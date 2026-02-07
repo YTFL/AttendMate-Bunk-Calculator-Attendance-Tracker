@@ -12,8 +12,6 @@
 
 AttendMate helps students stay on top of their attendance by providing intelligent tracking, predictions, and notifications. Whether you want to know how many classes you can safely skip or how many you need to attend to meet your target, AttendMate has you covered.
 
-![App Home Screen showing Today's Schedule with bottom navigation](./screenshots/home_screen.png)
-
 ---
 
 ## ✨ Key Features
