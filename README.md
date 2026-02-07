@@ -65,23 +65,13 @@ AttendMate helps students stay on top of their attendance by providing intellige
 ### 🔔 Notifications
 - Automatic notifications when classes end
 - Quick action buttons: "Mark Present" and "Mark Absent" directly from notification
-- Tap notification to navigate to Today's Schedule
-- Skips notifications for already-marked attendance
-- Timezone-aware scheduling
-- Exact alarm support for precise timing
 
 ### 🎨 Theme Support
-- Light mode with clean white interface
-- Dark mode with true black background
 - System theme following (automatic switching)
-- Theme toggle button in app bar
-- Consistent Material Design 3 styling
 
 ### 💾 Data Persistence
 - All data stored locally using SQLite database
 - No internet connection required
-- Automatic data saving
-- Fast and reliable performance
 
 ---
 
