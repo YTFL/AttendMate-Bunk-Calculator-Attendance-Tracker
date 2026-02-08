@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-02-08
+
+### Fixed
+- Fixed JSON import not importing acronyms from timetable data (operator precedence bug)
+- Fixed all analyzer warnings and issues (empty catch blocks, unnecessary null checks, unused variables)
+
+### Changed
+- Simplified bunk meter text messages to be more concise and fit in one line
+- Simplified semester summary card text to show essential information only
+- Messages now directly state "Can bunk X classes" or "Must attend X of Y classes"
+- Removed target attendance percentage pill from JSON import preview cards
+
+---
+
 ## [1.0.0] - 2026-02-07
 
 ### Initial Release
