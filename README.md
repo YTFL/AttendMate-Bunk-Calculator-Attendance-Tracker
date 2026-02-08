@@ -22,7 +22,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Automatic semester status tracking (not started, active, ended)
 
 ![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_setup.png)
-
+ 
 ### 📚 Subject Management
 - Add unlimited subjects with custom names and optional acronyms
 - Assign unique colors to each subject for easy identification
