@@ -21,7 +21,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Define target attendance percentage for the entire semester
 - Automatic semester status tracking (not started, active, ended)
 
-![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_setup.png)
+![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_setup_new.png)
  
 ### 📚 Subject Management
 - Add unlimited subjects with custom names and optional acronyms
@@ -58,7 +58,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Intelligent sorting: Subjects needing attention appear first
 - Semester end date awareness
 
-![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter.png)
+![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter_new.png)
 
 ### 🔔 Notifications
 - Automatic notifications when classes end
