@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-02-12
+
+### Added
+- Automatic update detection feature to check for new app versions
+
+### Fixed
+- Fixed Android app name appearing as "flutter material ai app" in recent apps - now correctly shows "AttendMate"
+
+---
+
+
 ## [1.0.1] - 2026-02-08
 
 ### Fixed
