@@ -275,6 +275,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.3.0** (2026-02-14) - Global time format preference, attendance calendar with bulk actions, UI improvements, bug fixes
 - **1.2.0** (2026-02-14) - Holiday management, enhanced attendance control, bunk meter search, auto end-of-day attendance, major size optimizations
 - **1.1.0** (2026-02-12) - Automatic update detection, app name fix
 - **1.0.1** (2026-02-08) - JSON import acronym fix, analyzer warnings resolved
@@ -294,5 +295,6 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
 
 
