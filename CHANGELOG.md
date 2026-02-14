@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-02-14
+
+### Added
+- **Global Time Format Preference**: Choose between 12-hour (AM/PM) and 24-hour time formats
+  - Toggle available on Subject screen
+  - Applied consistently across entire app (subject lists, calendar views, add/edit pages)
+  - Times displayed in chosen format throughout schedule and calendar
+- **Attendance Calendar**: Full-semester calendar view with comprehensive attendance tracking
+  - Legend showing all attendance states
+  - Tap past dates to review classes and update attendance via bottom sheet
+  - Bulk actions per date (Present, Skip Day, Holiday)
+  - Upcoming dates shown as read-only with distinct calendar state
+  - Calendar day details display class time slots sorted chronologically
+
+### Changed
+- **UI Improvements**:
+  - Schedule chips, calendar day dialogs, and time pickers now use selected time format for consistency
+  - Subject cards now display acronyms (or first letters of each word) across Today, Calendar, and Subjects screens
+  - Calendar upcoming-day color updated for better visual distinction from mixed attendance
+
+### Fixed
+- Editing subject time slot now defaults end time to slot's current end time instead of always adding one hour
+- Calendar bulk actions now update day state immediately after selection
+- Various minor bug fixes and stability improvements
+
+---
+
+
 ## [1.2.0] - 2026-02-14
 
 **Minimum Android Version:** 7.0 (API 24) — required for in-app update system and secure APK installation.
@@ -266,4 +294,5 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
 
