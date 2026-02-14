@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-02-14
+
+### Added
+- **Holiday Management**: Mark/unmark entire days as holidays with automatic class cancellation
+  - Dedicated "Today is a Holiday" screen when day is marked as holiday
+  - Complete holiday isolation - classes hidden from display until unmarked
+  - Automatic exclusion of holiday classes from attendance calculations
+- **Enhanced Attendance Control**:
+  - "Mark Today as Present" button to quickly mark all unmarked classes as present
+  - Ability to unmark individual classes (both present and absent) to revert to "Awaiting Status"
+  - Dual action buttons for marked classes (Mark Absent/Unmark for present classes, Mark Present/Unmark for absent classes)
+- **Bunk Meter Search**: Search functionality to quickly find specific classes by name
+  - Real-time filtering with case-insensitive matching
+  - Search results counter showing number of matching classes
+  - Quick clear button and empty state feedback
+  - Preserved sorting (classes needing attendance appear first)
+- **Automatic End-of-Day Attendance**: Unmarked classes automatically marked as present at 10 PM+
+  - Smart holiday skip - auto-marking skipped if day marked as holiday
+  - Respects user intent - pre-marked classes not overridden
+  - Background task integration with WorkManager
+
+### Changed
+- **Attendance Calculation Improvements**:
+  - Unmarked classes now excluded from attendance percentage calculations
+  - Only explicitly marked classes (Present or Absent) counted toward bunk meter and semester summary
+  - Clearer statistics display showing Classes Held, Marked, Attended, and Bunked separately
+  - Simplified attendance messages with "Must attend X remaining classes" format
+- **Improved UI Layout**: Better organized action buttons
+  - Top row: "Mark Holiday", "Skip Day"
+  - Second row: "Mark Present" for normal days
+  - No action buttons shown when day marked as holiday
+
+### Fixed
+- Subject acronym not persisting across app restarts
+  - Added database migration (schema v3) with `acronym` column to `subjects` table
+  - Updated save/load logic to properly store and restore subject acronyms
+
+### Performance
+- Reduced APK size dramatically from ~178 MB to ~54 MB
+  - Removed emulator-only native libraries
+  - Enabled aggressive code and resource shrinking
+  - Enabled R8 minification
+  - Added ProGuard/R8 rules for Flutter and Play Core classes
+
+---
+
 ## [1.1.0] - 2026-02-12
 
 ### Added
@@ -16,7 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Android app name appearing as "flutter material ai app" in recent apps - now correctly shows "AttendMate"
 
 ---
-
 
 ## [1.0.1] - 2026-02-08
 
@@ -200,6 +245,9 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.2.0** (2026-02-14) - Holiday management, enhanced attendance control, bunk meter search, auto end-of-day attendance, major size optimizations
+- **1.1.0** (2026-02-12) - Automatic update detection, app name fix
+- **1.0.1** (2026-02-08) - JSON import acronym fix, analyzer warnings resolved
 - **1.0.0** (2026-02-07) - Initial public release
 
 ---
