@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.0] - 2026-02-14
 
+**Minimum Android Version:** 7.0 (API 24) — required for in-app update system and secure APK installation.
+
 ### Added
 - **Holiday Management**: Mark/unmark entire days as holidays with automatic class cancellation
   - Dedicated "Today is a Holiday" screen when day is marked as holiday
@@ -264,3 +266,4 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
