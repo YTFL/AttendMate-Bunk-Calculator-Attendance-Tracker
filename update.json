@@ -1,5 +1,4 @@
 {
   "version": "1.2.0",
-  "buildNumber": 4,
-  "changelog": "New: Holiday management, bunk meter search, auto end-of-day attendance, mark today as present, unmark classes • Improved: Attendance calculations exclude unmarked classes • Fixed: Subject acronym persistence • Performance: APK size reduced from 178MB to 54MB"
+  "buildNumber": 4
 }
