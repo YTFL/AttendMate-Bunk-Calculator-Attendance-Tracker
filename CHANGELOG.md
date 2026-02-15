@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.3.3] - 2026-02-15
+
+### Fixed
+- Fixed a bug where the update apk stayed in the app files after updating the app to the latest version
+- Reduced app size significantly by optimizing for modern 64-bit devices
+- Removed unnecessary debug statements for better performance
+- Various bug fixes and stability improvements
+
+---
+
+
 ## [1.3.2] - 2026-02-15
 
 ### Fixed
