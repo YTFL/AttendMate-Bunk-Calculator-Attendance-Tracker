@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+
+## [1.3.2] - 2026-02-15
+
+### Fixed
+- Reduced app size by optimizing for modern 64-bit devices
+- Removed unnecessary debug statements for better performance
+- Various bug fixes and stability improvements
+
+---
+
+
 ## [1.3.1] - 2026-02-14
 
 ### Fixed
 - Various minor bug fixes and stability improvements.
-
 ---
+
 
 ## [1.3.0] - 2026-02-14
 
@@ -80,6 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subject acronym not persisting across app restarts
   - Added database migration (schema v3) with `acronym` column to `subjects` table
   - Updated save/load logic to properly store and restore subject acronyms
+- **Dark mode styling** for "What's New" box in update dialog
+  - Background now properly changes to dark gray/black in dark mode instead of remaining white
+- **APK installation issue** on Android
+  - Replaced file opening approach with native Android method channel
+  - Now properly uses Android's system package installer (ACTION_INSTALL_PACKAGE)
+  - Resolved "problem parsing the package" errors when app was open during installation
+  - Properly implements FileProvider for Android 7.0+ compatibility
 
 ### Performance
 - Reduced APK size dramatically from ~178 MB to ~54 MB
@@ -282,6 +300,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.3.2** (2026-02-15) - bug fixes, performance improvements
 - **1.3.1** (2026-02-14) - performance improvements
 - **1.3.0** (2026-02-14) - Global time format preference, attendance calendar with bulk actions, UI improvements, bug fixes
 - **1.2.0** (2026-02-14) - Holiday management, enhanced attendance control, bunk meter search, auto end-of-day attendance, major size optimizations
@@ -303,7 +322,3 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
-
-
-
-
