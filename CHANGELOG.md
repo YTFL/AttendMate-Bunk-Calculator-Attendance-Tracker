@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.3.4] - 2026-02-18
+
+### Fixed
+- Fixed a bug where the name of the app appeared as "Flutter Material AI App" in the recent apps screen on android
+
+---
+
+
 ## [1.3.3] - 2026-02-15
 
 ### Fixed
@@ -311,6 +319,8 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.3.4** (2026-02-18) - recent apps name fix, update apk bug fix, reduced app size, performance improvements
+- **1.3.3** (2026-02-15) - fixed update apk retention, reduced app size, performance improvements
 - **1.3.2** (2026-02-15) - bug fixes, performance improvements
 - **1.3.1** (2026-02-14) - performance improvements
 - **1.3.0** (2026-02-14) - Global time format preference, attendance calendar with bulk actions, UI improvements, bug fixes
