@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.4.0] - 2026-02-20
+
+### Added
+- **More Tab**: New **More** tab (three-dots icon) in bottom navigation
+  - Moved the global 12-hour / 24-hour time format toggle from the Subjects screen to the More tab
+  - App version display in More showing **Version + Build Number**
+  - In-app **Setup Guide** page
+  - **Request feature / Report bug** action with guidance to create a new issue on GitHub
+  - Direct link launch support for the GitHub Issues page
+- **Attendance Calendar Improvements**:
+  - Swipe navigation in calendar month view to move to previous/next month
+  - Swipe navigation in day details view to move to previous/next day
+  - Day view swipe skips days with no classes and jumps directly to the next/previous day that has classes
+
+### Changed
+- Updated bunk recommendation wording to: "You can bunk next X classes continuously"
+- Added explicit zero-bunk state text: "You currently cannot bunk anymore classes" instead of showing "Can bunk 0 more classes"
+- Added a warning in Overall Semester Summary that semester-level bunkable count may keep overall attendance above target while individual subjects can still fall below target
+- Removed the duplicate top-right checkmark save action from Add Subject and Edit Subject screens, keeping only the bottom Save button
+- When acronym is cleared and subject is saved, app now auto-generates an acronym from subject name initials (e.g., "Data Structures" → "DS") instead of retaining the previous acronym
+
+### Fixed
+- Fixed an issue where if the same subject appeared multiple times on the same day, only the first entry was shown — all same-day entries now appear correctly in both Today's Schedule and Calendar Day View
+- Fixed a screen flash/jitter issue while adding or editing time slots in Add Subject and Edit Subject screens
+
+---
+
+
 ## [1.3.4] - 2026-02-18
 
 ### Fixed
@@ -319,6 +347,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.4.0** (2026-02-20) - More tab, swipe navigation in calendar, bunk meter wording improvements, duplicate subject fix, various UI fixes
 - **1.3.4** (2026-02-18) - recent apps name fix, update apk bug fix, reduced app size, performance improvements
 - **1.3.3** (2026-02-15) - fixed update apk retention, reduced app size, performance improvements
 - **1.3.2** (2026-02-15) - bug fixes, performance improvements
