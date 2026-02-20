@@ -157,23 +157,16 @@ To bulk import subjects, use this JSON structure:
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Installation 
 
 ### Download
 Download the latest APK from the [Releases](../../releases) section.
 
-### Installation
 1. Download the APK file
 2. Enable "Install from Unknown Sources" in Android settings
 3. Open the APK and install
 4. Grant notification permissions for best experience
 
-### First Launch
-1. Open AttendMate
-2. Navigate to "Semester" tab
-3. Set up your semester details
-4. Add subjects or import timetable
-5. Start tracking attendance!
 
 ---
 
