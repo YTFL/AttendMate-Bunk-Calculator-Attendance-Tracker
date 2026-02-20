@@ -159,13 +159,9 @@ To bulk import subjects, use this JSON structure:
 
 ## 🚀 Installation 
 
-### Download
-Download the latest APK from the [Releases](../../releases) section.
-
-1. Download the APK file
+1. Download the latest APK from the [Releases](../../releases) section.
 2. Enable "Install from Unknown Sources" in Android settings
 3. Open the APK and install
-4. Grant notification permissions for best experience
 
 
 ---
