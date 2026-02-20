@@ -1,328 +1,174 @@
-# AttendMate - Complete Features List
+# AttendMate — Features Overview
 
-This document provides a comprehensive list of all features available in AttendMate v1.0.0.
-
----
-
-## 🎓 Core Features
-
-### Semester Management
-- ✅ Create and configure semester with start and end dates
-- ✅ Set global target attendance percentage
-- ✅ Automatic semester status detection (not started, active, ended)
-- ✅ Semester validation (end date must be after start date)
-- ✅ Visual indicators for semester status
-- ✅ Informational banners when semester hasn't started or has ended
-- ✅ Persistent semester data storage
-
-### Subject Management
-- ✅ Add unlimited subjects
-- ✅ Custom subject names
-- ✅ Optional subject acronyms for short display names
-- ✅ Color-coded subjects (10 predefined colors)
-- ✅ Automatic color assignment from unused colors
-- ✅ Individual target attendance percentage per subject
-- ✅ Edit existing subjects
-- ✅ Delete subjects with confirmation
-- ✅ View subject details
-- ✅ Persistent subject data storage
-
-### Schedule Management
-- ✅ Create flexible weekly schedules for each subject
-- ✅ Multiple time slots per subject
-- ✅ Support for all 7 days of the week
-- ✅ Custom start and end times for each slot
-- ✅ Time picker UI for easy time selection
-- ✅ Schedule validation (end time must be after start time)
-- ✅ Visual schedule display with day and time information
-- ✅ Edit and delete individual time slots
-- ✅ Automatic calculation of total scheduled classes
+> A comprehensive attendance tracking app for students. Here's everything AttendMate can do.
 
 ---
 
-## 📥 Import & Export
+## 🗓️ Semester & Subject Setup
 
-### Timetable Import
-- ✅ Bulk import subjects via JSON
-- ✅ Import single or multiple subjects at once
-- ✅ JSON validation with detailed error messages
-- ✅ Preview imported subjects before confirming
-- ✅ Automatic color assignment during import
-- ✅ Copy JSON format reference to clipboard
-- ✅ Built-in JSON format documentation
-- ✅ Support for subject names, acronyms, and schedules
-- ✅ Clear and parse functionality
-- ✅ Visual preview with color indicators
+### Semester
+Set up your semester once and the app handles the rest.
+
+| Feature | Description |
+|---|---|
+| Semester creation | Set start date, end date, and your target attendance percentage |
+| Automatic status detection | App knows if your semester hasn't started, is active, or has ended |
+| Semester editing | Update your semester details anytime |
+| Status banners | Clear messages shown when semester is inactive |
+
+### Subjects
+Add and organize your subjects the way you want.
+
+| Feature | Description |
+|---|---|
+| Unlimited subjects | Add as many subjects as needed |
+| Custom acronyms | Short display names for subjects (auto-generated from initials if left empty) |
+| Color coding | 10 colors to choose from, auto-assigned to keep them unique |
+| Per-subject attendance target | Set a different target percentage for each subject |
+| Full CRUD | Add, edit, and delete subjects with confirmation prompts |
+
+### Schedule
+Define when each class happens during the week.
+
+| Feature | Description |
+|---|---|
+| Weekly schedule builder | Assign specific days and time slots to each subject |
+| Multiple slots per subject | A subject can appear multiple times on the same day or across different days |
+| Time picker | Tap to select start and end times easily |
+| Edit & delete slots | Modify or remove individual time slots at any time |
+
+---
+
+## 📥 Timetable Import
+
+Quickly populate all your subjects in one go using a JSON format.
+
+- Bulk import multiple subjects with their schedules in a single step
+- Preview what will be imported before confirming
+- Automatic color assignment during import
+- Built-in format reference and copy-to-clipboard support
+- Clear error messages if the format is incorrect
 
 ---
 
 ## 📆 Attendance Tracking
 
 ### Today's Schedule
-- ✅ View all classes scheduled for current day
-- ✅ Time-sorted class list (earliest to latest)
-- ✅ Quick attendance marking with action buttons
-- ✅ Mark individual classes as Present or Absent
-- ✅ Toggle attendance status (Present ↔ Absent)
-- ✅ Visual status indicators with icons and colors
-  - ✅ Green for Attended
-  - ✅ Red for Absent
-  - ✅ Grey for Cancelled
-  - ✅ Neutral for Awaiting Status
-- ✅ Subject color-coded avatars
-- ✅ Display class timings
-- ✅ "No classes today" message when schedule is empty
-- ✅ Semester-aware (disabled when semester hasn't started or has ended)
+Your daily attendance hub — see all today's classes and mark them as you go.
 
-### Bulk Attendance Actions
-- ✅ Mark entire day as Holiday
-  - ✅ Cancels all scheduled classes for the day
-  - ✅ Doesn't affect attendance percentage
-  - ✅ Confirmation dialog before action
-- ✅ Skip entire day
-  - ✅ Marks all scheduled classes as Absent
-  - ✅ Affects attendance percentage
-  - ✅ Confirmation dialog before action
-- ✅ Success notifications after bulk actions
+- Classes sorted by time, earliest first
+- Mark each class as **Present** or **Absent** with a single tap
+- Toggle or **Unmark** any class to revert it to _Awaiting Status_
+- Visual status indicators: green (present), red (absent), grey (cancelled), neutral (awaiting)
+- **Mark Today as Present** button to mark all pending classes at once
+- Duplicate slots (same subject, same day) all shown correctly
 
-### Attendance Data
-- ✅ Persistent attendance records in database
-- ✅ Date-based attendance tracking
-- ✅ Three attendance statuses: Attended, Absent, Cancelled
-- ✅ Automatic attendance calculation
-- ✅ Historical attendance data retention
+### Bulk Day Actions
+Take action on an entire day at once.
+
+| Action | Effect |
+|---|---|
+| **Mark as Holiday** | Cancels all classes — does not affect your attendance percentage |
+| **Skip Day** | Marks all classes as absent |
+| **Mark as Present** | Marks all unmarked classes as present |
+
+When a day is marked as a holiday, a dedicated screen replaces Today's Schedule and no action buttons are shown.
+
+### Auto End-of-Day
+At 10 PM, any class that is still unmarked is automatically marked as present — so you don't lose attendance for classes you forgot to log. Classes you've already marked are never overridden.
 
 ---
 
-## 📊 Analytics & Predictions
+## 📊 Bunk Meter
 
-### Bunk Meter
-- ✅ Real-time attendance percentage calculation
-- ✅ Bunking predictions based on target percentage
-- ✅ Three prediction scenarios:
-  1. **Above Target:** Shows how many classes can be safely bunked
-  2. **Below Target:** Shows how many classes need to be attended
-  3. **Target Unreachable:** Warns when target is impossible to achieve
-- ✅ Detailed statistics per subject:
-  - ✅ Classes held so far
-  - ✅ Classes attended
-  - ✅ Classes bunked
-  - ✅ Current attendance percentage
-- ✅ Future class predictions
-- ✅ Remaining classes count
-- ✅ Maximum attainable percentage calculation
-- ✅ Intelligent subject sorting (subjects needing attention first)
-- ✅ Color-coded messages (green, orange, red)
-- ✅ Semester end date awareness
-- ✅ Handles cancelled classes correctly
-- ✅ Handles subjects with no scheduled classes
+A smart prediction tool that tells you how many classes you can afford to miss.
 
-### Statistics
-- ✅ Total scheduled classes calculation
-- ✅ Classes held vs classes scheduled differentiation
-- ✅ Attended vs absent tracking
-- ✅ Cancelled classes exclusion from percentage
-- ✅ Real-time updates when attendance is marked
-- ✅ Accurate percentage calculations
+### Per-Subject Predictions
+
+| Scenario | What you see |
+|---|---|
+| Above target | How many classes you can safely bunk continuously |
+| Below target | How many classes you must attend to recover |
+| Target unreachable | A clear warning that the target can no longer be met |
+
+> **Note:** The semester-level bunk count keeps your *overall* average above target, but individual subjects can still fall below — check each subject's card for the full picture.
+
+### Statistics per Subject
+For each subject you can see: classes held, classes marked, classes attended, and classes bunked — displayed separately so you always know where you stand.
+
+### Search
+Quickly find any subject in the Bunk Meter list by typing its name. Results filter in real time, showing a match count and a clear empty state if nothing matches.
+
+---
+
+## 📅 Attendance Calendar
+
+A full-semester calendar that gives you a bird's-eye view of your attendance.
+
+- Month view with color-coded dates for each attendance state
+- **Swipe** left/right to move between months
+- Tap any past date to see its classes and update attendance via a bottom sheet
+- Bulk actions available per day (Mark Present, Skip, Holiday)
+- Upcoming dates shown as read-only
+- Day detail view with classes sorted by time
+- **Swipe** in the day view to jump to the previous/next day that has classes
 
 ---
 
 ## 🔔 Notifications
 
-### Notifications
-- ✅ Automatic notification scheduling for all subjects
-- ✅ Notifications trigger when class ends
-- ✅ Action buttons in notifications:
-  - ✅ "Mark Present" button
-  - ✅ "Mark Absent" button
-- ✅ Mark attendance directly from notification
-- ✅ Tap notification to navigate to Today's Schedule
-- ✅ Confirmation notification after marking attendance
-- ✅ Auto-dismiss confirmation after 2 seconds
-- ✅ Skip notifications for already-marked attendance
-- ✅ Timezone-aware scheduling
-- ✅ Exact alarm support for precise timing
-- ✅ Graceful handling of recently ended classes (5-minute grace period)
-- ✅ Notification permission request
-- ✅ Exact alarm permission request (Android 12+)
-- ✅ Custom notification icon
-- ✅ Vibration and sound support
-- ✅ High priority notifications
-- ✅ Persistent notification data
+AttendMate automatically reminds you to mark attendance after each class ends.
+
+- Notification fires when a class ends with **Mark Present** and **Mark Absent** action buttons
+- Mark attendance directly from the notification without opening the app
+- Tap the notification to go straight to Today's Schedule
+- A brief confirmation notification appears after marking, then auto-dismisses
+- Notifications are skipped for classes already marked
+- 5-minute grace period for classes that ended very recently
+- Exact alarm scheduling with timezone awareness
+- Notifications are automatically rescheduled when you edit a subject
 
 ---
 
-## 🎨 User Interface
+## 🔄 In-App Updates
 
-### Theme Support
-- ✅ Light theme with white background
-- ✅ Dark theme with true black background
-- ✅ System theme following (automatic)
-- ✅ Theme toggle button in app bar
-- ✅ Persistent theme preference
-- ✅ Material Design 3 components
-- ✅ Consistent color scheme across themes
-- ✅ High contrast for accessibility
-
-### Navigation
-- ✅ Bottom navigation bar with 4 tabs:
-  1. ✅ Today's Schedule
-  2. ✅ Subjects
-  3. ✅ Semester
-  4. ✅ Bunk Meter
-- ✅ Fixed bottom navigation (always visible)
-- ✅ Active tab highlighting
-- ✅ Icon-based navigation
-- ✅ Programmatic navigation support
-
-### Visual Design
-- ✅ Google Fonts integration (Oswald, Roboto, Open Sans)
-- ✅ Custom typography scale
-- ✅ Rounded corners on cards and buttons
-- ✅ Elevation and shadows
-- ✅ Color-coded subjects
-- ✅ Icon-based status indicators
-- ✅ Responsive layouts
-- ✅ Consistent spacing and padding
-- ✅ Material Design 3 color system
-
-### User Experience
-- ✅ Floating Action Button for adding subjects
-- ✅ Contextual action buttons
-- ✅ Confirmation dialogs for destructive actions
-- ✅ Success/error snackbar notifications
-- ✅ Loading states
-- ✅ Empty states with helpful messages
-- ✅ Informational banners
-- ✅ Tooltips on icon buttons
-- ✅ Keyboard dismissal on tap outside
-- ✅ Form validation
-- ✅ Error messages
+- Automatic update check on app launch
+- "What's New" dialog showing release highlights for the new version
+- Download and install updates directly from within the app
 
 ---
 
-## 🛠️ Technical Features
+## ⋯ More Tab
 
-### Data Management
-- ✅ SQLite local database
-- ✅ Automatic database initialization
-- ✅ CRUD operations for all entities
-- ✅ Data persistence across app restarts
-- ✅ Efficient data loading
-- ✅ No internet connection required
-- ✅ Offline-first architecture
+A dedicated tab (three-dots icon) for app-wide settings and info.
 
-### State Management
-- ✅ Provider pattern for state management
-- ✅ Reactive UI updates
-- ✅ Efficient widget rebuilding
-- ✅ Separation of concerns (UI, business logic, data)
-- ✅ Multiple providers for different features:
-  - ✅ ThemeProvider
-  - ✅ SemesterProvider
-  - ✅ SubjectProvider
-  - ✅ AttendanceProvider
+| Option | Description |
+|---|---|
+| Time format | Switch between 12-hour (AM/PM) and 24-hour display |
+| App version | See the current version and build number |
+| Setup Guide | In-app walkthrough for getting started |
+| Feedback | Direct link to submit a feature request or bug report on GitHub |
 
-### Performance
-- ✅ Optimized database queries
-- ✅ Efficient list rendering
-- ✅ Minimal unnecessary rebuilds
-- ✅ Fast app startup
-- ✅ Smooth animations and transitions
-- ✅ Responsive UI
-
-### Reliability
-- ✅ Error handling for database operations
-- ✅ Graceful degradation
-- ✅ Input validation
-- ✅ Edge case handling
-- ✅ Null safety
-- ✅ Type safety
+The time format preference applies across the entire app — schedule chips, calendar views, and time pickers all follow the same setting.
 
 ---
 
-## 📱 Platform Features
+## 🎨 Themes
 
-### Android-Specific
-- ✅ Android notification system integration
-- ✅ Notification channels
-- ✅ Notification actions
-- ✅ Exact alarm scheduling
-- ✅ Timezone handling
-- ✅ Permission management
-- ✅ Material Design 3 Android components
+| Theme | Description |
+|---|---|
+| Light | Clean white background |
+| Dark | True black for AMOLED-friendly viewing |
+| System | Follows your device's system-wide theme setting |
 
-### Accessibility
-- ✅ High contrast themes
-- ✅ Icon labels
-- ✅ Tooltips
-- ✅ Semantic widgets
-- ✅ Screen reader support (implicit)
+Theme preference is saved and restored on every launch.
 
 ---
 
-## 🔐 Privacy & Security
+## 🔐 Privacy
 
-- ✅ All data stored locally on device
-- ✅ No data collection
-- ✅ No internet connection required
-- ✅ No third-party analytics
-- ✅ No user accounts or authentication
-- ✅ Complete privacy
+AttendMate works entirely offline. All your data lives only on your device — no accounts, no syncing, no analytics, no internet connection required.
 
 ---
 
-## 📋 Additional Features
-
-### Semester Screen
-- ✅ View current semester details
-- ✅ Edit semester configuration
-- ✅ Visual semester status display
-- ✅ Formatted date display
-- ✅ Target percentage display
-
-### Subject Screen
-- ✅ List all subjects
-- ✅ Add new subject button
-- ✅ Import timetable button
-- ✅ Subject cards with color indicators
-- ✅ Quick access to edit subject
-- ✅ Empty state message
-- ✅ Disabled when semester hasn't started or has ended
-
-### Subject Details/Edit
-- ✅ Edit subject name
-- ✅ Edit subject acronym
-- ✅ Change subject color
-- ✅ Modify target attendance
-- ✅ Add/remove time slots
-- ✅ Delete subject
-- ✅ Save changes
-- ✅ Cancel editing
-
----
-
-## 🎯 Intelligent Features
-
-### Intelligent Behavior
-- ✅ Automatic notification rescheduling when subjects change
-- ✅ Skip notifications for already-marked attendance
-- ✅ Intelligent sorting (subjects needing attention first)
-- ✅ Semester status awareness across all features
-- ✅ Graceful handling of schedule changes
-- ✅ Accurate calculations even with modified schedules
-
-### User Guidance
-- ✅ Helpful empty state messages
-- ✅ Informational banners
-- ✅ Clear error messages
-- ✅ JSON format reference
-- ✅ Tooltips and hints
-- ✅ Confirmation dialogs
-- ✅ Success feedback
-
----
-
-**Total Feature Count:** 150+ features across all categories
-
-This comprehensive feature set makes AttendMate a complete solution for student attendance tracking and management.
+*AttendMate — built for students who want to stay on top of their attendance without the guesswork.*
