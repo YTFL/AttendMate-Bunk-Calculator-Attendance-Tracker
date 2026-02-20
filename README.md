@@ -177,17 +177,6 @@ Download the latest APK from the [Releases](../../releases) section.
 
 ---
 
-## 📝 Version Information
-
-**Current Version:** 1.0.0  
-**Release Date:** February 2026  
-**Minimum Android Version:** Android 5.0 (API 21)
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.  
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for detailed v1.0.0 release information.  
-See [FEATURES.md](FEATURES.md) for complete feature list.
-
----
 
 ## 🤝 Support
 
