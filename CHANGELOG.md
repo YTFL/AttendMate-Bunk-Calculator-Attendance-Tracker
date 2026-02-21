@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.4.1] - 2026-02-21
+
+### Added
+- **Attendance Calendar**: Smooth swipe animations for month-to-month navigation in calendar view
+- **Attendance Calendar**: Smooth swipe animations for day-to-day transitions in day details view; transitions use directional slide + fade animations for a more fluid experience
+- **More Page**: Split app metadata into separate rows for **App version** and **Build number**
+- **More Page**: New **Latest update release date** row sourced from GitHub releases
+- **More Page**: New **Support me** entry that opens a dialog asking users to star the GitHub repository, with a direct repository link
+
+### Changed
+- **Subject Management**: Improved auto-generated acronyms (when acronym is left empty while adding/editing) to ignore filler words like "and", "the", "of", "with", "for", and "to"
+- **Subject Management**: Removed redundant runtime acronym fallbacks across the app; acronym display/usage now relies on the stored subject acronym generated during Add/Edit save
+- **Subject Management**: Centered acronym text inside subject avatar circles on both Subjects and Today's Schedule so wrapped acronyms remain visually centered
+- **Subject Management**: Increased subject avatar circle size by 3% on Subjects and Today's Schedule for better acronym readability
+- **More Page**: Updated the time format control to match the standard list-item UI used by the rest of the More page
+
+### Fixed
+- Fixed residual screen flash/jitter while adding or editing time slots in Add Subject and Edit Subject by removing focus churn during picker interactions
+- Improved dark-mode dialog presentation by slightly lightening the background behind More page dialogs while keeping the dialog itself dark
+- Updated request/bug dialog copy from "our" to "my" and removed inline link text from the dialog body
+- Improved external link opening reliability for the More page action buttons with a stronger launch fallback flow
+
+---
+
+
 ## [1.4.0] - 2026-02-20
 
 ### Added
@@ -347,6 +372,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.4.1** (2026-02-21) - Calendar swipe animations, acronym improvements, More page additions (update date, support, split metadata), polish fixes
 - **1.4.0** (2026-02-20) - More tab, swipe navigation in calendar, bunk meter wording improvements, duplicate subject fix, various UI fixes
 - **1.3.4** (2026-02-18) - recent apps name fix, update apk bug fix, reduced app size, performance improvements
 - **1.3.3** (2026-02-15) - fixed update apk retention, reduced app size, performance improvements
