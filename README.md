@@ -2,7 +2,7 @@
 
 **AttendMate** is an attendance tracking app designed for students to manage their class attendance, calculate bunking capacity, and maintain their target attendance percentage throughout the semester.
 
-![App Version](https://img.shields.io/badge/version-1.4.0-blue)
+![App Version](https://img.shields.io/badge/version-1.4-blue)
 ![Platform](https://img.shields.io/badge/platform-Android-green)
 ![License](https://img.shields.io/badge/license-Freeware-orange)
 
