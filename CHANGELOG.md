@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.4.3] - 2026-02-22
+
+### Added
+- **More Page**: New **What's New** screen in More showing bundled release notes
+- **More Page**: New **App updates** item that checks for update availability; displays an **Update available** badge when a newer version exists; tapping it opens the in-app update dialog
+- **Setup Guide**: Rebuilt fully in-app with a swipeable, section-by-section book-style experience
+- **Setup Guide**: Clickable Table of Contents for jumping directly to any section
+- **Setup Guide**: On first launch, users are prompted to open the Setup Guide or start using the app directly
+- **Setup Guide**: One-tap **Copy AI Prompt** button in the JSON import section
+- **Setup Guide**: **Open in App** deep-link actions per section (Add Subject, Import Timetable, Attendance Calendar)
+
+### Changed
+- **Attendance Calendar**: Updated calendar swipe transitions to a push animation — swiping forward pushes content left while new content enters from the right; swiping back does the reverse
+- **More Page**: Replaced GitHub-dependent **Latest update release date** with offline **Current version release date** sourced from bundled `RELEASE_NOTES.md`
+- **Setup Guide**: Updated quote styling to use dark/grey theme-aware highlights instead of blue callouts; fixed JSON examples to render in proper code blocks; removed changelog/features footer content
+
+### Fixed
+- **More Page**: In **Support me** and **Request feature / Report bug** dialogs, tapping the action button now closes the dialog before opening the external link
+
+---
+
+
 ## [1.4.2] - 2026-02-22
 
 ### Changed
@@ -386,6 +408,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.4.3** (2026-02-22) - What's New screen, App updates item with badge, offline release date, Setup Guide rebuilt in-app (swipeable, ToC, onboarding prompt, deep links), calendar push animation fix, dialog auto-close fix
 - **1.4.2** (2026-02-22) - Push-slide calendar swipe animation, 3-option theme selector, support dialog polish, attendance slot conflict fix, screen flash fix
 - **1.4.1** (2026-02-21) - Calendar swipe animations, acronym improvements, More page additions (update date, support, split metadata), polish fixes
 - **1.4.0** (2026-02-20) - More tab, swipe navigation in calendar, bunk meter wording improvements, duplicate subject fix, various UI fixes
