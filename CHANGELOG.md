@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.4.2] - 2026-02-22
+
+### Changed
+- **Attendance Calendar**: Updated calendar swipe transitions to a PowerPoint-style push slide animation; swiping to next month/day pushes current content left while new content enters from the right, and vice versa for previous
+- **More Page**: Improved theme switching with a 3-option selector in the app bar: **Light**, **Dark**, and **System** (phone icon); Light and Dark now stay fixed and no longer change with device theme; System mode follows the phone's light/dark setting automatically
+
+### Fixed
+- Removed the visible repository URL from the **Support me** dialog, keeping only the action button for a cleaner UI
+- Fixed same-subject multiple-class attendance conflicts by rebuilding the attendance table with slot-based keys during upgrade (performs a one-time reset of attendance records to avoid legacy duplicate/misaligned status issues)
+- Fixed lingering screen flash on Add Subject/Edit Subject during time-slot interactions by tightening text-field focus behavior (focus only on direct tap, then keyboard auto-dismisses after typing stops)
+
+---
+
+
 ## [1.4.1] - 2026-02-21
 
 ### Added
@@ -372,6 +386,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.4.2** (2026-02-22) - Push-slide calendar swipe animation, 3-option theme selector, support dialog polish, attendance slot conflict fix, screen flash fix
 - **1.4.1** (2026-02-21) - Calendar swipe animations, acronym improvements, More page additions (update date, support, split metadata), polish fixes
 - **1.4.0** (2026-02-20) - More tab, swipe navigation in calendar, bunk meter wording improvements, duplicate subject fix, various UI fixes
 - **1.3.4** (2026-02-18) - recent apps name fix, update apk bug fix, reduced app size, performance improvements
