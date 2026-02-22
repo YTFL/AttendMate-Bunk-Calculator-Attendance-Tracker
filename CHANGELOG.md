@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.4.4] - 2026-02-22
+
+### Added
+- **Search**: Acronym-aware subject search in both the Subjects and Bunk Meter screens (e.g., searching `DBMS` now matches `Database Management Systems`)
+
+### Changed
+- **What's New Page**: Simplified to display only the bundled `RELEASE_NOTES.md` content, removing additional generated sections and extra UI blocks
+- **Dialog UI**: Improved dark mode dialog background separation by slightly lightening the popup backdrop, making dialogs stand out more clearly
+- **Toast & Snackbar**: Updated in-app toast/snackbar handling so the latest notification immediately replaces the currently visible one; prevented notification stacking/queue buildup during rapid actions
+
+---
+
+
 ## [1.4.3] - 2026-02-22
 
 ### Added
@@ -408,6 +421,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.4.4** (2026-02-22) - Acronym-aware subject search, simplified What's New page, dark mode dialog polish, toast/snackbar stacking fixes
 - **1.4.3** (2026-02-22) - What's New screen, App updates item with badge, offline release date, Setup Guide rebuilt in-app (swipeable, ToC, onboarding prompt, deep links), calendar push animation fix, dialog auto-close fix
 - **1.4.2** (2026-02-22) - Push-slide calendar swipe animation, 3-option theme selector, support dialog polish, attendance slot conflict fix, screen flash fix
 - **1.4.1** (2026-02-21) - Calendar swipe animations, acronym improvements, More page additions (update date, support, split metadata), polish fixes
