@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.5] - 2026-02-26
+
+### Added
+- **Collapsible Subject Cards**: Each subject card can now be collapsed to show only the avatar/acronym, subject name, and edit/delete actions
+- **Expanded Subject Schedule View**: Expanding a subject card continues to show the same schedule chip details as before
+- **Unified Subject Card Header**: Avatar, name, edit/delete actions, and expand/collapse indicator now stay aligned in a single top row in both states
+- **Collapsible Bunk Meter Cards**: Subject cards in Bunk Meter now support collapsed and expanded states to reduce list height
+- **Compact Quick Status (Collapsed)**: Collapsed bunk meter cards now show a short status summary such as bunkable count, must-attend count, or can't bunk/target status
+- **Expanded Full Details (Redesigned)**: Expanded bunk meter cards keep all previous bunk meter details with a cleaner layout and a 4-column quick-glance stats row (Classes Held, Attended, Bunked, Current %)
+- **Header Style Match**: Bunk Meter card headers now match Subjects card style with avatar/acronym, subject name, and chevron indicator
+
+### Changed
+- **Home Update Flow**: Launch-time update prompt now opens as a full-screen update page instead of a small dialog
+- **More Page Update Check**: Update checks now run only when tapped and continue showing update availability after selecting **Remind Later**
+- **More → What's New Content**: In-app bundled release notes now hide the top version metadata block and the **Installation** section for cleaner reading
+
+### Fixed
+- **Subject Time Selection Flash**: Reduced screen flashing in Add Subject/Edit Subject during Start Time → End Time → Day picker transitions by smoothing dialog handoff and navigator routing
+
+---
+
 
 ## [1.4.4] - 2026-02-22
 
@@ -450,3 +471,4 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
