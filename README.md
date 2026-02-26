@@ -58,7 +58,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Intelligent sorting: Subjects needing attention appear first
 - Semester end date awareness
 
-![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter_new.png)
+![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter.png)
 
 ### 🔔 Notifications
 - Automatic notifications when classes end
