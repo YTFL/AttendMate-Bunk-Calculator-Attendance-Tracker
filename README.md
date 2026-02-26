@@ -21,7 +21,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Define target attendance percentage for the entire semester
 - Automatic semester status tracking (not started, active, ended)
 
-![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_setup_new.png)
+![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_setup.png)
  
 ### 📚 Subject Management
 - Add unlimited subjects with custom names and optional acronyms
@@ -30,7 +30,7 @@ AttendMate helps students stay on top of their attendance by providing intellige
 - Create flexible weekly schedules with multiple time slots per subject
 - Edit or delete subjects anytime
 
-![Subject List showing color-coded subjects](./screenshots/subject_list.png)
+![Subject List showing color-coded subjects](./screenshots/subjects.png)
 
 ### 📥 Timetable Import
 - Bulk import subjects via JSON format
