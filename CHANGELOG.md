@@ -441,7 +441,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 ---
 
 ## Version History
-
+- **1.4.5** (2026-02-26) - Collapsible subject/bunk meter cards, full-screen home update flow, update check on tap, What's New metadata/install section hidden, subject time selection flash fix
 - **1.4.4** (2026-02-22) - Acronym-aware subject search, simplified What's New page, dark mode dialog polish, toast/snackbar stacking fixes
 - **1.4.3** (2026-02-22) - What's New screen, App updates item with badge, offline release date, Setup Guide rebuilt in-app (swipeable, ToC, onboarding prompt, deep links), calendar push animation fix, dialog auto-close fix
 - **1.4.2** (2026-02-22) - Push-slide calendar swipe animation, 3-option theme selector, support dialog polish, attendance slot conflict fix, screen flash fix
@@ -471,4 +471,5 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
 
