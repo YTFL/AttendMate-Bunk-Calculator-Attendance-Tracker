@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.6] - 2026-02-28
+
+### Changed
+- **Collapsible Subject Cards**: Cards now default to collapsed state instead of expanded
+
+### Fixed
+- **Acronym Generation Ignores Filler Words**: Subject acronyms in Add/Edit now skip common words ("and", "the", "of", "for", "with", "to", etc.) and use only main subject words for a more meaningful abbreviation
+- **Subject Time Selection Flash**: Reduced screen flashing in Add Subject/Edit Subject during Start Time → End Time → Day picker transitions by smoothing dialog handoff and navigator routing
+- **Holiday Day Class Visibility**: Classes are now shown even when an entire day is marked as holiday (class cards are no longer hidden); each class card includes a **Holiday** action to mark that individual class as holiday for the day
+
+---
+
 ## [1.4.5] - 2026-02-26
 
 ### Added
@@ -441,6 +453,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 ---
 
 ## Version History
+- **1.4.6** (2026-02-28) - Collapsible subject cards default to collapsed, acronym filler word fix, time selection flash fix, holiday day class visibility fix
 - **1.4.5** (2026-02-26) - Collapsible subject/bunk meter cards, full-screen home update flow, update check on tap, What's New metadata/install section hidden, subject time selection flash fix
 - **1.4.4** (2026-02-22) - Acronym-aware subject search, simplified What's New page, dark mode dialog polish, toast/snackbar stacking fixes
 - **1.4.3** (2026-02-22) - What's New screen, App updates item with badge, offline release date, Setup Guide rebuilt in-app (swipeable, ToC, onboarding prompt, deep links), calendar push animation fix, dialog auto-close fix
@@ -471,5 +484,6 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
+
 
 
