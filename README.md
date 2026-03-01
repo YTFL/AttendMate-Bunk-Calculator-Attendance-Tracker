@@ -12,7 +12,7 @@
 
 AttendMate gives you a clear picture of where you stand in every subject — how many classes you can still bunk, how many you need to attend to recover, and when a subject is beyond saving. All data stays on your device with no accounts or internet required.
 
-![App Home Screen showing Today's Schedule with bottom navigation](./screenshots/home_screen.png)
+![App Home Screen showing Today's Schedule with bottom navigation](./screenshots/todays_schedule.png)
 
 ---
 
