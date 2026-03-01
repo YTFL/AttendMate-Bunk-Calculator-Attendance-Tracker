@@ -148,7 +148,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 Download the latest APK from the [Releases](../../releases) section.
 
 ### Installation
-1. Download **AttendMate-v1.4.7.apk**
+1. Download **AttendMate-v1.4.x.apk**
 2. Enable **Install from Unknown Sources** in Android settings if prompted
 3. Open the APK and install
 4. Grant notification and exact alarm permissions for the best experience
