@@ -32,7 +32,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - **Collapsible subject cards** — collapse to just the name and acronym, expand for full schedule details
 - Edit or delete subjects anytime
 
-![Subject List showing color-coded subjects](./screenshots/subject_list.png)
+![Subject List showing color-coded subjects](./screenshots/subjects.png)
 
 ### 📥 Timetable Import
 - Bulk import all your subjects and schedules at once using a simple JSON format
