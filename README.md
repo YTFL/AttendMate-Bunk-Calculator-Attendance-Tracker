@@ -51,7 +51,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - When a day is a holiday, classes are still visible with individual **Holiday** actions per class
 - Auto end-of-day: at 10 PM, any still-unmarked class is automatically marked Present
 
-![Today's Schedule with Present/Absent action buttons](./screenshots/todays_schedule.png)
+![Today's Schedule with Present/Absent action buttons](./screenshots/todays.png)
 
 ### 📊 Bunk Meter
 - Per-subject predictions: how many classes you can safely bunk, or how many you must attend
