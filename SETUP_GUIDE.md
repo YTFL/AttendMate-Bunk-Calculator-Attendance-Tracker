@@ -2,13 +2,15 @@
 
 A complete walkthrough of everything you need to get started and make the most of AttendMate.
 
+When you open AttendMate for the first time after installing, you’ll be prompted to either open this Setup Guide or start using the app directly.
+
 ---
 
 ## 📋 Table of Contents
 
 1. [Setting Up Your Semester](#1-setting-up-your-semester)
 2. [Adding Subjects Manually](#2-adding-subjects-manually)
-3. [Importing Subjects via JSON](#3-importing-subjects-via-json)
+3. [Importing Subjects via JSON/CSV](#3-importing-subjects-via-jsoncsv)
 4. [Marking Attendance](#4-marking-attendance)
 5. [Calendar View](#5-calendar-view)
 6. [Bunk Meter](#6-bunk-meter)
@@ -78,14 +80,14 @@ Once set up, the Semester screen shows a status banner:
 
 ---
 
-## 3. Importing Subjects via JSON
+## 3. Importing Subjects via JSON/CSV
 
-If you have your full timetable ready, you can import all subjects at once instead of adding them one by one.
+If you have your full timetable ready, you can import all subjects at once instead of adding them one by one using JSON or CSV.
 
 ### How to Import
 
 1. On the **Subjects** tab, tap the **Import** icon (top-right area of the app bar).
-2. Paste your JSON into the text field.
+2. Paste your JSON or CSV into the text field, or tap **Import File** to pick a `.json`/`.csv` file.
 3. Tap **Parse** to validate and preview the subjects.
 4. Review the preview cards — each subject shows its name, acronym, and schedule.
 5. Tap **Import** to confirm and add all subjects.
@@ -140,7 +142,18 @@ If you have your full timetable ready, you can import all subjects at once inste
 | `day` | Lowercase: `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday` |
 | `startTime` / `endTime` | 24-hour format: `HH:MM` (e.g. `09:00`, `14:30`) |
 
-> **Tip:** Tap **Copy Format** inside the import screen to copy the JSON template to your clipboard.
+### CSV Format
+
+CSV import uses the same timetable-grid shape as CSV export:
+
+```text
+Day,"09:00-10:30","10:00-11:30","11:00-12:30"
+Monday,"MTH","-","CHE"
+Tuesday,"PHY","-","CSE"
+Wednesday,"CHE","-","MTH"
+```
+
+> **Tip:** Tap **Copy JSON Reference** or **Copy CSV Reference** inside the import screen.
 
 ---
 
@@ -150,7 +163,7 @@ If you have your full timetable ready, you can import all subjects at once inste
 >
 > **Steps:**
 > 1. Take a **screenshot** of your timetable, or have your **timetable PDF / image** ready.
-> 2. In AttendMate, tap **Copy Format** to copy the JSON reference to your clipboard.
+> 2. In AttendMate, tap **Copy JSON Reference** (or **Copy CSV Reference**) from Import Timetable.
 > 3. Open any AI chatbot — **Gemini**, **ChatGPT**, **Claude**, or any other.
 > 4. Upload your timetable image and send this prompt (paste your copied JSON format at the end):
 
