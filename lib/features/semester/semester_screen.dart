@@ -893,12 +893,13 @@ class _SemesterScreenState extends State<SemesterScreen> {
     return SizedBox(
       width: width,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: rs.font(12), color: Colors.grey),
           ),
           SizedBox(height: rs.height(4)),
@@ -906,6 +907,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: rs.font(16),
               fontWeight: FontWeight.bold,
