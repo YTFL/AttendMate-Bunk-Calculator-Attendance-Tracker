@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
 
 import '../../main.dart';
 import '../../utils/snackbar_utils.dart';
@@ -80,9 +79,22 @@ Add subjects one by one with name, acronym, color, and time slots.
 ## Steps
 1. Open the **Subjects** tab.
 2. Tap the **+** button.
-3. Fill subject name, optional acronym, and color.
-4. Tap **Add Time Slot** and add each day/time.
-5. Tap **Save Subject**.
+  3. Choose class type:
+    - Keep **Special One-Day Class** OFF for regular weekly classes.
+    - Turn **Special One-Day Class** ON for one-off classes.
+  4. Fill subject name, optional acronym, and color.
+  5. Add schedule:
+    - Weekly class: tap **Add Slot** and pick weekdays/time.
+    - Special class: pick a date first, then add time slot(s) for that date.
+  6. Tap **Add Subject**.
+
+  ---
+
+  ## Special One-Day Class Rules
+  - Special classes are counted in attendance just like regular classes.
+  - Special classes do **not** repeat weekly.
+  - For special classes, duplicate colors are not allowed on the same date.
+  - The same special-class color can be reused on a different date.
 
 ---
 
@@ -91,20 +103,40 @@ To edit or delete, open any subject card and update details.
 ''',
     ),
     _GuideSection(
-      title: '3. Importing Subjects via JSON',
+      title: '3. Importing Subjects via JSON/CSV',
       openInAppLabel: 'Open Import Timetable',
       openTarget: _GuideOpenTarget.importTimetable,
       markdown: '''
 ## Overview
-If you have your timetable ready, you can import all subjects at once.
+If you have your timetable ready, you can import all subjects at once using either JSON or CSV.
 
 ---
 
 ## How to Import
 1. On **Subjects**, tap the **Import** icon in the top app bar (upper-right corner).
-2. Paste JSON and tap **Parse**.
+2. Paste JSON/CSV **or** tap **Import File** to load a `.json` or `.csv` file.
 3. Review preview cards.
 4. Tap the **Import** button at the bottom of the screen (below the preview cards).
+
+---
+
+## Supported Formats
+- **JSON**: Same schema as JSON export (`subjects` with `name`, optional `acronym`, and `schedule`).
+- **CSV**: Same grid shape as CSV export.
+
+```text
+Day,"09:00-10:30","10:00-11:30"
+Monday,"MTH","-"
+Tuesday,"PHY","CSE"
+```
+
+> Use **Copy JSON Reference** or **Copy CSV Reference** inside Import Timetable.
+
+---
+
+## Export Notes
+- Export options (**JSON / CSV / PDF**) are for the **weekly timetable**.
+- One-off **Special One-Day Classes** are excluded from timetable export.
 
 ---
 
@@ -144,7 +176,42 @@ Rules to follow:
       aiPromptCopyText: _aiPrompt,
     ),
     _GuideSection(
-      title: '4. Marking Attendance',
+  title: '4. Exporting Timetable (JSON/CSV/PDF)',
+  openInAppLabel: 'Open Import Timetable',
+  openTarget: _GuideOpenTarget.importTimetable,
+  markdown: '''
+## Overview
+You can export your weekly timetable in **JSON**, **CSV**, or **PDF** directly from the Import Timetable screen.
+
+---
+
+## How to Export
+1. Open **Subjects** and go to **Import Timetable**.
+2. Tap the **three-dot menu** in the top-right.
+3. Choose one of:
+   - **Export as JSON**
+   - **Export as CSV**
+   - **Export as PDF**
+
+---
+
+## Output Details
+- All files are saved to your device **Downloads** folder.
+- Export covers the **weekly timetable grid**.
+- One-off **Special One-Day Classes** are excluded from export.
+
+---
+
+## Format Notes
+- **JSON Export**: Uses the same schema supported by JSON import.
+- **CSV Export**: Uses the same grid format supported by CSV import.
+- **PDF Export**: Generates a landscape timetable table based on the same grid data.
+
+> This means exported JSON/CSV can be edited and re-imported into AttendMate.
+''',
+    ),
+    _GuideSection(
+  title: '5. Marking Attendance',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -171,7 +238,7 @@ Bulk actions are available for a full day:
 ''',
     ),
   _GuideSection(
-      title: '5. Calendar View',
+      title: '6. Calendar View',
       openInAppLabel: 'Open Calendar',
       openTarget: _GuideOpenTarget.calendar,
       markdown: '''
@@ -190,7 +257,7 @@ Tap any past date to:
 ''',
     ),
   _GuideSection(
-      title: '6. Bunk Meter',
+      title: '7. Bunk Meter',
       openInAppLabel: 'Open Bunk Meter',
       openTarget: _GuideOpenTarget.bunkMeterTab,
       markdown: '''
@@ -212,7 +279,7 @@ It also tells whether you can bunk safely, need to attend more, or if the target
 ''',
     ),
   _GuideSection(
-      title: '7. Notifications',
+      title: '8. Notifications',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -232,7 +299,7 @@ Tap notification body to open **Today**.
 ''',
     ),
   _GuideSection(
-      title: '8. More',
+      title: '9. More',
       openInAppLabel: 'Open More Page',
       openTarget: _GuideOpenTarget.moreTab,
       markdown: '''
@@ -260,12 +327,13 @@ The **More** page contains app info, update tools, guide access, and support lin
 ''',
     ),
   _GuideSection(
-      title: '9. Tips & Tricks',
+      title: '10. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
 ## Tips
 - Color-code subjects for faster recognition.
+- Use **Special One-Day Class** for makeup classes, extra labs, or one-time events.
 - Use JSON import to save setup time.
 - Keep notifications enabled for quick marking.
 - Use Calendar to fix past mistakes.
@@ -550,16 +618,23 @@ class _GuideSectionPage extends StatelessWidget {
             ),
           ),
         Expanded(
-          child: Markdown(
-            data: markdown,
-            styleSheet: markdownStyle,
-            builders: {
-              'pre': _CodeBlockBuilder(
-                aiPromptText: aiPromptCopyText,
-                onCopyPrompt: onCopyPrompt,
-              ),
-            },
+          child: ListView(
             padding: const EdgeInsets.all(16),
+            children: [
+              MarkdownBody(
+                data: markdown,
+                styleSheet: markdownStyle,
+                selectable: true,
+              ),
+              if (aiPromptCopyText != null && aiPromptCopyText!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _AiPromptCard(
+                    prompt: aiPromptCopyText!,
+                    onCopyPrompt: onCopyPrompt,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -567,103 +642,61 @@ class _GuideSectionPage extends StatelessWidget {
   }
 }
 
-class _CodeBlockBuilder extends MarkdownElementBuilder {
-  final String? aiPromptText;
+class _AiPromptCard extends StatelessWidget {
+  final String prompt;
   final VoidCallback onCopyPrompt;
 
-  _CodeBlockBuilder({
-    required this.aiPromptText,
+  const _AiPromptCard({
+    required this.prompt,
     required this.onCopyPrompt,
   });
 
   @override
-  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    final codeText = element.textContent;
-    final shouldShowCopy = aiPromptText != null;
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
-    return Builder(
-      builder: (context) {
-        final theme = Theme.of(context);
-        final colorScheme = theme.colorScheme;
-        final isDarkMode = theme.brightness == Brightness.dark;
-        final codeBlockBackground = shouldShowCopy
-            ? (isDarkMode
-                ? colorScheme.surfaceContainerHighest
-                : colorScheme.surfaceContainerLow)
-            : colorScheme.surfaceContainerHigh;
-        final borderColor = shouldShowCopy
-            ? colorScheme.outline
-            : colorScheme.outlineVariant;
-
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: codeBlockBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor.withValues(alpha: 0.7)),
-            boxShadow: shouldShowCopy
-                ? [
-                    BoxShadow(
-                      color: colorScheme.shadow.withValues(alpha: isDarkMode ? 0.35 : 0.12),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (shouldShowCopy)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainer,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        'AI Prompt',
-                        style: theme.textTheme.labelLarge,
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: onCopyPrompt,
-                        icon: const Icon(Icons.copy_outlined),
-                        label: const Text('Copy'),
-                      ),
-                    ],
-                  ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode ? colorScheme.surfaceContainerHighest : colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainer,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Text('AI Prompt', style: theme.textTheme.labelLarge),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: onCopyPrompt,
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Copy'),
                 ),
-              if (shouldShowCopy)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: SelectableText(
-                    codeText,
-                    style: (preferredStyle ?? const TextStyle()).copyWith(
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                )
-              else
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.all(12),
-                  child: SelectableText(
-                    codeText,
-                    style: (preferredStyle ?? const TextStyle()).copyWith(
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(12),
+            child: SelectableText(
+              prompt,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

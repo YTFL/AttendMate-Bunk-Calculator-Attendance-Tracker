@@ -88,6 +88,180 @@ class TimetableImportUtils {
     }
   }
 
+  /// Parse pasted input and auto-detect JSON or CSV format.
+  static List<Subject> parseInputToSubjects(String input, Set<Color> usedColors) {
+    final normalized = input.trim();
+    if (normalized.isEmpty) {
+      throw Exception('Please paste JSON or CSV data.');
+    }
+
+    final startsLikeJson = normalized.startsWith('{') || normalized.startsWith('[');
+
+    if (startsLikeJson) {
+      return parseJsonToSubjects(normalized, usedColors);
+    }
+
+    return parseCsvToSubjects(normalized, usedColors);
+  }
+
+  /// Parse CSV grid exported by AttendMate and return list of subjects.
+  /// Expected structure:
+  /// Day,09:00-10:30,10:00-11:30
+  /// Monday,MTH,-
+  /// Tuesday,-,PHY
+  static List<Subject> parseCsvToSubjects(String csvString, Set<Color> usedColors) {
+    try {
+      final cleaned = csvString
+          .replaceFirst('\uFEFF', '')
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n')
+          .trim();
+
+      final lines = cleaned
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+
+      if (lines.length < 2) {
+        throw Exception('CSV must contain a header and at least one day row.');
+      }
+
+      final header = _parseCsvLine(lines.first);
+      if (header.length < 2 || header.first.toLowerCase() != 'day') {
+        throw Exception('Invalid CSV header. First column must be "Day".');
+      }
+
+      final slotDefs = <_CsvSlotDef>[];
+      for (int i = 1; i < header.length; i++) {
+        final parsedSlot = _parseCsvTimeSlot(header[i]);
+        if (parsedSlot == null) {
+          throw Exception('Invalid time slot in CSV header: "${header[i]}". Expected HH:MM-HH:MM');
+        }
+        slotDefs.add(parsedSlot);
+      }
+
+      final subjectSlots = <String, List<TimeSlot>>{};
+
+      for (int rowIndex = 1; rowIndex < lines.length; rowIndex++) {
+        final row = _parseCsvLine(lines[rowIndex]);
+        if (row.isEmpty) {
+          continue;
+        }
+
+        final day = _parseDayOfWeek(row.first);
+        if (day == null) {
+          throw Exception('Invalid day in CSV row ${rowIndex + 1}: "${row.first}".');
+        }
+
+        for (int col = 1; col < header.length && col < row.length; col++) {
+          final rawValue = row[col].trim();
+          final value = _normalizeCsvCell(rawValue);
+          if (value == '-' || value.isEmpty) {
+            continue;
+          }
+
+          final slot = slotDefs[col - 1];
+          final timeSlot = TimeSlot(
+            day: day,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          );
+
+          subjectSlots.putIfAbsent(value, () => <TimeSlot>[]).add(timeSlot);
+        }
+      }
+
+      if (subjectSlots.isEmpty) {
+        throw Exception('No valid subjects found in CSV.');
+      }
+
+      final subjects = <Subject>[];
+      var currentUsedColors = Set<Color>.from(usedColors);
+      for (final entry in subjectSlots.entries) {
+        final token = entry.key.trim();
+        final schedule = entry.value;
+        if (schedule.isEmpty) {
+          continue;
+        }
+
+        final subject = Subject(
+          name: token,
+          acronym: token.length <= 12 ? token : null,
+          color: getRandomUnusedColor(currentUsedColors),
+          schedule: schedule,
+        );
+        subjects.add(subject);
+        currentUsedColors.add(subject.color);
+      }
+
+      if (subjects.isEmpty) {
+        throw Exception('No valid subjects found in CSV.');
+      }
+
+      return subjects;
+    } catch (e) {
+      throw Exception('Error parsing CSV: ${e.toString()}');
+    }
+  }
+
+  static List<String> _parseCsvLine(String line) {
+    final result = <String>[];
+    final buffer = StringBuffer();
+    var inQuotes = false;
+
+    for (int i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+          buffer.write('"');
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        result.add(buffer.toString().trim());
+        buffer.clear();
+      } else {
+        buffer.write(char);
+      }
+    }
+
+    result.add(buffer.toString().trim());
+    return result;
+  }
+
+  static _CsvSlotDef? _parseCsvTimeSlot(String value) {
+    final normalized = value
+        .trim()
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll('−', '-');
+
+    final parts = normalized.split('-');
+    if (parts.length != 2) {
+      return null;
+    }
+
+    final start = _parseTimeOfDay(parts[0]);
+    final end = _parseTimeOfDay(parts[1]);
+    if (start == null || end == null) {
+      return null;
+    }
+
+    return _CsvSlotDef(startTime: start, endTime: end);
+  }
+
+  static String _normalizeCsvCell(String value) {
+    final cleaned = value
+        .trim()
+        .replaceAll('–', '-')
+        .replaceAll('—', '-')
+        .replaceAll('−', '-')
+        .replaceAll('\u00A0', ' ');
+    return cleaned.isEmpty ? '-' : cleaned;
+  }
+
   /// Parse individual subject from JSON
   static Subject _parseSubjectFromJson(dynamic subjectData, Set<Color> usedColors) {
     if (subjectData is! Map) {
@@ -268,6 +442,18 @@ class TimetableImportUtils {
     return jsonEncode(template);
   }
 
+  /// Generate template CSV format compatible with AttendMate export/import.
+  static String generateTemplateCsv() {
+    return '''Day,"09:00-10:30","10:00-11:30","11:00-12:30","14:00-15:30","16:00-18:00"
+Monday,"MTH","-","CHE","ENG","-"
+Tuesday,"PHY","-","CSE","-","-"
+Wednesday,"CHE","-","MTH","ENG","-"
+Thursday,"CSE","-","-","PHY","-"
+Friday,"MTH","-","-","CHE","-"
+Saturday,"-","PHY","-","CSE","-"
+Sunday,"-","-","-","-","ENG"''';
+  }
+
   /// Format JSON string with proper indentation
   static String formatJson(String jsonString) {
     try {
@@ -277,4 +463,14 @@ class TimetableImportUtils {
       return jsonString;
     }
   }
+}
+
+class _CsvSlotDef {
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+
+  _CsvSlotDef({
+    required this.startTime,
+    required this.endTime,
+  });
 }

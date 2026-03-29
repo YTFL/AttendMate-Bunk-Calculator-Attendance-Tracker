@@ -2,8 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_markdown/flutter_markdown.dart';
 
-class WhatsNewScreen extends StatelessWidget {
+class WhatsNewScreen extends StatefulWidget {
   const WhatsNewScreen({super.key});
+
+  @override
+  State<WhatsNewScreen> createState() => _WhatsNewScreenState();
+}
+
+class _WhatsNewScreenState extends State<WhatsNewScreen> {
+  late final Future<String> _releaseNotesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _releaseNotesFuture = _loadReleaseNotes();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +25,7 @@ class WhatsNewScreen extends StatelessWidget {
         title: const Text('What\'s New'),
       ),
       body: FutureBuilder<String>(
-        future: _loadReleaseNotes(),
+        future: _releaseNotesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

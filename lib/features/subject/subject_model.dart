@@ -72,13 +72,23 @@ class Subject {
     );
   }
 
+  bool get isSpecialClass =>
+      schedule.isNotEmpty && schedule.every((slot) => slot.isSpecialClass);
+
+  DateTime? get specialClassDate {
+    if (!isSpecialClass) {
+      return null;
+    }
+    return schedule.first.specificDate;
+  }
+
   int getTotalScheduledClasses(DateTime startDate, DateTime endDate) {
     int total = 0;
     for (DateTime date = startDate;
         date.isBefore(endDate.add(const Duration(days: 1)));
         date = date.add(const Duration(days: 1))) {
       for (var slot in schedule) {
-        if (date.weekday == slot.day.index + 1) {
+        if (slot.occursOnDate(date)) {
           total++;
         }
       }
@@ -103,22 +113,114 @@ class Subject {
   }
 }
 
+class ManualAttendanceOverride {
+  final DateTime effectiveFrom;
+  final int classesHeld;
+  final int classesAttended;
+
+  const ManualAttendanceOverride({
+    required this.effectiveFrom,
+    required this.classesHeld,
+    required this.classesAttended,
+  });
+
+  int get classesAbsent => (classesHeld - classesAttended).clamp(0, classesHeld);
+}
+
+const String _manualOverrideSlotKeyPrefix = '__manual_override_v1__';
+
+extension SubjectManualOverrideExtension on Subject {
+  ManualAttendanceOverride? get manualAttendanceOverride {
+    for (final record in attendanceRecords) {
+      final slotKey = record.slotKey ?? '';
+      if (!slotKey.startsWith(_manualOverrideSlotKeyPrefix)) {
+        continue;
+      }
+
+      final heldMatch = RegExp(r'held=(\d+)').firstMatch(slotKey);
+      final attendedMatch = RegExp(r'attended=(\d+)').firstMatch(slotKey);
+      if (heldMatch == null || attendedMatch == null) {
+        continue;
+      }
+
+      final held = int.tryParse(heldMatch.group(1) ?? '');
+      final attended = int.tryParse(attendedMatch.group(1) ?? '');
+      if (held == null || attended == null || held < 0 || attended < 0 || attended > held) {
+        continue;
+      }
+
+      final normalizedDate = normalizeDate(record.date) ?? record.date;
+      return ManualAttendanceOverride(
+        effectiveFrom: normalizedDate,
+        classesHeld: held,
+        classesAttended: attended,
+      );
+    }
+
+    return null;
+  }
+
+  Subject copyWithManualAttendanceOverride({
+    required DateTime effectiveFrom,
+    required int classesHeld,
+    required int classesAttended,
+  }) {
+    final normalizedDate = normalizeDate(effectiveFrom) ?? effectiveFrom;
+    final filtered = attendanceRecords.where((record) {
+      final slotKey = record.slotKey ?? '';
+      return !slotKey.startsWith(_manualOverrideSlotKeyPrefix);
+    }).toList();
+
+    filtered.add(
+      Attendance(
+        subjectId: id,
+        date: normalizedDate,
+        status: AttendanceStatus.cancelled,
+        slotKey:
+            '$_manualOverrideSlotKeyPrefix|held=$classesHeld|attended=$classesAttended',
+      ),
+    );
+
+    return copyWith(attendanceRecords: filtered);
+  }
+}
+
 class TimeSlot {
   final DayOfWeek day;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
+  final DateTime? specificDate;
+  final DateTime? effectiveFrom;
+  final DateTime? effectiveUntil;
 
   TimeSlot({
     required this.day,
     required this.startTime,
     required this.endTime,
+    this.specificDate,
+    this.effectiveFrom,
+    this.effectiveUntil,
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
+    final parsedSpecificDate = json['specificDate'] != null
+        ? DateTime.parse(json['specificDate'] as String)
+        : null;
+    final normalizedDate = normalizeDate(parsedSpecificDate);
+    final parsedEffectiveFrom = json['effectiveFrom'] != null
+        ? DateTime.parse(json['effectiveFrom'] as String)
+        : null;
+    final parsedEffectiveUntil = json['effectiveUntil'] != null
+        ? DateTime.parse(json['effectiveUntil'] as String)
+        : null;
+
     return TimeSlot(
       day: DayOfWeek.values[json['day'] as int],
       startTime: TimeOfDay(hour: json['startTime']['hour'], minute: json['startTime']['minute']),
       endTime: TimeOfDay(hour: json['endTime']['hour'], minute: json['endTime']['minute']),
+      specificDate: normalizedDate,
+      effectiveFrom: normalizeDate(parsedEffectiveFrom),
+      effectiveUntil: normalizeDate(parsedEffectiveUntil),
     );
   }
 
@@ -126,10 +228,69 @@ class TimeSlot {
         'day': day.index,
         'startTime': {'hour': startTime.hour, 'minute': startTime.minute},
         'endTime': {'hour': endTime.hour, 'minute': endTime.minute},
+        if (specificDate != null) 'specificDate': specificDate!.toIso8601String(),
+        if (effectiveFrom != null) 'effectiveFrom': effectiveFrom!.toIso8601String(),
+        if (effectiveUntil != null) 'effectiveUntil': effectiveUntil!.toIso8601String(),
       };
 
+  TimeSlot copyWith({
+    DayOfWeek? day,
+    TimeOfDay? startTime,
+    TimeOfDay? endTime,
+    DateTime? specificDate,
+    DateTime? effectiveFrom,
+    DateTime? effectiveUntil,
+    bool clearSpecificDate = false,
+    bool clearEffectiveFrom = false,
+    bool clearEffectiveUntil = false,
+  }) {
+    return TimeSlot(
+      day: day ?? this.day,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      specificDate: clearSpecificDate
+          ? null
+          : normalizeDate(specificDate ?? this.specificDate),
+      effectiveFrom: clearEffectiveFrom
+          ? null
+          : normalizeDate(effectiveFrom ?? this.effectiveFrom),
+      effectiveUntil: clearEffectiveUntil
+          ? null
+          : normalizeDate(effectiveUntil ?? this.effectiveUntil),
+    );
+  }
+
   String get slotKey {
-    return '${day.index}-${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}-${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+    final datePrefix = specificDate == null
+        ? ''
+        : '${specificDate!.year.toString().padLeft(4, '0')}-${specificDate!.month.toString().padLeft(2, '0')}-${specificDate!.day.toString().padLeft(2, '0')}-';
+    return '$datePrefix${day.index}-${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}-${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  bool get isSpecialClass => specificDate != null;
+
+  bool occursOnDate(DateTime date) {
+    final normalizedDate = normalizeDate(date) ?? date;
+    if (specificDate != null) {
+      return isSameDay(specificDate!, normalizedDate);
+    }
+    if (!_isWithinEffectiveRange(normalizedDate)) {
+      return false;
+    }
+    return normalizedDate.weekday == day.index + 1;
+  }
+
+  bool _isWithinEffectiveRange(DateTime date) {
+    final from = effectiveFrom;
+    final until = effectiveUntil;
+
+    if (from != null && date.isBefore(from)) {
+      return false;
+    }
+    if (until != null && date.isAfter(until)) {
+      return false;
+    }
+    return true;
   }
 
   /// Format the time slot as a time range string based on the specified format
@@ -169,6 +330,13 @@ extension DayOfWeekExtension on DayOfWeek {
 // Helper to check if two DateTime objects are the same day
 bool isSameDay(DateTime a, DateTime b) {
   return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+DateTime? normalizeDate(DateTime? date) {
+  if (date == null) {
+    return null;
+  }
+  return DateTime(date.year, date.month, date.day);
 }
 
 extension SubjectSearchExtension on Subject {

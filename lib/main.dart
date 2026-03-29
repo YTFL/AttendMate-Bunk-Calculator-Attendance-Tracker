@@ -12,7 +12,6 @@ import 'features/home/home_screen.dart';
 import 'features/semester/semester_provider.dart';
 import 'features/settings/setup_guide_screen.dart';
 import 'features/settings/time_format_provider.dart';
-import 'features/subject/subject_model.dart';
 import 'features/subject/subject_provider.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
@@ -66,9 +65,6 @@ Future<void> _performEndOfDayAttendanceMarking(DateTime date) async {
     // Load subjects
     final subjects = await databaseService.loadSubjects();
     
-    // Get day of week
-    final dayOfWeek = DayOfWeek.values[date.weekday - 1];
-    
     // Check if day is marked as holiday
     final records = await databaseService.loadAttendance();
     final recordsForDay = records.where((record) => record.date == date).toList();
@@ -80,7 +76,7 @@ Future<void> _performEndOfDayAttendanceMarking(DateTime date) async {
     
     // Auto-mark all unmarked classes as present
     for (var subject in subjects) {
-      final slotsForDay = subject.schedule.where((s) => s.day == dayOfWeek).toList();
+      final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date)).toList();
       if (slotsForDay.isEmpty) {
         continue;
       }
@@ -341,6 +337,9 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
         shouldShowPrompt = true;
         await prefs.setBool(_hasSeenSetupPromptKey, true);
       }
+
+      // Mark previous days' attendance as present (fallback for missed end-of-day markings)
+      await _markPreviousDaysAttendance();
     } catch (_) {
     }
 
@@ -359,6 +358,47 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
         }
         _showFirstLaunchPrompt();
       });
+    }
+  }
+
+  /// Mark attendance for previous unmarked days as a fallback
+  /// This runs when the app starts to handle cases where end-of-day marking didn't work
+  Future<void> _markPreviousDaysAttendance() async {
+    try {
+      // Wait a moment for providers to be initialized
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) {
+        return;
+      }
+
+      // Get providers from context
+      final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
+      final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+
+      // Only run if semester is set and has started
+      if (semesterProvider.semester == null || !semesterProvider.hasSemesterStarted) {
+        return;
+      }
+
+      // Wait for subjects to load
+      int attempts = 0;
+      while (subjectProvider.isLoading && attempts < 10) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+
+      // Mark previous days' attendance
+      await attendanceProvider.markPreviousDaysAttendanceAsPresent(
+        semesterStartDate: semesterProvider.semester!.startDate,
+        subjects: subjectProvider.subjects,
+      );
+
+      debugPrint('Previous days attendance marked successfully');
+    } catch (e) {
+      debugPrint('Error in fallback attendance marking: $e');
+      // Silently fail - this is a non-critical operation
     }
   }
 
@@ -522,6 +562,18 @@ class MyApp extends StatelessWidget {
           darkTheme: darkTheme,
           themeMode: themeProvider.themeMode,
           navigatorKey: navigatorKey,
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            final systemScale = mediaQuery.textScaler.scale(1.0);
+            final clampedScale = systemScale.clamp(0.9, 1.25);
+
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(clampedScale),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: const FirstLaunchGate(),
         );
       },

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/database_service.dart';
 import 'attendance_model.dart';
+import '../subject/subject_model.dart';
 
 class AttendanceProvider with ChangeNotifier {
   List<Attendance> _attendanceRecords = [];
@@ -128,5 +129,71 @@ class AttendanceProvider with ChangeNotifier {
     );
     await _databaseService.saveAttendance(_attendanceRecords);
     notifyListeners();
+  }
+
+  /// Fallback method: Mark attendance for all previous unmarked days as present
+  /// This is called when the app starts to handle missed end-of-day markings
+  /// It marks all scheduled classes from past days as present if they haven't been marked yet
+  Future<void> markPreviousDaysAttendanceAsPresent({
+    required DateTime semesterStartDate,
+    required List<Subject> subjects,
+  }) async {
+    try {
+      if (subjects.isEmpty) {
+        return;
+      }
+
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      
+      // Start from the day after semester start or from the earliest day in records
+      DateTime checkFromDate = DateTime(semesterStartDate.year, semesterStartDate.month, semesterStartDate.day);
+      
+      // Add a day to start checking from the day after semester start
+      checkFromDate = checkFromDate.add(const Duration(days: 1));
+
+      // Check all days from checkFromDate to yesterday
+      for (DateTime date = checkFromDate;
+          date.isBefore(todayDate);
+          date = date.add(const Duration(days: 1))) {
+        
+        // Skip if this day is marked as a holiday
+        if (isHoliday(date)) {
+          continue;
+        }
+
+        // For each subject, check and mark classes
+        for (final subject in subjects) {
+          // Find all slots scheduled for this date
+          final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(date)).toList();
+          
+          if (slotsForDay.isEmpty) {
+            continue;
+          }
+
+          // For each slot, check if attendance is marked
+          for (final slot in slotsForDay) {
+            final attendance = getAttendanceForSubjectOnDate(
+              subject.id,
+              date,
+              slotKey: slot.slotKey,
+            );
+
+            // If not marked, mark it as present
+            if (attendance == null) {
+              await markAttendance(
+                subject.id,
+                date,
+                AttendanceStatus.attended,
+                slotKey: slot.slotKey,
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error marking previous days attendance: $e');
+      // Silently fail - this is a fallback mechanism
+    }
   }
 }

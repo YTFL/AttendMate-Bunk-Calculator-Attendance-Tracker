@@ -7,6 +7,7 @@ import '../../features/semester/semester_provider.dart';
 import '../../features/settings/time_format_provider.dart';
 import '../../features/subject/subject_model.dart';
 import '../../features/subject/subject_provider.dart';
+import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import 'calendar_utils.dart';
 
@@ -204,14 +205,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildLegend() {
+    final rs = context.rs;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Legend:', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
+        SizedBox(height: rs.height(8)),
         Wrap(
-          spacing: 12,
-          runSpacing: 8,
+          spacing: rs.width(12),
+          runSpacing: rs.height(8),
           children: [
             _buildLegendItem(
               DayState.attendedFullDay,
@@ -248,26 +250,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildLegendItem(DayState state, String label) {
+    final rs = context.rs;
     return Tooltip(
       message: CalendarUtils.getStateLabel(state),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 24,
-            height: 24,
+            width: rs.scale(24),
+            height: rs.scale(24),
             decoration: BoxDecoration(
               color: CalendarUtils.getStateColor(state),
               shape: BoxShape.circle,
             ),
             child: Icon(
               CalendarUtils.getStateIcon(state),
-              size: 14,
+              size: rs.scale(14),
               color: Colors.white,
             ),
           ),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          SizedBox(width: rs.width(6)),
+          Text(label, style: TextStyle(fontSize: rs.font(12))),
         ],
       ),
     );
@@ -280,6 +283,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     List<Subject> subjects,
     List<Attendance> attendanceRecords,
   ) {
+    final rs = context.rs;
     final firstDayOfMonth = DateTime(month.year, month.month, 1);
     final lastDayOfMonth =
         DateTime(month.year, month.month + 1, 0);
@@ -309,15 +313,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   ))
               .toList(),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: rs.height(12)),
         // Calendar grid
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 7,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 14,
+            mainAxisSpacing: rs.height(10),
+            crossAxisSpacing: rs.width(10),
             childAspectRatio: 1.0,
           ),
           itemCount: (firstWeekday - 1) + daysInMonth,
@@ -343,6 +347,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildDayCell(BuildContext context, CalendarDayInfo dayInfo) {
+    final rs = context.rs;
     final isPressed = _pressedDate != null && 
         _pressedDate!.year == dayInfo.date.year &&
         _pressedDate!.month == dayInfo.date.month &&
@@ -371,22 +376,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: displayColor,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(rs.scale(8)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               dayInfo.date.day.toString(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
+                fontSize: rs.font(12),
               ),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: rs.height(2)),
             Icon(
               CalendarUtils.getStateIcon(dayInfo.state),
-              size: 16,
+              size: rs.scale(16),
               color: Colors.white,
             ),
           ],
@@ -438,6 +444,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     DateTime startDate,
     DateTime endDate,
   ) {
+    final rs = context.rs;
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
     final swipableDates = _getSwipableDayDates(
       currentDate: dayInfo.date,
@@ -459,9 +466,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           height: MediaQuery.of(context).size.height * 0.95,
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
+            left: rs.width(16),
+            right: rs.width(16),
+            top: rs.height(16),
           ),
           child: PageView.builder(
             controller: dayPageController,
@@ -493,7 +500,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             dateFormatter,
                             style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: rs.height(4)),
                           Text(
                             CalendarUtils.getStateLabel(pageDayInfo.state),
                             style: TextStyle(
@@ -513,90 +520,203 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   if (pageDayInfo.classesCount > 0 &&
                       pageDayInfo.state != DayState.futureClasses)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.check_circle_outline, size: 18),
-                              label: const Text('Present', style: TextStyle(fontSize: 13)),
-                              onPressed: () {
-                                final subjectProvider =
-                                    Provider.of<SubjectProvider>(context, listen: false);
-                                for (var subject in classesForDay) {
-                                  subjectProvider.markAttendance(
-                                    subject.id,
-                                    pageDate,
-                                    AttendanceStatus.attended,
-                                    slotKey: subject.schedule.first.slotKey,
-                                  );
-                                }
-                                ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                  const SnackBar(content: Text('All classes marked as present')),
-                                );
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 13),
-                                backgroundColor: Theme.of(context).colorScheme.onSurface,
-                                foregroundColor: Theme.of(context).colorScheme.surface,
-                              ),
+                      padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final rowScale = (constraints.maxWidth / 360).clamp(0.72, 1.0);
+                          final compactMode = constraints.maxWidth < 370;
+                          final iconlessMode = constraints.maxWidth < 335;
+                          final buttonStyle = ElevatedButton.styleFrom(
+                            minimumSize: Size(0, rs.height(44)),
+                            padding: EdgeInsets.symmetric(
+                              vertical: rs.height(9),
+                              horizontal: rs.width(compactMode ? 4 : 6),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.fast_forward_outlined, size: 18),
-                              label: const Text('Skip Day', style: TextStyle(fontSize: 13)),
-                              onPressed: () {
-                                final subjectProvider =
-                                    Provider.of<SubjectProvider>(context, listen: false);
-                                for (var subject in classesForDay) {
-                                  subjectProvider.markAttendance(
-                                    subject.id,
-                                    pageDate,
-                                    AttendanceStatus.absent,
-                                    slotKey: subject.schedule.first.slotKey,
-                                  );
-                                }
-                                ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                  const SnackBar(content: Text('All classes marked as absent')),
-                                );
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 13),
-                                backgroundColor: Theme.of(context).colorScheme.onSurface,
-                                foregroundColor: Theme.of(context).colorScheme.surface,
+                            visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
+                            backgroundColor: Theme.of(context).colorScheme.onSurface,
+                            foregroundColor: Theme.of(context).colorScheme.surface,
+                          );
+
+                          String adaptiveLabel(String label) {
+                            if (!compactMode) return label;
+                            if (label == 'Skip Day') return 'Skip';
+                            return label;
+                          }
+
+                          Widget actionButton({
+                            required IconData icon,
+                            required String label,
+                            required VoidCallback onPressed,
+                          }) {
+                            final buttonLabel = adaptiveLabel(label);
+                            final fontSize = (rs.font(12) * rowScale).clamp(11.0, 13.0);
+                            return SizedBox(
+                              width: (constraints.maxWidth - rs.width(12)) / 3,
+                              child: ElevatedButton(
+                                onPressed: onPressed,
+                                style: buttonStyle,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (!iconlessMode) ...[
+                                      Icon(icon, size: (rs.scale(16) * rowScale).clamp(13.0, 18.0)),
+                                      SizedBox(width: rs.width(4)),
+                                    ],
+                                    Flexible(
+                                      child: Text(
+                                        buttonLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.fade,
+                                        softWrap: false,
+                                        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.celebration_outlined, size: 18),
-                              label: const Text('Holiday', style: TextStyle(fontSize: 13)),
-                              onPressed: () {
-                                final subjectProvider =
-                                    Provider.of<SubjectProvider>(context, listen: false);
-                                subjectProvider.markDayAsHoliday(pageDate);
-                                ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                  const SnackBar(content: Text('Day marked as holiday')),
-                                );
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 13),
-                                backgroundColor: Theme.of(context).colorScheme.onSurface,
-                                foregroundColor: Theme.of(context).colorScheme.surface,
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: actionButton(
+                                  icon: Icons.check_circle_outline,
+                                  label: 'Present',
+                                  onPressed: () async {
+                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                    final navigator = Navigator.of(context);
+                                    final subjectProvider =
+                                        Provider.of<SubjectProvider>(context, listen: false);
+                                    final editableClasses = classesForDay
+                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
+                                        .toList();
+                                    final lockedCount = classesForDay.length - editableClasses.length;
+
+                                    if (editableClasses.isEmpty) {
+                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
+                                        const SnackBar(
+                                          content: Text('Classes on this date are locked due to manual count update.'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    for (final subject in editableClasses) {
+                                      await subjectProvider.markAttendance(
+                                        subject.id,
+                                        pageDate,
+                                        AttendanceStatus.attended,
+                                        slotKey: subject.schedule.first.slotKey,
+                                      );
+                                    }
+
+                                    final message = lockedCount > 0
+                                        ? 'Marked ${editableClasses.length} class(es) as present. $lockedCount locked.'
+                                        : 'All classes marked as present';
+                                    scaffoldMessenger.showReplacingSnackBar(
+                                      SnackBar(content: Text(message)),
+                                    );
+                                    navigator.pop();
+                                  },
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
+                              SizedBox(width: rs.width(6)),
+                              Expanded(
+                                child: actionButton(
+                                  icon: Icons.fast_forward_outlined,
+                                  label: 'Skip Day',
+                                  onPressed: () async {
+                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                    final navigator = Navigator.of(context);
+                                    final subjectProvider =
+                                        Provider.of<SubjectProvider>(context, listen: false);
+                                    final editableClasses = classesForDay
+                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
+                                        .toList();
+                                    final lockedCount = classesForDay.length - editableClasses.length;
+
+                                    if (editableClasses.isEmpty) {
+                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
+                                        const SnackBar(
+                                          content: Text('Classes on this date are locked due to manual count update.'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    for (final subject in editableClasses) {
+                                      await subjectProvider.markAttendance(
+                                        subject.id,
+                                        pageDate,
+                                        AttendanceStatus.absent,
+                                        slotKey: subject.schedule.first.slotKey,
+                                      );
+                                    }
+
+                                    final message = lockedCount > 0
+                                        ? 'Marked ${editableClasses.length} class(es) as absent. $lockedCount locked.'
+                                        : 'All classes marked as absent';
+                                    scaffoldMessenger.showReplacingSnackBar(
+                                      SnackBar(content: Text(message)),
+                                    );
+                                    navigator.pop();
+                                  },
+                                ),
+                              ),
+                              SizedBox(width: rs.width(6)),
+                              Expanded(
+                                child: actionButton(
+                                  icon: Icons.celebration_outlined,
+                                  label: 'Holiday',
+                                  onPressed: () async {
+                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                    final navigator = Navigator.of(context);
+                                    final subjectProvider =
+                                        Provider.of<SubjectProvider>(context, listen: false);
+                                    final editableClasses = classesForDay
+                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
+                                        .toList();
+                                    final lockedCount = classesForDay.length - editableClasses.length;
+
+                                    if (editableClasses.isEmpty) {
+                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
+                                        const SnackBar(
+                                          content: Text('Classes on this date are locked due to manual count update.'),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    for (final subject in editableClasses) {
+                                      await subjectProvider.markAttendance(
+                                        subject.id,
+                                        pageDate,
+                                        AttendanceStatus.cancelled,
+                                        slotKey: subject.schedule.first.slotKey,
+                                      );
+                                    }
+
+                                    final message = lockedCount > 0
+                                        ? 'Marked ${editableClasses.length} class(es) as holiday. $lockedCount locked.'
+                                        : 'Day marked as holiday';
+                                    scaffoldMessenger.showReplacingSnackBar(
+                                      SnackBar(content: Text(message)),
+                                    );
+                                    navigator.pop();
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: rs.height(8)),
                   if (pageDayInfo.classesCount == 0)
                     Expanded(
                       child: Center(
@@ -635,7 +755,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         },
                       ),
                     ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: rs.height(16)),
                 ],
               );
             },
@@ -698,11 +818,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   List<Subject> _expandSubjectsBySlotForDay(List<Subject> subjects, DateTime date) {
-    final dayOfWeek = DayOfWeek.values[date.weekday - 1];
     final expandedSubjects = <Subject>[];
 
     for (final subject in subjects) {
-      final slotsForDay = subject.schedule.where((slot) => slot.day == dayOfWeek);
+      final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(date));
       for (final slot in slotsForDay) {
         expandedSubjects.add(subject.copyWith(schedule: [slot]));
       }
@@ -730,25 +849,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
     TimeFormatProvider timeFormatProvider,
     String slotKey,
   ) {
+    final rs = context.rs;
     final status = attendance?.status;
     final isFutureClass = dayState == DayState.futureClasses;
+    final isLockedByManualOverride = _isLockedByManualOverride(subject, date);
+    final overrideDate = subject.manualAttendanceOverride?.effectiveFrom;
     final timeSlot = CalendarUtils.getTimeSlotForDate(subject, date);
     final timeText = timeSlot != null
         ? '${timeSlot.startTime.hour.toString().padLeft(2, '0')}:${timeSlot.startTime.minute.toString().padLeft(2, '0')} - ${timeSlot.endTime.hour.toString().padLeft(2, '0')}:${timeSlot.endTime.minute.toString().padLeft(2, '0')}'
         : '';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: rs.height(8)),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(rs.scale(8)),
       ),
       child: ListTile(
         dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        contentPadding: rs.insetsSymmetric(horizontal: 12, vertical: 4),
         leading: Container(
-          width: 40,
-          height: 40,
+          width: rs.scale(40),
+          height: rs.scale(40),
           decoration: BoxDecoration(
             color: subject.color,
             shape: BoxShape.circle,
@@ -771,12 +893,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Text(subject.name),
             if (timeText.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 4.0),
+                padding: EdgeInsets.only(top: rs.height(4)),
                 child: Text(
                   timeText,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: rs.font(11),
                     color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            if (isLockedByManualOverride && overrideDate != null)
+              Padding(
+                padding: EdgeInsets.only(top: rs.height(4)),
+                child: Text(
+                  'Locked before ${_formatShortDate(overrideDate)}',
+                  style: TextStyle(
+                    fontSize: rs.font(11),
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -784,27 +918,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ),
         trailing: isFutureClass
             ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(rs.scale(20)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.schedule, size: 16, color: Colors.white),
-                    const SizedBox(width: 4),
-                    const Text(
+                    Icon(Icons.schedule, size: rs.scale(16), color: Colors.white),
+                    SizedBox(width: rs.width(4)),
+                    Text(
                       'Pending',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: rs.font(12),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               )
+            : isLockedByManualOverride
+                ? _buildLockedStatusButton()
             : _buildAttendanceStatusButton(
                 status,
                 () async {
@@ -830,7 +966,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  Widget _buildLockedStatusButton() {
+    final rs = context.rs;
+    return Container(
+      padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey,
+        borderRadius: BorderRadius.circular(rs.scale(20)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: rs.scale(16), color: Colors.white),
+          SizedBox(width: rs.width(4)),
+          Text(
+            'Locked',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: rs.font(12),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAttendanceStatusButton(AttendanceStatus? status, VoidCallback onTap) {
+    final rs = context.rs;
     Color bgColor;
     String label;
     IconData icon;
@@ -856,21 +1019,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(rs.scale(20)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: Colors.white),
-            const SizedBox(width: 4),
+            Icon(icon, size: rs.scale(16), color: Colors.white),
+            SizedBox(width: rs.width(4)),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 12,
+                fontSize: rs.font(12),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -927,6 +1090,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
     ];
     final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  bool _isLockedByManualOverride(Subject subject, DateTime date) {
+    final manualOverride = subject.manualAttendanceOverride;
+    if (manualOverride == null) {
+      return false;
+    }
+
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final effectiveFrom = manualOverride.effectiveFrom;
+    final normalizedEffectiveFrom =
+        DateTime(effectiveFrom.year, effectiveFrom.month, effectiveFrom.day);
+
+    return normalizedDate.isBefore(normalizedEffectiveFrom);
+  }
+
+  String _formatShortDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
   Color _darkenColor(Color color) {

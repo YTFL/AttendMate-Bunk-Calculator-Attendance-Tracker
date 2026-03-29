@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -52,7 +51,7 @@ class NotificationService {
   Stream<NavigationEvent> get navigationStream => _navigationController.stream;
 
   Future<void> init() async {
-    if (_initialized || kIsWeb) {
+    if (_initialized) {
       return;
     }
 
@@ -71,10 +70,6 @@ class NotificationService {
   }
 
   Future<void> scheduleForSubjects(List<Subject> subjects) async {
-    if (kIsWeb) {
-      return;
-    }
-
     await init();
     await _plugin.cancelAll();
     _scheduledNotifications.clear();
@@ -88,6 +83,9 @@ class NotificationService {
     for (final subject in subjects) {
       for (final slot in subject.schedule) {
         final scheduleTime = _nextInstanceOfSlot(slot);
+        if (scheduleTime == null) {
+          continue;
+        }
         final notificationId = _notificationId(subject.id, slot);
         
         // Skip if already scheduled in this session
@@ -166,47 +164,67 @@ class NotificationService {
     return const NotificationDetails(android: androidDetails);
   }
 
-  tz.TZDateTime _nextInstanceOfSlot(TimeSlot slot) {
+  tz.TZDateTime? _nextInstanceOfSlot(TimeSlot slot) {
     final now = tz.TZDateTime.now(tz.local);
-    final targetWeekday = slot.day.index + 1;
+    final today = DateTime(now.year, now.month, now.day);
 
-    if (now.weekday == targetWeekday) {
-      final todayEnd = tz.TZDateTime(
+    if (slot.specificDate != null) {
+      final scheduledDate = normalizeDate(slot.specificDate)!;
+      if (scheduledDate.isBefore(today)) {
+        return null;
+      }
+
+      final scheduledEnd = tz.TZDateTime(
         tz.local,
-        now.year,
-        now.month,
-        now.day,
+        scheduledDate.year,
+        scheduledDate.month,
+        scheduledDate.day,
         slot.endTime.hour,
         slot.endTime.minute,
       );
-      
-      if (!now.isAfter(todayEnd)) {
-        return todayEnd;
+
+      if (now.isAfter(scheduledEnd)) {
+        if (now.difference(scheduledEnd) <= _recentEndGrace) {
+          return now.add(const Duration(seconds: 5));
+        }
+        return null;
       }
-      
-      final difference = now.difference(todayEnd);
-      
-      if (difference <= _recentEndGrace) {
-        final immediate = now.add(const Duration(seconds: 5));
-        return immediate;
-      }
+
+      return scheduledEnd;
     }
 
-    var daysToAdd = (targetWeekday - now.weekday) % 7;
-    if (daysToAdd == 0) {
-      daysToAdd = 7;
+    for (int dayOffset = 0; dayOffset <= 370; dayOffset++) {
+      final candidateDateTime = now.add(Duration(days: dayOffset));
+      final candidateDate = DateTime(
+        candidateDateTime.year,
+        candidateDateTime.month,
+        candidateDateTime.day,
+      );
+
+      if (!slot.occursOnDate(candidateDate)) {
+        continue;
+      }
+
+      final candidateEnd = tz.TZDateTime(
+        tz.local,
+        candidateDate.year,
+        candidateDate.month,
+        candidateDate.day,
+        slot.endTime.hour,
+        slot.endTime.minute,
+      );
+
+      if (dayOffset == 0 && now.isAfter(candidateEnd)) {
+        if (now.difference(candidateEnd) <= _recentEndGrace) {
+          return now.add(const Duration(seconds: 5));
+        }
+        continue;
+      }
+
+      return candidateEnd;
     }
 
-    final nextDate = now.add(Duration(days: daysToAdd));
-    final result = tz.TZDateTime(
-      tz.local,
-      nextDate.year,
-      nextDate.month,
-      nextDate.day,
-      slot.endTime.hour,
-      slot.endTime.minute,
-    );
-    return result;
+    return null;
   }
 
   int _notificationId(String subjectId, TimeSlot slot) {

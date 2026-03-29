@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../utils/responsive_scale.dart';
 import '../attendance/attendance_model.dart';
 import '../attendance/attendance_provider.dart';
 import '../subject/subject_model.dart';
@@ -29,6 +30,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rs = context.rs;
     // By using Provider.of, this widget will rebuild when SubjectProvider notifies its listeners
     final subjectProvider = Provider.of<SubjectProvider>(context);
     final semesterProvider = Provider.of<SemesterProvider>(context);
@@ -46,22 +48,22 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       final formattedDate = '${startDate.day}/${startDate.month}/${startDate.year}';
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: rs.insetsAll(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.pending_actions, size: 50, color: Colors.blue),
-              const SizedBox(height: 16),
-              const Text(
+              Icon(Icons.pending_actions, size: rs.scale(50), color: Colors.blue),
+              SizedBox(height: rs.height(16)),
+              Text(
                 'Semester Yet to Begin',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: rs.font(22), fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: rs.height(8)),
               Text(
                 'Your semester will start on $formattedDate. The bunk meter will be available from that date.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: rs.font(16)),
               ),
             ],
           ),
@@ -87,7 +89,6 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       attendanceProvider,
       semester,
       endDate,
-      targetPercentage,
     );
 
     // Filter subjects based on search query
@@ -101,17 +102,17 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       children: [
         if (semesterEnded)
           Container(
-            padding: const EdgeInsets.all(12.0),
-            margin: const EdgeInsets.all(8.0),
+            padding: rs.insetsAll(12),
+            margin: rs.insetsAll(8),
             decoration: BoxDecoration(
               color: Colors.blue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8.0),
+              borderRadius: BorderRadius.circular(rs.scale(8)),
               border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                const SizedBox(width: 8),
+                Icon(Icons.info_outline, color: Colors.blue, size: rs.scale(20)),
+                SizedBox(width: rs.width(8)),
                 Expanded(
                   child: Text(
                     'Semester ended on ${semester.endDate.day}/${semester.endDate.month}/${semester.endDate.year}. Showing final attendance data.',
@@ -123,7 +124,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
           ),
         // Search field
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
           child: TextField(
             controller: _searchController,
             onChanged: (value) {
@@ -146,20 +147,20 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                     )
                   : null,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.0),
+                borderRadius: BorderRadius.circular(rs.scale(12)),
               ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 12.0),
+              contentPadding: rs.insetsSymmetric(vertical: 12),
             ),
           ),
         ),
         // Show count of filtered results
         if (_searchQuery.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+            padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
             child: Text(
               'Found ${filteredSubjects.length} class${filteredSubjects.length == 1 ? '' : 'es'}',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: rs.font(12),
                 color: Colors.grey.shade600,
                 fontWeight: FontWeight.w500,
               ),
@@ -171,16 +172,16 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off, size: 64, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
+                      Icon(Icons.search_off, size: rs.scale(64), color: Colors.grey.shade400),
+                      SizedBox(height: rs.height(16)),
                       Text(
                         'No classes found',
-                        style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                        style: TextStyle(fontSize: rs.font(18), color: Colors.grey.shade600),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: rs.height(8)),
                       Text(
                         'Try a different search term',
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                        style: TextStyle(fontSize: rs.font(14), color: Colors.grey.shade500),
                       ),
                     ],
                   ),
@@ -190,29 +191,14 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       itemCount: filteredSubjects.length,
       itemBuilder: (context, index) {
         final subject = filteredSubjects[index];
+        final snapshot = _buildAttendanceSnapshot(
+          subject: subject,
+          attendanceProvider: attendanceProvider,
+          semester: semester,
+          endDate: endDate,
+        );
 
-        // 1. Get total classes scheduled for the whole semester
-        final totalClassesInSemester = subject.getTotalScheduledClasses(semester.startDate, semester.endDate);
-
-        // 2. Get classes scheduled up to today
-        final scheduledSoFar = subject.getTotalScheduledClasses(semester.startDate, endDate);
-
-        // 3. Get attendance records for this subject up to today
-        final recordsForSubject = attendanceProvider.attendanceRecords.where((record) {
-          return record.subjectId == subject.id && !record.date.isAfter(endDate);
-        }).toList();
-
-        final attendedClasses = recordsForSubject
-            .where((record) => record.status == AttendanceStatus.attended)
-            .length;
-        final absentClasses = recordsForSubject
-            .where((record) => record.status == AttendanceStatus.absent)
-            .length;
-        final cancelledClasses = recordsForSubject
-            .where((record) => record.status == AttendanceStatus.cancelled)
-            .length;
-
-        if (totalClassesInSemester == 0) {
+        if (snapshot.totalClassesInWindow == 0 && snapshot.classesHeldSoFar == 0) {
           final isDarkMode = Theme.of(context).brightness == Brightness.dark;
           final isExpanded = _expandedSubjectIds.contains(subject.id);
           return Card(
@@ -291,21 +277,14 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
           );
         }
 
-        // 4. Calculate classes held so far (all scheduled classes excluding cancelled holidays)
-        int classesHeldSoFar = scheduledSoFar - cancelledClasses;
-        if (classesHeldSoFar < 0) {
-          classesHeldSoFar = 0;
-        }
+        final classesHeldSoFar = snapshot.classesHeldSoFar;
+        final attendedClasses = snapshot.attendedClasses;
+        final absentClasses = snapshot.absentClasses;
+        final markedClasses = snapshot.markedClasses;
+        final currentPercentage =
+            (markedClasses == 0) ? 100.0 : (attendedClasses / markedClasses) * 100;
 
-        // 5. Calculate only marked classes (attended + absent) - unmarked classes are not considered
-        final markedClasses = attendedClasses + absentClasses;
-
-        // 6. Calculate the current attendance percentage based only on marked classes
-        double currentPercentage = (markedClasses == 0)
-            ? 100.0
-            : (attendedClasses / markedClasses) * 100;
-
-        // 7. Calculate future bunking ability or required attendance
+        // Calculate future bunking ability or required attendance
         String message;
         Color messageColor;
         String compactStatus;
@@ -314,7 +293,10 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
             ? 1.0
             : (attendedClasses / markedClasses);
 
-        final futureScheduled = totalClassesInSemester - scheduledSoFar;
+        int futureScheduled = snapshot.totalClassesInWindow - snapshot.scheduledSoFarInWindow;
+        if (futureScheduled < 0) {
+          futureScheduled = 0;
+        }
 
         if (currentRatio >= targetPercentage) {
           // Already at or above target
@@ -448,6 +430,18 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                     const SizedBox(height: 10),
                     const Divider(height: 1),
                     const SizedBox(height: 10),
+                    if (snapshot.manualOverride != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Manual baseline active from ${snapshot.countingStart.day}/${snapshot.countingStart.month}/${snapshot.countingStart.year}. Any attendance or timetable changes before this date are ignored in this card.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -456,6 +450,21 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                         _buildStatColumn('Bunked', absentClasses.toString()),
                         _buildStatColumn('Current %', '${currentPercentage.toStringAsFixed(1)}%'),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showManualCountUpdateDialog(
+                          subject: subject,
+                          subjectProvider: subjectProvider,
+                          currentHeld: classesHeldSoFar,
+                          currentAttended: attendedClasses,
+                          effectiveFrom: today,
+                        ),
+                        icon: const Icon(Icons.edit_calendar_outlined),
+                        label: const Text('Update Counts Manually'),
+                      ),
                     ),
                   ],
                 ],
@@ -486,7 +495,6 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     AttendanceProvider attendanceProvider,
     Semester semester,
     DateTime endDate,
-    double targetPercentage,
   ) {
     final targetPercentageValue = semester.targetPercentage / 100;
     
@@ -512,20 +520,15 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     DateTime endDate,
     double targetPercentage,
   ) {
-    // Get attendance records for this subject up to today
-    final recordsForSubject = attendanceProvider.attendanceRecords.where((record) {
-      return record.subjectId == subject.id && !record.date.isAfter(endDate);
-    }).toList();
+    final snapshot = _buildAttendanceSnapshot(
+      subject: subject,
+      attendanceProvider: attendanceProvider,
+      semester: semester,
+      endDate: endDate,
+    );
 
-    final attendedClasses = recordsForSubject
-        .where((record) => record.status == AttendanceStatus.attended)
-        .length;
-    final absentClasses = recordsForSubject
-        .where((record) => record.status == AttendanceStatus.absent)
-        .length;
-
-    // Only count marked classes (attended + absent), unmarked classes are not considered
-    final markedClasses = attendedClasses + absentClasses;
+    final attendedClasses = snapshot.attendedClasses;
+    final markedClasses = snapshot.markedClasses;
 
     // Check if below target
     if (markedClasses == 0) {
@@ -534,5 +537,256 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
 
     final currentRatio = attendedClasses / markedClasses;
     return currentRatio < targetPercentage;
+  }
+
+  _SubjectAttendanceSnapshot _buildAttendanceSnapshot({
+    required Subject subject,
+    required AttendanceProvider attendanceProvider,
+    required Semester semester,
+    required DateTime endDate,
+  }) {
+    final manualOverride = subject.manualAttendanceOverride;
+    DateTime countingStart = manualOverride?.effectiveFrom ?? semester.startDate;
+    if (countingStart.isBefore(semester.startDate)) {
+      countingStart = semester.startDate;
+    }
+
+    final recordsForSubject = attendanceProvider.attendanceRecords.where((record) {
+      if (record.subjectId != subject.id) {
+        return false;
+      }
+      if (record.date.isAfter(endDate)) {
+        return false;
+      }
+      if (record.date.isBefore(countingStart)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    final attendedPostOverride = recordsForSubject
+        .where((record) => record.status == AttendanceStatus.attended)
+        .length;
+    final absentPostOverride = recordsForSubject
+        .where((record) => record.status == AttendanceStatus.absent)
+        .length;
+    final cancelledPostOverride = recordsForSubject
+        .where((record) => record.status == AttendanceStatus.cancelled)
+        .length;
+
+    final scheduledSoFarInWindow = countingStart.isAfter(endDate)
+        ? 0
+        : subject.getTotalScheduledClasses(countingStart, endDate);
+    final totalClassesInWindow = countingStart.isAfter(semester.endDate)
+        ? 0
+        : subject.getTotalScheduledClasses(countingStart, semester.endDate);
+
+    int heldPostOverride = scheduledSoFarInWindow - cancelledPostOverride;
+    if (heldPostOverride < 0) {
+      heldPostOverride = 0;
+    }
+
+    final baselineHeld = manualOverride?.classesHeld ?? 0;
+    final baselineAttended = manualOverride?.classesAttended ?? 0;
+    final baselineAbsent = manualOverride?.classesAbsent ?? 0;
+
+    return _SubjectAttendanceSnapshot(
+      totalClassesInWindow: totalClassesInWindow,
+      scheduledSoFarInWindow: scheduledSoFarInWindow,
+      classesHeldSoFar: baselineHeld + heldPostOverride,
+      attendedClasses: baselineAttended + attendedPostOverride,
+      absentClasses: baselineAbsent + absentPostOverride,
+      markedClasses: baselineHeld + attendedPostOverride + absentPostOverride,
+      countingStart: countingStart,
+      manualOverride: manualOverride,
+    );
+  }
+
+  Future<void> _showManualCountUpdateDialog({
+    required Subject subject,
+    required SubjectProvider subjectProvider,
+    required int currentHeld,
+    required int currentAttended,
+    required DateTime effectiveFrom,
+  }) async {
+    final manualInput = await Navigator.of(context).push<_ManualCountInput>(
+      MaterialPageRoute(
+        builder: (context) => _ManualCountUpdatePage(
+          subjectName: subject.name,
+          effectiveFrom: effectiveFrom,
+          initialHeld: currentHeld,
+          initialAttended: currentAttended,
+        ),
+      ),
+    );
+
+    if (manualInput == null || !mounted) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    await subjectProvider.updateManualAttendanceCounts(
+      subjectId: subject.id,
+      classesHeld: manualInput.held,
+      classesAttended: manualInput.attended,
+      effectiveFrom: effectiveFrom,
+    );
+  }
+}
+
+class _SubjectAttendanceSnapshot {
+  final int totalClassesInWindow;
+  final int scheduledSoFarInWindow;
+  final int classesHeldSoFar;
+  final int attendedClasses;
+  final int absentClasses;
+  final int markedClasses;
+  final DateTime countingStart;
+  final ManualAttendanceOverride? manualOverride;
+
+  const _SubjectAttendanceSnapshot({
+    required this.totalClassesInWindow,
+    required this.scheduledSoFarInWindow,
+    required this.classesHeldSoFar,
+    required this.attendedClasses,
+    required this.absentClasses,
+    required this.markedClasses,
+    required this.countingStart,
+    required this.manualOverride,
+  });
+}
+
+class _ManualCountInput {
+  final int held;
+  final int attended;
+
+  const _ManualCountInput({
+    required this.held,
+    required this.attended,
+  });
+}
+
+class _ManualCountUpdatePage extends StatefulWidget {
+  final String subjectName;
+  final DateTime effectiveFrom;
+  final int initialHeld;
+  final int initialAttended;
+
+  const _ManualCountUpdatePage({
+    required this.subjectName,
+    required this.effectiveFrom,
+    required this.initialHeld,
+    required this.initialAttended,
+  });
+
+  @override
+  State<_ManualCountUpdatePage> createState() => _ManualCountUpdatePageState();
+}
+
+class _ManualCountUpdatePageState extends State<_ManualCountUpdatePage> {
+  late final TextEditingController _heldController;
+  late final TextEditingController _attendedController;
+  String? _validationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _heldController = TextEditingController(text: widget.initialHeld.toString());
+    _attendedController = TextEditingController(text: widget.initialAttended.toString());
+  }
+
+  @override
+  void dispose() {
+    _heldController.dispose();
+    _attendedController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final held = int.tryParse(_heldController.text.trim());
+    final attended = int.tryParse(_attendedController.text.trim());
+
+    if (held == null || attended == null || held < 0 || attended < 0 || attended > held) {
+      setState(() {
+        _validationError = 'Enter valid counts. Attended must be between 0 and held.';
+      });
+      return;
+    }
+
+    Navigator.pop(context, _ManualCountInput(held: held, attended: attended));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Update ${widget.subjectName} Counts'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Warning: Updating class counts manually will ignore all attendance and timetable history before ${widget.effectiveFrom.day}/${widget.effectiveFrom.month}/${widget.effectiveFrom.year} for this subject in Bunk Meter.',
+              style: TextStyle(
+                color: Colors.orange.shade800,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Set your baseline counts. From that day onward, future classes will be added normally.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _heldController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Classes Held',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _attendedController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Classes Attended',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_validationError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _validationError!,
+                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              ),
+            ],
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _save,
+                    child: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

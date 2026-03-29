@@ -87,7 +87,7 @@ class _MoreScreenState extends State<MoreScreen> {
       return;
     }
 
-    await _showUpdateDialog(update);
+    await _showUpdateScreen(update);
     if (!mounted) return;
 
     setState(() {
@@ -96,98 +96,98 @@ class _MoreScreenState extends State<MoreScreen> {
     });
   }
 
-  Future<void> _showUpdateDialog(AppUpdate update) async {
+  Future<void> _showUpdateScreen(AppUpdate update) async {
     var isDownloading = false;
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, dialogSetState) => FutureBuilder<PackageInfo>(
-          future: _packageInfoFuture,
-          builder: (dialogContext, snapshot) {
-            final currentVersion = snapshot.data?.version ?? '1.0.1';
-            return UpdateDialog(
-              update: update,
-              currentVersion: currentVersion,
-              isDownloading: isDownloading,
-              onInstallNow: () async {
-                dialogSetState(() {
-                  isDownloading = true;
-                });
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (routeContext) => StatefulBuilder(
+          builder: (routeContext, routeSetState) => FutureBuilder<PackageInfo>(
+            future: _packageInfoFuture,
+            builder: (routeContext, snapshot) {
+              final currentVersion = snapshot.data?.version ?? '1.0.1';
+              return UpdateFullScreen(
+                update: update,
+                currentVersion: currentVersion,
+                isDownloading: isDownloading,
+                onInstallNow: () async {
+                  routeSetState(() {
+                    isDownloading = true;
+                  });
 
-                final navigator = Navigator.of(dialogContext);
-                final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(routeContext);
+                  final messenger = ScaffoldMessenger.of(context);
 
-                try {
-                  final apkFile = await _updateService.downloadAPK(update.version);
-                  if (apkFile != null && mounted) {
-                    final installResult = await _updateService.installAPK(apkFile);
-                    if (!mounted) return;
-                    switch (installResult) {
-                      case InstallResult.installerStarted:
-                        navigator.pop();
-                        messenger.showReplacingSnackBar(
-                          const SnackBar(
-                            content: Text('Installer opened. Complete the update to continue.'),
-                          ),
-                        );
-                        break;
-                      case InstallResult.permissionRequired:
-                        messenger.showReplacingSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Allow installs from this source, then tap Install Now again.',
+                  try {
+                    final apkFile = await _updateService.downloadAPK(update.version);
+                    if (apkFile != null && mounted) {
+                      final installResult = await _updateService.installAPK(apkFile);
+                      if (!mounted) return;
+                      switch (installResult) {
+                        case InstallResult.installerStarted:
+                          navigator.pop();
+                          messenger.showReplacingSnackBar(
+                            const SnackBar(
+                              content: Text('Installer opened. Complete the update to continue.'),
                             ),
-                          ),
-                        );
-                        break;
-                      case InstallResult.installerUnavailable:
-                        messenger.showReplacingSnackBar(
-                          const SnackBar(
-                            content: Text('No installer found to open the APK on this device.'),
-                          ),
-                        );
-                        break;
-                      case InstallResult.failed:
-                        messenger.showReplacingSnackBar(
-                          const SnackBar(
-                            content: Text('Failed to launch installer. APK saved for retry.'),
-                          ),
-                        );
-                        break;
+                          );
+                          break;
+                        case InstallResult.permissionRequired:
+                          messenger.showReplacingSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Allow installs from this source, then tap Install Now again.',
+                              ),
+                            ),
+                          );
+                          break;
+                        case InstallResult.installerUnavailable:
+                          messenger.showReplacingSnackBar(
+                            const SnackBar(
+                              content: Text('No installer found to open the APK on this device.'),
+                            ),
+                          );
+                          break;
+                        case InstallResult.failed:
+                          messenger.showReplacingSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to launch installer. APK saved for retry.'),
+                            ),
+                          );
+                          break;
+                      }
+                    } else if (mounted) {
+                      messenger.showReplacingSnackBar(
+                        const SnackBar(content: Text('Failed to download update')),
+                      );
                     }
-                  } else if (mounted) {
-                    messenger.showReplacingSnackBar(
-                      const SnackBar(content: Text('Failed to download update')),
-                    );
+                  } catch (e) {
+                    if (mounted) {
+                      messenger.showReplacingSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  } finally {
+                    if (mounted) {
+                      routeSetState(() {
+                        isDownloading = false;
+                      });
+                    }
                   }
-                } catch (e) {
-                  if (mounted) {
-                    messenger.showReplacingSnackBar(
-                      SnackBar(content: Text('Error: $e')),
-                    );
+                },
+                onRemindLater: () async {
+                  try {
+                    await _updateService.deferUpdate();
+                    if (routeContext.mounted) {
+                      Navigator.of(routeContext).pop();
+                    }
+                  } catch (e) {
+                    debugPrint('Error deferring update: $e');
                   }
-                } finally {
-                  if (mounted) {
-                    dialogSetState(() {
-                      isDownloading = false;
-                    });
-                  }
-                }
-              },
-              onRemindLater: () async {
-                try {
-                  await _updateService.deferUpdate();
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop();
-                  }
-                } catch (e) {
-                  debugPrint('Error deferring update: $e');
-                }
-              },
-            );
-          },
+                },
+              );
+            },
+          ),
         ),
       ),
     );

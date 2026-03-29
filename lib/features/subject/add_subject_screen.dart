@@ -4,9 +4,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/string_extension.dart';
 import '../settings/time_format_provider.dart';
+import 'class_color_palettes.dart';
 import 'subject_model.dart';
 import 'subject_provider.dart';
 
@@ -24,9 +26,12 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
   Timer? _typingIdleTimer;
   Timer? _invalidTimeToastTimer;
   OverlayEntry? _invalidTimeToastEntry;
+
   String _subjectName = '';
   String? _subjectAcronym;
   late Color _selectedColor;
+  bool _isSpecialClass = false;
+  DateTime? _specialClassDate;
   final List<TimeSlot> _schedule = [];
 
   @override
@@ -40,7 +45,6 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     _typingIdleTimer?.cancel();
     _invalidTimeToastTimer?.cancel();
     _invalidTimeToastEntry?.remove();
-    _invalidTimeToastEntry = null;
     _nameFocusNode.dispose();
     _acronymFocusNode.dispose();
     super.dispose();
@@ -89,24 +93,51 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     );
   }
 
-  Set<int> _getUsedColorValues() {
+  Set<int> _getUsedWeeklyColorValues() {
     final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
-    return subjectProvider.subjects.map((s) => s.color.toARGB32()).toSet();
+    return subjectProvider.subjects
+        .where((s) => !s.isSpecialClass)
+        .map((s) => s.color.toARGB32())
+        .toSet();
   }
 
+  Set<int> _getUsedSpecialColorValuesForDate(DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+    return subjectProvider.subjects
+        .where((s) => s.isSpecialClass && s.specialClassDate != null)
+        .where((s) => isSameDay(s.specialClassDate!, normalizedDate))
+        .map((s) => s.color.toARGB32())
+        .toSet();
+  }
+
+  Set<int> _getUsedColorValuesForCurrentMode() {
+    if (_isSpecialClass) {
+      if (_specialClassDate == null) {
+        return <int>{};
+      }
+      return _getUsedSpecialColorValuesForDate(_specialClassDate!);
+    }
+    return _getUsedWeeklyColorValues();
+  }
+
+  List<Color> get _activePalette =>
+      _isSpecialClass ? specialClassColors : weeklyClassColors;
+
   Color _pickRandomAvailableColor() {
-    final usedColorValues = _getUsedColorValues();
-    final availableColors = _colors
-      .where((color) => !usedColorValues.contains(color.toARGB32()))
-      .toList();
-    final source = availableColors.isEmpty ? _colors : availableColors;
+    final usedColorValues = _getUsedColorValuesForCurrentMode();
+    final availableColors = _activePalette
+        .where((color) => !usedColorValues.contains(color.toARGB32()))
+        .toList();
+    final source = availableColors.isEmpty ? _activePalette : availableColors;
     return source[Random().nextInt(source.length)];
   }
 
-  void _showColorPicker() async {
+  Future<void> _showColorPicker() async {
     await _prepareForDialogTransition();
     if (!mounted) return;
-    final usedColorValues = _getUsedColorValues();
+
+    final usedColorValues = _getUsedColorValuesForCurrentMode();
     await showDialog<void>(
       context: context,
       useRootNavigator: false,
@@ -115,7 +146,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Select Color'),
+              title: Text(_isSpecialClass
+                  ? 'Select Special Class Color'
+                  : 'Select Weekly Class Color'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: GridView.builder(
@@ -126,9 +159,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                     mainAxisSpacing: 8,
                     childAspectRatio: 1,
                   ),
-                  itemCount: _colors.length,
+                  itemCount: _activePalette.length,
                   itemBuilder: (context, index) {
-                    final color = _colors[index];
+                    final color = _activePalette[index];
                     final isSelected = color.toARGB32() == selected.toARGB32();
                     final isUsed = usedColorValues.contains(color.toARGB32());
                     return GestureDetector(
@@ -180,57 +213,32 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     );
   }
 
-
-  final List<Color> _colors = [
-    const Color(0xFFE53935),
-    const Color(0xFFD81B60),
-    const Color(0xFFEC407A),
-    const Color(0xFFAB47BC),
-    const Color(0xFF8E24AA),
-    const Color(0xFF5E35B1),
-    const Color(0xFF3949AB),
-    const Color(0xFF1E88E5),
-    const Color(0xFF42A5F5),
-    const Color(0xFF039BE5),
-    const Color(0xFF26C6DA),
-    const Color(0xFF00ACC1),
-    const Color(0xFF26A69A),
-    const Color(0xFF00897B),
-    const Color(0xFF43A047),
-    const Color(0xFF66BB6A),
-    const Color(0xFF7CB342),
-    const Color(0xFFC0CA33),
-    const Color(0xFFFDD835),
-    const Color(0xFFFFCA28),
-    const Color(0xFFFFB300),
-    const Color(0xFFFB8C00),
-    const Color(0xFFFF7043),
-    const Color(0xFFF4511E),
-    const Color(0xFF6D4C41),
-    const Color(0xFF8D6E63),
-    const Color(0xFF546E7A),
-    const Color(0xFF757575),
-  ];
-
   void _sortSchedule() {
     _schedule.sort((a, b) {
-      int dayCompare = a.day.index.compareTo(b.day.index);
+      final aDate = a.specificDate;
+      final bDate = b.specificDate;
+      if (aDate != null && bDate != null) {
+        final dateCompare = aDate.compareTo(bDate);
+        if (dateCompare != 0) return dateCompare;
+      }
+
+      final dayCompare = a.day.index.compareTo(b.day.index);
       if (dayCompare != 0) return dayCompare;
-      double aTime = a.startTime.hour + a.startTime.minute / 60.0;
-      double bTime = b.startTime.hour + b.startTime.minute / 60.0;
+
+      final aTime = a.startTime.hour * 60 + a.startTime.minute;
+      final bTime = b.startTime.hour * 60 + b.startTime.minute;
       return aTime.compareTo(bTime);
     });
   }
 
   int _toMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
 
-  TimeOfDay _addOneHour(TimeOfDay time) {
-    final totalMinutes = _toMinutes(time) + 60;
-    return TimeOfDay(hour: (totalMinutes ~/ 60) % 24, minute: totalMinutes % 60);
-  }
-
   TimeOfDay _defaultEndTimeAfterStart(TimeOfDay startTime) {
-    final candidate = _addOneHour(startTime);
+    final totalMinutes = _toMinutes(startTime) + 60;
+    final candidate = TimeOfDay(
+      hour: (totalMinutes ~/ 60) % 24,
+      minute: totalMinutes % 60,
+    );
     if (_toMinutes(candidate) > _toMinutes(startTime)) {
       return candidate;
     }
@@ -259,13 +267,6 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
               decoration: BoxDecoration(
                 color: colorScheme.errorContainer,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: Text(
                 'End time must be after start time.',
@@ -304,50 +305,60 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     return null;
   }
 
-  void _addSubject() {
-    _dismissKeyboard();
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-      final resolvedAcronym = (_subjectAcronym == null || _subjectAcronym!.isEmpty)
-          ? _acronymFromSubjectName(_subjectName)
-          : _subjectAcronym;
-      final usedColorValues = _getUsedColorValues();
-      if (usedColorValues.contains(_selectedColor.toARGB32())) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showReplacingSnackBar(
-          const SnackBar(
-            content: Text('This color is already used by another subject.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      if (_schedule.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showReplacingSnackBar(
-          const SnackBar(
-            content: Text('Please add at least one time slot.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      _sortSchedule();
-      Provider.of<SubjectProvider>(context, listen: false).addSubject(Subject(
-        name: _subjectName,
-        acronym: resolvedAcronym,
-        color: _selectedColor,
-        schedule: _schedule,
-      ));
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    }
-  }
-
-  void _showTimePicker() async {
+  Future<void> _pickSpecialClassDate() async {
     await _prepareForDialogTransition();
     if (!mounted) return;
+
+    final now = DateTime.now();
+    final initialDate = _specialClassDate ?? now;
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (!mounted || selected == null) return;
+
+    final normalized = DateTime(selected.year, selected.month, selected.day);
+    final oldSchedule = List<TimeSlot>.from(_schedule);
+    final updatedSchedule = oldSchedule
+        .map(
+          (slot) => TimeSlot(
+            day: DayOfWeek.values[normalized.weekday - 1],
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            specificDate: normalized,
+          ),
+        )
+        .toList();
+
+    setState(() {
+      _specialClassDate = normalized;
+      _schedule
+        ..clear()
+        ..addAll(updatedSchedule);
+      _selectedColor = _pickRandomAvailableColor();
+      _sortSchedule();
+    });
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  String _slotLabel(TimeSlot slot) {
+    if (slot.specificDate != null) {
+      final date = slot.specificDate!;
+      return '${slot.day.name.capitalize()}, ${_formatDate(date)}';
+    }
+    return slot.day.name.capitalize();
+  }
+
+  Future<void> _showTimePicker() async {
+    await _prepareForDialogTransition();
+    if (!mounted) return;
+
     final startTime = await showTimePicker(
       context: context,
       useRootNavigator: false,
@@ -360,14 +371,35 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     final endTime = await _pickEndTimeAfterStart(startTime);
     if (endTime == null || !mounted) return;
 
-    await _showDayPicker(startTime, endTime);
+    if (_isSpecialClass) {
+      if (_specialClassDate == null) {
+        await _pickSpecialClassDate();
+      }
+      if (!mounted || _specialClassDate == null) return;
+
+      final date = _specialClassDate!;
+      setState(() {
+        _schedule.add(
+          TimeSlot(
+            day: DayOfWeek.values[date.weekday - 1],
+            startTime: startTime,
+            endTime: endTime,
+            specificDate: date,
+          ),
+        );
+        _sortSchedule();
+      });
+      return;
+    }
+
+    await _showWeeklyDayPicker(startTime, endTime);
   }
 
-  void _editTimeslot(int index) async {
+  Future<void> _editTimeslot(int index) async {
     await _prepareForDialogTransition();
     if (!mounted) return;
+
     final timeSlot = _schedule[index];
-    
     final startTime = await showTimePicker(
       context: context,
       useRootNavigator: false,
@@ -380,10 +412,29 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     final endTime = await _pickEndTimeAfterStart(startTime);
     if (endTime == null || !mounted) return;
 
-    await _showDayPicker(startTime, endTime, editIndex: index);
+    if (_isSpecialClass) {
+      final date = _specialClassDate;
+      if (date == null) return;
+      setState(() {
+        _schedule[index] = TimeSlot(
+          day: DayOfWeek.values[date.weekday - 1],
+          startTime: startTime,
+          endTime: endTime,
+          specificDate: date,
+        );
+        _sortSchedule();
+      });
+      return;
+    }
+
+    await _showWeeklyDayPicker(startTime, endTime, editIndex: index);
   }
 
-  Future<void> _showDayPicker(TimeOfDay startTime, TimeOfDay endTime, {int? editIndex}) async {
+  Future<void> _showWeeklyDayPicker(
+    TimeOfDay startTime,
+    TimeOfDay endTime, {
+    int? editIndex,
+  }) async {
     if (!mounted) return;
 
     final List<DayOfWeek>? days = await showDialog<List<DayOfWeek>>(
@@ -391,7 +442,6 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
       useRootNavigator: false,
       builder: (context) {
         final selectedDays = List.filled(7, false);
-        // Pre-select the day if editing
         if (editIndex != null) {
           selectedDays[_schedule[editIndex].day.index] = true;
         }
@@ -442,38 +492,141 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     if (days != null && days.isNotEmpty) {
       setState(() {
         if (editIndex != null) {
-          // Remove the old timeslot
           _schedule.removeAt(editIndex);
         }
-        final newSlots = days.map((day) => TimeSlot(day: day, startTime: startTime, endTime: endTime));
-        _schedule.addAll(newSlots);
+        _schedule.addAll(days.map(
+          (day) => TimeSlot(day: day, startTime: startTime, endTime: endTime),
+        ));
         _sortSchedule();
       });
     }
   }
 
+  void _toggleSpecialClass(bool enabled) {
+    setState(() {
+      _isSpecialClass = enabled;
+      _schedule.clear();
+      _specialClassDate = null;
+      _selectedColor = _pickRandomAvailableColor();
+    });
+  }
+
+  void _addSubject() {
+    _dismissKeyboard();
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    _formKey.currentState!.save();
+
+    final resolvedAcronym = (_subjectAcronym == null || _subjectAcronym!.isEmpty)
+        ? _acronymFromSubjectName(_subjectName)
+        : _subjectAcronym;
+
+    if (_schedule.isEmpty) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one time slot.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_isSpecialClass) {
+      if (_specialClassDate == null) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('Please pick a date for the special class.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final usedSpecialColors = _getUsedSpecialColorValuesForDate(_specialClassDate!);
+      if (usedSpecialColors.contains(_selectedColor.toARGB32())) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('This special class color is already used on the selected day.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    } else {
+      final usedWeeklyColors = _getUsedWeeklyColorValues();
+      if (usedWeeklyColors.contains(_selectedColor.toARGB32())) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('This weekly class color is already used by another weekly class.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    _sortSchedule();
+    Provider.of<SubjectProvider>(context, listen: false).addSubject(
+      Subject(
+        name: _subjectName,
+        acronym: resolvedAcronym,
+        color: _selectedColor,
+        schedule: _schedule,
+      ),
+    );
+
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final timeFormat = Provider.of<TimeFormatProvider>(context).timeFormat;
+    final rs = context.rs;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Add New Subject'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: rs.insetsAll(16),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Special One-Day Class'),
+                subtitle: const Text(
+                  'Special classes do not repeat weekly.',
+                ),
+                value: _isSpecialClass,
+                onChanged: _toggleSpecialClass,
+              ),
+              if (_isSpecialClass)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.event),
+                  title: const Text('Special Class Date'),
+                  subtitle: Text(
+                    _specialClassDate == null
+                        ? 'Tap to choose date'
+                        : _formatDate(_specialClassDate!),
+                  ),
+                  onTap: _pickSpecialClassDate,
+                ),
+              SizedBox(height: rs.height(8)),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   GestureDetector(
                     onTap: _showColorPicker,
                     child: Container(
-                      width: 50,
-                      height: 50,
-                      margin: const EdgeInsets.only(right: 12, top: 8),
+                      width: rs.scale(50),
+                      height: rs.scale(50),
+                      margin: EdgeInsets.only(right: rs.width(12), top: rs.height(8)),
                       decoration: BoxDecoration(
                         color: _selectedColor,
                         shape: BoxShape.circle,
@@ -505,7 +658,7 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: rs.height(12)),
               TextFormField(
                 focusNode: _acronymFocusNode,
                 autofocus: false,
@@ -520,15 +673,19 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                   hintText: 'e.g., MTH, PHY',
                   border: OutlineInputBorder(),
                 ),
-                onSaved: (value) => _subjectAcronym = value?.trim().isEmpty ?? true ? null : value!.trim(),
+                onSaved: (value) => _subjectAcronym =
+                    value?.trim().isEmpty ?? true ? null : value!.trim(),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: rs.height(20)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    _isSpecialClass ? 'Special Day Schedule' : 'Weekly Schedule',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(14)),
+                  ),
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.add, size: 18),
+                    icon: Icon(Icons.add, size: rs.scale(18)),
                     onPressed: _showTimePicker,
                     label: const Text('Add Slot'),
                   ),
@@ -537,7 +694,13 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
               const Divider(),
               Expanded(
                 child: _schedule.isEmpty
-                    ? const Center(child: Text('No time slots added. Tap \'Add Slot\' to begin.'))
+                    ? Center(
+                        child: Text(
+                          _isSpecialClass
+                              ? 'No special slots added. Tap Add Slot to begin.'
+                              : 'No weekly slots added. Tap Add Slot to begin.',
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: _schedule.length,
                         itemBuilder: (context, index) {
@@ -546,13 +709,8 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                             margin: const EdgeInsets.symmetric(vertical: 4.0),
                             child: ListTile(
                               leading: const Icon(Icons.access_time),
-                              title: Text(timeSlot.day.name.capitalize()),
-                              subtitle: Text(
-                                timeSlot.formatTimeRange(
-                                  Provider.of<TimeFormatProvider>(context)
-                                      .timeFormat,
-                                ),
-                              ),
+                              title: Text(_slotLabel(timeSlot)),
+                              subtitle: Text(timeSlot.formatTimeRange(timeFormat)),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -579,7 +737,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                   onPressed: _addSubject,
                   child: const Text('Add Subject'),
                 ),

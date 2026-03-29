@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/snackbar_utils.dart';
+import '../../utils/responsive_scale.dart';
 import '../semester/semester_provider.dart';
 import '../settings/time_format_provider.dart';
 import '../subject/subject_provider.dart';
@@ -61,6 +62,7 @@ class TodaySchedule extends StatelessWidget {
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
+    final rs = context.rs;
 
     // Check if the semester has started yet
     final semester = semesterProvider.semester;
@@ -69,22 +71,22 @@ class TodaySchedule extends StatelessWidget {
       final formattedDate = '${startDate.day}/${startDate.month}/${startDate.year}';
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: rs.insetsAll(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.pending_actions, size: 50, color: Colors.blue),
-              const SizedBox(height: 16),
-              const Text(
+              Icon(Icons.pending_actions, size: rs.scale(50), color: Colors.blue),
+              SizedBox(height: rs.height(16)),
+              Text(
                 'Semester Yet to Begin',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: rs.font(22), fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: rs.height(8)),
               Text(
                 'Your semester will start on $formattedDate. Today\'s schedule will be available from that date.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: rs.font(16)),
               ),
             ],
           ),
@@ -108,12 +110,12 @@ class TodaySchedule extends StatelessWidget {
       children: [
         if (semesterEnded)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding: rs.insetsSymmetric(horizontal: 16, vertical: 12),
             color: Colors.orange.withValues(alpha: 0.1),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                const SizedBox(width: 8),
+                Icon(Icons.info_outline, color: Colors.orange, size: rs.scale(20)),
+                SizedBox(width: rs.width(8)),
                 Expanded(
                   child: Text(
                     'Semester has ended. Attendance tracking is disabled.',
@@ -125,81 +127,123 @@ class TodaySchedule extends StatelessWidget {
           ),
         if (!semesterEnded && !isHoliday)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.celebration_outlined, size: 14),
-                    label: const Text('Holiday', style: TextStyle(fontSize: 11)),
-                    onPressed: () => _showConfirmationDialog(
-                      context: context,
-                      title: 'Mark as Holiday',
-                      content: 'Are you sure you want to mark today as a holiday? All classes will be cancelled and won\'t affect attendance criteria.',
-                      onConfirm: () => subjectProvider.markDayAsHoliday(today),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                      backgroundColor: theme.colorScheme.onSurface,
-                      foregroundColor: theme.colorScheme.surface,
-                    ),
+            padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final rowScale = (constraints.maxWidth / 360).clamp(0.72, 1.0);
+                final compactMode = constraints.maxWidth < 370;
+                final iconlessMode = constraints.maxWidth < 335;
+                final buttonStyle = ElevatedButton.styleFrom(
+                  minimumSize: Size(0, rs.height(44)),
+                  padding: EdgeInsets.symmetric(
+                    vertical: rs.height(9),
+                    horizontal: rs.width(compactMode ? 4 : 6),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.fast_forward_outlined, size: 14),
-                    label: const Text('Skip Day', style: TextStyle(fontSize: 11)),
-                    onPressed: () => _showConfirmationDialog(
-                      context: context,
-                      title: 'Skip Today',
-                      content: 'Are you sure you want to skip all classes today? This will mark all scheduled classes as absent.',
-                      onConfirm: () => subjectProvider.markDayAsAbsent(today),
+                  visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
+                  backgroundColor: theme.colorScheme.onSurface,
+                  foregroundColor: theme.colorScheme.surface,
+                );
+
+                String adaptiveLabel(String label) {
+                  if (!compactMode) return label;
+                  if (label == 'Skip Day') return 'Skip';
+                  return label;
+                }
+
+                Widget actionButton({
+                  required IconData icon,
+                  required String label,
+                  required VoidCallback onPressed,
+                }) {
+                  final buttonLabel = adaptiveLabel(label);
+                  final fontSize = (rs.font(12) * rowScale).clamp(11.0, 13.0);
+                  final button = ElevatedButton(
+                    onPressed: onPressed,
+                    style: buttonStyle,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!iconlessMode) ...[
+                          Icon(icon, size: (rs.scale(14) * rowScale).clamp(12.0, 16.0)),
+                          SizedBox(width: rs.width(4)),
+                        ],
+                        Flexible(
+                          child: Text(
+                            buttonLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                            style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                      backgroundColor: theme.colorScheme.onSurface,
-                      foregroundColor: theme.colorScheme.surface,
+                  );
+
+                  return SizedBox(width: (constraints.maxWidth - rs.width(12)) / 3, child: button);
+                }
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: actionButton(
+                        icon: Icons.celebration_outlined,
+                        label: 'Holiday',
+                        onPressed: () => _showConfirmationDialog(
+                          context: context,
+                          title: 'Mark as Holiday',
+                          content: 'Are you sure you want to mark today as a holiday? All classes will be cancelled and won\'t affect attendance criteria.',
+                          onConfirm: () => subjectProvider.markDayAsHoliday(today),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.check_circle_outline, size: 14),
-                    label: const Text('Present', style: TextStyle(fontSize: 11)),
-                    onPressed: () => _showConfirmationDialog(
-                      context: context,
-                      title: 'Mark as Present',
-                      content: 'Are you sure you want to mark today as present? All classes will be marked as attended.',
-                      onConfirm: () => subjectProvider.markDayAsPresent(today),
+                    SizedBox(width: rs.width(6)),
+                    Expanded(
+                      child: actionButton(
+                        icon: Icons.fast_forward_outlined,
+                        label: 'Skip Day',
+                        onPressed: () => _showConfirmationDialog(
+                          context: context,
+                          title: 'Skip Today',
+                          content: 'Are you sure you want to skip all classes today? This will mark all scheduled classes as absent.',
+                          onConfirm: () => subjectProvider.markDayAsAbsent(today),
+                        ),
+                      ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                      backgroundColor: theme.colorScheme.onSurface,
-                      foregroundColor: theme.colorScheme.surface,
+                    SizedBox(width: rs.width(6)),
+                    Expanded(
+                      child: actionButton(
+                        icon: Icons.check_circle_outline,
+                        label: 'Present',
+                        onPressed: () => _showConfirmationDialog(
+                          context: context,
+                          title: 'Mark as Present',
+                          content: 'Are you sure you want to mark today as present? All classes will be marked as attended.',
+                          onConfirm: () => subjectProvider.markDayAsPresent(today),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         if (displayClasses.isEmpty)
           Expanded(
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: rs.insetsAll(16),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.calendar_today_outlined, size: 60, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    const Text(
+                    Icon(Icons.calendar_today_outlined, size: rs.scale(60), color: Colors.grey),
+                    SizedBox(height: rs.height(16)),
+                    Text(
                       'No Classes Today',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: rs.font(20), fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: rs.height(8)),
                     Text(
                       'There are no classes scheduled for this day of the week.',
                       textAlign: TextAlign.center,
@@ -213,7 +257,7 @@ class TodaySchedule extends StatelessWidget {
         else
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(8),
+              padding: rs.insetsAll(8),
               itemCount: displayClasses.length,
               itemBuilder: (context, index) {
                 final subject = displayClasses[index];
@@ -417,10 +461,10 @@ class TodaySchedule extends StatelessWidget {
 
                 return Card(
                   elevation: 2.0,
-                  margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                  margin: rs.insetsSymmetric(horizontal: 8, vertical: 6),
                   shadowColor: isDarkMode ? null : Colors.black.withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(rs.scale(12)),
                     side: BorderSide(
                       color: isDarkMode
                           ? Colors.white.withValues(alpha: 0.4)
@@ -429,10 +473,11 @@ class TodaySchedule extends StatelessWidget {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(8.0),
+                    padding: rs.insetsAll(8),
                     child: ListTile(
+                      contentPadding: rs.insetsSymmetric(horizontal: 8, vertical: 2),
                       leading: CircleAvatar(
-                        radius: 20.6,
+                        radius: rs.scale(20.6),
                         backgroundColor: subject.color,
                         child: Center(
                           child: Text(
@@ -440,25 +485,40 @@ class TodaySchedule extends StatelessWidget {
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             softWrap: true,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: rs.font(11),
                               height: 1.0,
                             ),
                           ),
                         ),
                       ),
-                      title: Text(subject.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(
+                        subject.name,
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(15)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(timeSlot.formatTimeRange(timeFormatProvider.timeFormat)),
-                          const SizedBox(height: 4),
+                          SizedBox(height: rs.height(4)),
                           Row(
                             children: [
-                              Icon(statusIcon, size: 16, color: statusColor),
-                              const SizedBox(width: 4),
-                              Text(statusText, style: TextStyle(color: statusColor, fontStyle: FontStyle.italic)),
+                              Icon(statusIcon, size: rs.scale(16), color: statusColor),
+                              SizedBox(width: rs.width(4)),
+                              Flexible(
+                                child: Text(
+                                  statusText,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: rs.font(13),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                         ],

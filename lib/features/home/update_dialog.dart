@@ -3,53 +3,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../models/app_update_model.dart';
 
-class UpdateDialog extends StatelessWidget {
-  final AppUpdate update;
-  final String currentVersion;
-  final VoidCallback onInstallNow;
-  final VoidCallback onRemindLater;
-  final bool isDownloading;
-
-  const UpdateDialog({
-    super.key,
-    required this.update,
-    required this.currentVersion,
-    required this.onInstallNow,
-    required this.onRemindLater,
-    this.isDownloading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('App Update Available'),
-      content: _UpdateContent(update: update, currentVersion: currentVersion),
-      actions: [
-        TextButton(
-          onPressed: isDownloading ? null : onRemindLater,
-          child: const Text('Remind Later'),
-        ),
-        ElevatedButton.icon(
-          onPressed: isDownloading ? null : onInstallNow,
-          icon: isDownloading
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Theme.of(context).primaryColor,
-                    ),
-                  ),
-                )
-              : const Icon(Icons.download),
-          label: Text(isDownloading ? 'Downloading...' : 'Install Now'),
-        ),
-      ],
-    );
-  }
-}
-
 class UpdateFullScreen extends StatelessWidget {
   final AppUpdate update;
   final String currentVersion;

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -21,12 +20,6 @@ class DatabaseService {
   /// Initialize the database
   Future<void> init() async {
     try {
-      // Skip database initialization on web platform
-      if (kIsWeb) {
-        _isInitialized = true;
-        return;
-      }
-      
       final databasesPath = await getDatabasesPath();
       final path = join(databasesPath, 'attendance_tracker.db');
 
@@ -143,9 +136,6 @@ class DatabaseService {
   }
 
   Database _getDb() {
-    if (kIsWeb) {
-      throw Exception('Database operations not supported on web platform');
-    }
     if (_database == null || !_isInitialized) {
       throw Exception('DatabaseService not initialized. Call init() first.');
     }
@@ -277,9 +267,6 @@ class DatabaseService {
 
   Future<Semester?> loadSemester() async {
     try {
-      if (kIsWeb) {
-        return null;
-      }
       final db = _getDb();
       final List<Map<String, dynamic>> maps = await db.query(
         'semester',

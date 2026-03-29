@@ -46,15 +46,14 @@ class CalendarUtils {
     final isFuture = date.isAfter(todayDate);
 
     // Get all subjects with classes on this day
-    final dayOfWeek = DayOfWeek.values[date.weekday - 1];
     var subjectsWithClassesToday = subjects
-        .where((subject) => subject.schedule.any((slot) => slot.day == dayOfWeek))
+      .where((subject) => subject.schedule.any((slot) => slot.occursOnDate(date)))
         .toList();
 
     final totalClassesCount = subjectsWithClassesToday.fold<int>(
       0,
       (sum, subject) =>
-        sum + subject.schedule.where((slot) => slot.day == dayOfWeek).length,
+      sum + subject.schedule.where((slot) => slot.occursOnDate(date)).length,
     );
     
     // Sort subjects by their start time
@@ -97,7 +96,7 @@ class CalendarUtils {
       }
 
       return subject.schedule.any(
-        (slot) => slot.day == dayOfWeek && slot.slotKey == slotKey,
+        (slot) => slot.occursOnDate(date) && slot.slotKey == slotKey,
       );
     }).toList();
 
@@ -260,9 +259,8 @@ class CalendarUtils {
 
   /// Get the TimeSlot for a subject on a given date
   static TimeSlot? getTimeSlotForDate(Subject subject, DateTime date) {
-    final dayOfWeek = DayOfWeek.values[date.weekday - 1];
     return subject.schedule.firstWhere(
-      (slot) => slot.day == dayOfWeek,
+      (slot) => slot.occursOnDate(date),
       orElse: () => null as dynamic,
     ) as TimeSlot?;
   }

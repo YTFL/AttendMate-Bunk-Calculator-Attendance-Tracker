@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../main.dart';
 import '../../models/app_update_model.dart';
 import '../../services/update_service.dart';
+import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../bunk_meter/bunk_meter_screen.dart';
 import '../calendar/calendar_screen.dart';
@@ -158,26 +159,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSemesterRequiredWidget() {
+    final rs = context.rs;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: rs.insetsAll(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Icon(Icons.info_outline, size: 50, color: Colors.amber),
-            const SizedBox(height: 16),
-            const Text(
+            Icon(Icons.info_outline, size: rs.scale(50), color: Colors.amber),
+            SizedBox(height: rs.height(16)),
+            Text(
               'Please Create a Semester',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: rs.font(22), fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: rs.height(8)),
             const Text(
               'You need to set up a semester before you can add subjects or track attendance.',
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: rs.height(24)),
             ElevatedButton.icon(
               icon: const Icon(Icons.school),
               label: const Text('Go to Semester Setup'),
@@ -194,31 +196,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSemesterYetToBeginWidget() {
+    final rs = context.rs;
     final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
     final startDate = semesterProvider.semester!.startDate;
     final formattedDate = '${startDate.day}/${startDate.month}/${startDate.year}';
     
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: rs.insetsAll(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Icon(Icons.pending_actions, size: 50, color: Colors.blue),
-            const SizedBox(height: 16),
-            const Text(
+            Icon(Icons.pending_actions, size: rs.scale(50), color: Colors.blue),
+            SizedBox(height: rs.height(16)),
+            Text(
               'Semester Yet to Begin',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: rs.font(22), fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: rs.height(8)),
             Text(
               'Your semester will start on $formattedDate. Attendance tracking will begin from that date.',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: rs.font(16)),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: rs.height(24)),
             ElevatedButton.icon(
               icon: const Icon(Icons.school),
               label: const Text('View Semester Details'),
