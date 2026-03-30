@@ -98,8 +98,6 @@ class TodaySchedule extends StatelessWidget {
     final bool semesterEnded = semesterProvider.hasSemesterEnded;
 
     final displayClasses = _expandSubjectsBySlot(subjectProvider.getClassesForDate(today));
-    final isHoliday = subjectProvider.isHoliday(today);
-
     displayClasses.sort((a, b) {
       final aTime = a.schedule.first.startTime.hour * 60 + a.schedule.first.startTime.minute;
       final bTime = b.schedule.first.startTime.hour * 60 + b.schedule.first.startTime.minute;
@@ -125,7 +123,7 @@ class TodaySchedule extends StatelessWidget {
               ],
             ),
           ),
-        if (!semesterEnded && !isHoliday)
+        if (!semesterEnded)
           Padding(
             padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
             child: LayoutBuilder(
