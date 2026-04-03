@@ -5,6 +5,60 @@ All notable changes to AttendMate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+---
+
+
+## [1.5.1] - 2026-04-03
+
+### Added
+- **"Copy Timetable To This Day"** in the calendar day-details modal. Users can pick a source date and copy its classes onto a chosen target date.
+- Outlined copy button (`Copy Timetable To This Day`) in the day details modal for quick access.
+
+### Changed
+- Copied slots are converted into one-day special slots on the target date, and existing schedules are trimmed/merged as needed.
+- SubjectProvider now includes `copyDayTimetable()` and `DayTimetableCopyResult` for safe copy/merge of day-specific classes.
+- When replacing classes on the target date, attendance records for that date are deleted to keep attendance consistent.
+- Subject schedules are saved and notifications/reminders are refreshed after changes.
+- Improved adaptive layout for action buttons (Present / Skip / Holiday) on narrow screens.
+- Added clear snackbar feedback for success, replacement info, and no-source warnings.
+
+### Fixed
+- Defensive checks prevent copying from the same date and notify the user when the source date has no classes.
+- UX polish for special one-day classes and locked/manual baseline displays.
+- Small bug fixes and defensive improvements around date normalization and modal state handling.
+
+---
+
+
+## [1.5.0] - 2026-03-29
+
+### Added
+- Timetable import now supports **JSON and CSV** formats.
+- Import by pasting data or selecting a `.json` or `.csv` file.
+- Quick helper buttons: **Copy JSON Reference**, **Copy CSV Reference**.
+- Built-in timetable export as **JSON**, **CSV**, or **PDF** (saved to Downloads, PDF supports direct open).
+- Special One-Day Class mode in Add/Edit Subject for one-off classes.
+- Manual baseline controls in Bunk Meter with **Update Counts Manually**.
+- Startup fallback: marks previously unmarked past classes as present when appropriate.
+- Updated in-app Setup Guide with new instructions for import/export and special classes.
+
+### Changed
+- Import flow includes parse + preview for validation before importing.
+- Mid-semester timetable updates: choose an effective from date, preview changes (added/updated/retired slots), preserves older attendance history.
+- Color uniqueness now handled separately for weekly vs special classes.
+- Cards indicate when manual baseline logic is active; calculations respect manual baseline windows and lock rules.
+- Day actions (Present / Skip / Holiday) are more adaptive on smaller screens.
+- Added visible **Locked** state for dates restricted by manual baseline rules.
+- Calendar better reflects date-based slot logic (including special classes).
+- Improved spacing, typography, and control sizing for better compact-device usability.
+- Update flow: **App updates** action in More now opens the new full-screen update page; removed old popup dialog.
+
+### Fixed
+- PDF/CSV/JSON export structured for easy re-import after editing.
+- Fixed missed attendance marking after offline/interrupted sessions.
+- Responsiveness and readability improvements across all main screens.
+
 ---
 
 ## [1.4.6] - 2026-02-28
