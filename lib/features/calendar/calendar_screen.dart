@@ -436,6 +436,84 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  Future<void> _copyTimetableIntoDate({
+    required BuildContext context,
+    required DateTime targetDate,
+    required DateTime startDate,
+    required DateTime endDate,
+    required SubjectProvider subjectProvider,
+    required VoidCallback refreshModal,
+  }) async {
+    final normalizedTarget = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final candidateInitial = normalizedTarget.subtract(const Duration(days: 1));
+    final normalizedStart = DateTime(startDate.year, startDate.month, startDate.day);
+    final normalizedEnd = DateTime(endDate.year, endDate.month, endDate.day);
+
+    DateTime initialDate = candidateInitial;
+    if (initialDate.isBefore(normalizedStart)) {
+      initialDate = normalizedStart;
+    } else if (initialDate.isAfter(normalizedEnd)) {
+      initialDate = normalizedEnd;
+    }
+
+    final sourceDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: normalizedStart,
+      lastDate: normalizedEnd,
+      helpText: 'Copy classes from date',
+    );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    if (sourceDate == null) {
+      return;
+    }
+
+    final normalizedSource = DateTime(sourceDate.year, sourceDate.month, sourceDate.day);
+    if (CalendarUtils.isSameDay(normalizedSource, normalizedTarget)) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(
+          content: Text('Choose a different source date.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final result = await subjectProvider.copyDayTimetable(
+      sourceDate: normalizedSource,
+      targetDate: normalizedTarget,
+    );
+
+    if (!context.mounted) {
+      return;
+    }
+
+    if (!result.hasSourceClasses) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(
+          content: Text('No classes found on source date.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    refreshModal();
+
+    final replacementText = result.replacedExistingClasses
+        ? 'Replaced ${result.replacedClasses} class(es) on target date.'
+        : 'Target date had no classes; copied directly.';
+    ScaffoldMessenger.of(context).showReplacingSnackBar(
+      SnackBar(
+        content: Text('Copied ${result.copiedClasses} class(es). $replacementText'),
+      ),
+    );
+  }
+
   Widget _buildDayDetailsModal(
     BuildContext context,
     CalendarDayInfo dayInfo,
@@ -714,6 +792,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             ],
                           );
                         },
+                      ),
+                    ),
+                  if (pageDayInfo.state != DayState.futureClasses)
+                    Padding(
+                      padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await _copyTimetableIntoDate(
+                              context: context,
+                              targetDate: pageDate,
+                              startDate: startDate,
+                              endDate: endDate,
+                              subjectProvider: subjectProvider,
+                              refreshModal: () => setState(() {}),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_all_outlined),
+                          label: const Text('Copy Timetable To This Day'),
+                        ),
                       ),
                     ),
                   SizedBox(height: rs.height(8)),
