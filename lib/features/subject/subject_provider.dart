@@ -21,6 +21,19 @@ class TimetableUpdateResult {
   });
 }
 
+class DayTimetableCopyResult {
+  final int copiedClasses;
+  final int replacedClasses;
+
+  const DayTimetableCopyResult({
+    required this.copiedClasses,
+    required this.replacedClasses,
+  });
+
+  bool get hasSourceClasses => copiedClasses > 0;
+  bool get replacedExistingClasses => replacedClasses > 0;
+}
+
 class SubjectProvider with ChangeNotifier {
   List<Subject> _subjects = [];
   final DatabaseService _databaseService = DatabaseService();
@@ -354,6 +367,104 @@ class SubjectProvider with ChangeNotifier {
     _subjects[index] = updated;
     await _databaseService.saveSubjects(_subjects);
     notifyListeners();
+  }
+
+  Future<DayTimetableCopyResult> copyDayTimetable({
+    required DateTime sourceDate,
+    required DateTime targetDate,
+  }) async {
+    final normalizedSource = normalizeDate(sourceDate) ?? sourceDate;
+    final normalizedTarget = normalizeDate(targetDate) ?? targetDate;
+
+    if (isSameDay(normalizedSource, normalizedTarget)) {
+      return const DayTimetableCopyResult(copiedClasses: 0, replacedClasses: 0);
+    }
+
+    int sourceClassCount = 0;
+    int replacedClassCount = 0;
+    final dayBeforeTarget =
+        normalizeDate(normalizedTarget.subtract(const Duration(days: 1))) ??
+            normalizedTarget.subtract(const Duration(days: 1));
+    final dayAfterTarget =
+        normalizeDate(normalizedTarget.add(const Duration(days: 1))) ??
+            normalizedTarget.add(const Duration(days: 1));
+    final targetWeekday = DayOfWeek.values[normalizedTarget.weekday - 1];
+
+    final updatedSubjects = <Subject>[];
+
+    for (final subject in _subjects) {
+      final copiedSlotsForSubject = subject.schedule
+          .where((slot) => slot.occursOnDate(normalizedSource))
+          .toList();
+      sourceClassCount += copiedSlotsForSubject.length;
+
+      final nextSchedule = <TimeSlot>[];
+
+      for (final slot in subject.schedule) {
+        final slotSpecificDate = normalizeDate(slot.specificDate);
+        if (slotSpecificDate != null && isSameDay(slotSpecificDate, normalizedTarget)) {
+          replacedClassCount++;
+          continue;
+        }
+
+        if (!slot.isSpecialClass && slot.occursOnDate(normalizedTarget)) {
+          replacedClassCount++;
+          final from = normalizeDate(slot.effectiveFrom);
+          final until = normalizeDate(slot.effectiveUntil);
+
+          final canKeepBefore = from == null || !from.isAfter(dayBeforeTarget);
+          if (canKeepBefore) {
+            final beforeUntil =
+                (until == null || until.isAfter(dayBeforeTarget)) ? dayBeforeTarget : until;
+            if (from == null || !from.isAfter(beforeUntil)) {
+              nextSchedule.add(slot.copyWith(effectiveUntil: beforeUntil));
+            }
+          }
+
+          final canKeepAfter = until == null || !until.isBefore(dayAfterTarget);
+          if (canKeepAfter) {
+            final afterFrom = (from == null || from.isBefore(dayAfterTarget))
+                ? dayAfterTarget
+                : from;
+            if (until == null || !afterFrom.isAfter(until)) {
+              nextSchedule.add(slot.copyWith(effectiveFrom: afterFrom));
+            }
+          }
+
+          continue;
+        }
+
+        nextSchedule.add(slot);
+      }
+
+      for (final slot in copiedSlotsForSubject) {
+        nextSchedule.add(
+          TimeSlot(
+            day: targetWeekday,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            specificDate: normalizedTarget,
+          ),
+        );
+      }
+
+      updatedSubjects.add(subject.copyWith(schedule: _sortedSchedule(nextSchedule)));
+    }
+
+    if (sourceClassCount == 0) {
+      return const DayTimetableCopyResult(copiedClasses: 0, replacedClasses: 0);
+    }
+
+    _subjects = updatedSubjects;
+    await _databaseService.saveSubjects(_subjects);
+    await _attendanceProvider.deleteRecordsForDate(normalizedTarget);
+    await _refreshAttendanceReminders();
+    notifyListeners();
+
+    return DayTimetableCopyResult(
+      copiedClasses: sourceClassCount,
+      replacedClasses: replacedClassCount,
+    );
   }
 
   Future<void> deleteSubject(Subject subject) async {
