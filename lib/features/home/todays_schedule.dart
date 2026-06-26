@@ -95,6 +95,32 @@ class TodaySchedule extends StatelessWidget {
     }
     
     // Check if the semester has ended
+    if (semester != null && semesterProvider.hasSemesterEnded) {
+      return Center(
+        child: Padding(
+          padding: rs.insetsAll(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.school_outlined, size: rs.scale(50), color: Colors.orange),
+              SizedBox(height: rs.height(16)),
+              Text(
+                'Semester Ended',
+                style: TextStyle(fontSize: rs.font(22), fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: rs.height(8)),
+              Text(
+                'The semester has ended.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: rs.font(16)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final bool semesterEnded = semesterProvider.hasSemesterEnded;
 
     final displayClasses = _expandSubjectsBySlot(subjectProvider.getClassesForDate(today));

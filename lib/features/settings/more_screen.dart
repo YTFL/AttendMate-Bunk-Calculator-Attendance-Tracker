@@ -223,6 +223,48 @@ class _MoreScreenState extends State<MoreScreen> {
             }
           },
         ),
+        ListTile(
+          leading: const Icon(Icons.timer_outlined),
+          title: const Text('Time picker style'),
+          subtitle: Text('Currently: ${timeFormatProvider.clockStyleDisplayName}'),
+          onTap: () {
+            showDialog<void>(
+              context: context,
+              builder: (ctx) {
+                return AlertDialog(
+                  title: const Text('Select Time Picker Style'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioGroup<ClockStyle>(
+                        groupValue: timeFormatProvider.clockStyle,
+                        onChanged: (val) {
+                          if (val != null) {
+                            timeFormatProvider.setClockStyle(val);
+                            Navigator.pop(ctx);
+                          }
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            RadioListTile<ClockStyle>(
+                              title: const Text('Material Dialog'),
+                              value: ClockStyle.material,
+                            ),
+                            RadioListTile<ClockStyle>(
+                              title: const Text('Scroll Wheel'),
+                              value: ClockStyle.scroll,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
         FutureBuilder<PackageInfo>(
           future: _packageInfoFuture,
           builder: (context, snapshot) {

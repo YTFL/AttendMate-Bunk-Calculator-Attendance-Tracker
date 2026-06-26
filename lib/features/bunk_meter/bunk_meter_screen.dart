@@ -83,12 +83,29 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     final today = DateTime(now.year, now.month, now.day); // Normalize to midnight
     final endDate = today.isAfter(semester.endDate) ? semester.endDate : today;
 
+    // Pre-group/index all attendance records by subjectId to avoid O(S * R) scans
+    final Map<String, List<Attendance>> recordsBySubject = {};
+    for (final record in attendanceProvider.attendanceRecords) {
+      recordsBySubject.putIfAbsent(record.subjectId, () => []).add(record);
+    }
+
+    // Precompute snapshots for all subjects to avoid O(N log N) recalculation during sorting
+    // and redundant calculations in ListView.builder.
+    final Map<String, _SubjectAttendanceSnapshot> snapshots = {
+      for (final subject in subjects)
+        subject.id: _buildAttendanceSnapshot(
+          subject: subject,
+          subjectRecords: recordsBySubject[subject.id] ?? const [],
+          semester: semester,
+          endDate: endDate,
+        )
+    };
+
     // Sort subjects: ones that need attendance first, then alphabetically
     final sortedSubjects = _getSortedSubjects(
       subjects,
-      attendanceProvider,
+      snapshots,
       semester,
-      endDate,
     );
 
     // Filter subjects based on search query
@@ -191,12 +208,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       itemCount: filteredSubjects.length,
       itemBuilder: (context, index) {
         final subject = filteredSubjects[index];
-        final snapshot = _buildAttendanceSnapshot(
-          subject: subject,
-          attendanceProvider: attendanceProvider,
-          semester: semester,
-          endDate: endDate,
-        );
+        final snapshot = snapshots[subject.id]!;
 
         if (snapshot.totalClassesInWindow == 0 && snapshot.classesHeldSoFar == 0) {
           final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -492,15 +504,14 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
   /// Sort subjects: ones that need attendance (below target) first, then alphabetically
   List<Subject> _getSortedSubjects(
     List<Subject> subjects,
-    AttendanceProvider attendanceProvider,
+    Map<String, _SubjectAttendanceSnapshot> snapshots,
     Semester semester,
-    DateTime endDate,
   ) {
     final targetPercentageValue = semester.targetPercentage / 100;
     
     return List<Subject>.from(subjects)..sort((a, b) {
-      final aNeeds = _needsAttendance(a, attendanceProvider, semester, endDate, targetPercentageValue);
-      final bNeeds = _needsAttendance(b, attendanceProvider, semester, endDate, targetPercentageValue);
+      final aNeeds = _needsAttendance(a, snapshots, targetPercentageValue);
+      final bNeeds = _needsAttendance(b, snapshots, targetPercentageValue);
 
       // Classes that need attendance come first
       if (aNeeds != bNeeds) {
@@ -515,17 +526,11 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
   /// Check if a subject needs attendance (is below target percentage)
   bool _needsAttendance(
     Subject subject,
-    AttendanceProvider attendanceProvider,
-    Semester semester,
-    DateTime endDate,
+    Map<String, _SubjectAttendanceSnapshot> snapshots,
     double targetPercentage,
   ) {
-    final snapshot = _buildAttendanceSnapshot(
-      subject: subject,
-      attendanceProvider: attendanceProvider,
-      semester: semester,
-      endDate: endDate,
-    );
+    final snapshot = snapshots[subject.id];
+    if (snapshot == null) return false;
 
     final attendedClasses = snapshot.attendedClasses;
     final markedClasses = snapshot.markedClasses;
@@ -541,7 +546,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
 
   _SubjectAttendanceSnapshot _buildAttendanceSnapshot({
     required Subject subject,
-    required AttendanceProvider attendanceProvider,
+    required List<Attendance> subjectRecords,
     required Semester semester,
     required DateTime endDate,
   }) {
@@ -551,10 +556,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       countingStart = semester.startDate;
     }
 
-    final recordsForSubject = attendanceProvider.attendanceRecords.where((record) {
-      if (record.subjectId != subject.id) {
-        return false;
-      }
+    final recordsForSubject = subjectRecords.where((record) {
       if (record.date.isAfter(endDate)) {
         return false;
       }

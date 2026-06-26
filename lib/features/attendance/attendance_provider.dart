@@ -65,6 +65,25 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
+  Future<void> markMultipleAttendance(List<Attendance> records) async {
+    if (records.isEmpty) return;
+    try {
+      for (final record in records) {
+        _attendanceRecords.removeWhere(
+          (r) =>
+              r.subjectId == record.subjectId &&
+              r.date == record.date &&
+              (r.slotKey ?? '') == (record.slotKey ?? ''),
+        );
+        _attendanceRecords.add(record);
+      }
+      await _databaseService.saveAttendance(_attendanceRecords);
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Attendance? getAttendanceForSubjectOnDate(
     String subjectId,
     DateTime date, {
@@ -146,11 +165,22 @@ class AttendanceProvider with ChangeNotifier {
       final today = DateTime.now();
       final todayDate = DateTime(today.year, today.month, today.day);
       
-      // Start from the day after semester start or from the earliest day in records
+      // Start from the semester start date
       DateTime checkFromDate = DateTime(semesterStartDate.year, semesterStartDate.month, semesterStartDate.day);
-      
-      // Add a day to start checking from the day after semester start
-      checkFromDate = checkFromDate.add(const Duration(days: 1));
+
+      // 1. Index attendance records by composite key: subjectId_dateEpoch_slotKey
+      final Map<String, Attendance> indexedRecords = {};
+      // 2. Index attendance records by date to check isHoliday in O(1)
+      final Map<DateTime, List<Attendance>> recordsByDate = {};
+
+      for (final record in _attendanceRecords) {
+        final normDate = DateTime(record.date.year, record.date.month, record.date.day);
+        final key = '${record.subjectId}_${normDate.millisecondsSinceEpoch}_${record.slotKey ?? ""}';
+        indexedRecords[key] = record;
+        recordsByDate.putIfAbsent(normDate, () => []).add(record);
+      }
+
+      bool changed = false;
 
       // Check all days from checkFromDate to yesterday
       for (DateTime date = checkFromDate;
@@ -158,7 +188,8 @@ class AttendanceProvider with ChangeNotifier {
           date = date.add(const Duration(days: 1))) {
         
         // Skip if this day is marked as a holiday
-        if (isHoliday(date)) {
+        final recordsForDay = recordsByDate[date];
+        if (recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled)) {
           continue;
         }
 
@@ -173,23 +204,35 @@ class AttendanceProvider with ChangeNotifier {
 
           // For each slot, check if attendance is marked
           for (final slot in slotsForDay) {
-            final attendance = getAttendanceForSubjectOnDate(
-              subject.id,
-              date,
-              slotKey: slot.slotKey,
-            );
+            final key = '${subject.id}_${date.millisecondsSinceEpoch}_${slot.slotKey}';
+            final attendance = indexedRecords[key];
 
-            // If not marked, mark it as present
+            // If not marked, mark it as present in memory
             if (attendance == null) {
-              await markAttendance(
-                subject.id,
-                date,
-                AttendanceStatus.attended,
+              _attendanceRecords.removeWhere(
+                (record) =>
+                    record.subjectId == subject.id &&
+                    record.date == date &&
+                    record.slotKey == slot.slotKey,
+              );
+
+              final newRecord = Attendance(
+                subjectId: subject.id,
+                date: date,
+                status: AttendanceStatus.attended,
                 slotKey: slot.slotKey,
               );
+              _attendanceRecords.add(newRecord);
+              indexedRecords[key] = newRecord;
+              changed = true;
             }
           }
         }
+      }
+
+      if (changed) {
+        await _databaseService.saveAttendance(_attendanceRecords);
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Error marking previous days attendance: $e');

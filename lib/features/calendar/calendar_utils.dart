@@ -39,6 +39,7 @@ class CalendarUtils {
     required DateTime date,
     required List<Subject> subjects,
     required List<Attendance> attendanceRecords,
+    Map<DateTime, List<Attendance>>? indexedRecords,
   }) {
     // Check if the date is in the future
     final today = DateTime.now();
@@ -79,9 +80,10 @@ class CalendarUtils {
     }
 
     // Get all attendance records for this day
-    final attendanceRecordsToday = attendanceRecords
-        .where((record) => isSameDay(record.date, date))
-        .toList();
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final attendanceRecordsToday = indexedRecords != null
+        ? (indexedRecords[normalizedDate] ?? [])
+        : attendanceRecords.where((record) => isSameDay(record.date, date)).toList();
 
     final markedRecordsToday = attendanceRecordsToday.where((record) {
       final subject = subjectsWithClassesToday

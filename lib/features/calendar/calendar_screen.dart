@@ -298,6 +298,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final int daysInMonth = displayEndDate.difference(displayStartDate).inDays + 1;
     final int firstWeekday = displayStartDate.weekday;
 
+    // Index attendance records by date to avoid O(R) scan for each of the 30 calendar day cells
+    final Map<DateTime, List<Attendance>> indexedRecords = {};
+    for (final record in attendanceRecords) {
+      final normalizedDate = DateTime(record.date.year, record.date.month, record.date.day);
+      indexedRecords.putIfAbsent(normalizedDate, () => []).add(record);
+    }
+
     return Column(
       children: [
         // Day headers
@@ -337,6 +344,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               date: date,
               subjects: subjects,
               attendanceRecords: attendanceRecords,
+              indexedRecords: indexedRecords,
             );
 
             return _buildDayCell(context, dayInfo);
@@ -875,14 +883,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
     var date = DateTime(startDate.year, startDate.month, startDate.day);
     final normalizedEndDate = DateTime(endDate.year, endDate.month, endDate.day);
 
+    // Fast check: avoid expensive day state building (including linear DB searches)
+    // for all 150+ days of the semester on details tap.
     while (!date.isAfter(normalizedEndDate)) {
-      final info = CalendarUtils.getDayState(
-        date: date,
-        subjects: subjects,
-        attendanceRecords: attendanceRecords,
-      );
+      int classesCount = 0;
+      for (final subject in subjects) {
+        for (final slot in subject.schedule) {
+          if (slot.occursOnDate(date)) {
+            classesCount++;
+          }
+        }
+      }
 
-      if (info.classesCount > 0) {
+      if (classesCount > 0) {
         classDates.add(date);
       }
 

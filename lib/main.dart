@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,6 +25,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    DartPluginRegistrant.ensureInitialized();
     try {
       // Initialize database in background context
       await DatabaseService().init();
@@ -36,14 +39,10 @@ void callbackDispatcher() {
           await updateService.checkForUpdate();
         }
       } else if (task == 'endOfDayAttendanceCheck') {
-        // Auto-mark all unmarked classes as present at end of day
+        // Auto-mark all unmarked classes as present at end of day (or catch up previous days)
         final today = DateTime.now();
         final today0 = DateTime(today.year, today.month, today.day);
-        
-        // Only run this between 10 PM and 11:59 PM
-        if (today.hour >= 22) {
-          await _performEndOfDayAttendanceMarking(today0);
-        }
+        await _performEndOfDayAttendanceMarking(today0);
       }
       return true;
     } catch (e) {
@@ -56,56 +55,97 @@ void callbackDispatcher() {
 /// Helper function to perform end-of-day attendance marking
 /// This is a top-level function so it can be called from the callback dispatcher
 @pragma('vm:entry-point')
-Future<void> _performEndOfDayAttendanceMarking(DateTime date) async {
+Future<void> _performEndOfDayAttendanceMarking(DateTime todayDate) async {
   try {
-    // Initialize providers in background context
     final databaseService = DatabaseService();
-    final attendanceProvider = AttendanceProvider();
-    
-    // Load subjects
+    final semester = await databaseService.loadSemester();
+    if (semester == null) return;
+
     final subjects = await databaseService.loadSubjects();
-    
-    // Check if day is marked as holiday
+    if (subjects.isEmpty) return;
+
     final records = await databaseService.loadAttendance();
-    final recordsForDay = records.where((record) => record.date == date).toList();
-    final isHoliday = recordsForDay.isNotEmpty && recordsForDay.every((record) => record.status == AttendanceStatus.cancelled);
-    
-    if (isHoliday) {
-      return; // Skip if day is marked as holiday
+    final mutableRecords = List<Attendance>.from(records);
+
+    // Index records by composite key: subjectId_dateEpoch_slotKey
+    final Map<String, Attendance> indexedRecords = {};
+    // Index records by date to check isHoliday in O(1)
+    final Map<DateTime, List<Attendance>> recordsByDate = {};
+
+    for (final record in mutableRecords) {
+      final normDate = DateTime(record.date.year, record.date.month, record.date.day);
+      final key = '${record.subjectId}_${normDate.millisecondsSinceEpoch}_${record.slotKey ?? ""}';
+      indexedRecords[key] = record;
+      recordsByDate.putIfAbsent(normDate, () => []).add(record);
     }
-    
-    // Auto-mark all unmarked classes as present
-    for (var subject in subjects) {
-      final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date)).toList();
-      if (slotsForDay.isEmpty) {
+
+    bool changed = false;
+
+    // 1. First, check and mark all past days (from semester start up to yesterday)
+    DateTime checkFromDate = DateTime(semester.startDate.year, semester.startDate.month, semester.startDate.day);
+    for (DateTime date = checkFromDate;
+        date.isBefore(todayDate);
+        date = date.add(const Duration(days: 1))) {
+      
+      // Skip if holiday
+      final recordsForDay = recordsByDate[date];
+      if (recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled)) {
         continue;
       }
 
-      for (final slot in slotsForDay) {
-        Attendance? attendance;
-        try {
-          attendance = records.firstWhere(
-            (record) =>
-                record.subjectId == subject.id &&
-                record.date == date &&
-                (record.slotKey ?? '') == slot.slotKey,
-          );
-        } catch (e) {
-          attendance = null;
-        }
-
-        if (attendance == null) {
-          await attendanceProvider.markAttendance(
-            subject.id,
-            date,
-            AttendanceStatus.attended,
-            slotKey: slot.slotKey,
-          );
+      for (final subject in subjects) {
+        final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(date)).toList();
+        for (final slot in slotsForDay) {
+          final key = '${subject.id}_${date.millisecondsSinceEpoch}_${slot.slotKey}';
+          if (!indexedRecords.containsKey(key)) {
+            final newRecord = Attendance(
+              subjectId: subject.id,
+              date: date,
+              status: AttendanceStatus.attended,
+              slotKey: slot.slotKey,
+            );
+            mutableRecords.add(newRecord);
+            indexedRecords[key] = newRecord;
+            recordsByDate.putIfAbsent(date, () => []).add(newRecord);
+            changed = true;
+          }
         }
       }
     }
+
+    // 2. Secondly, if today is late enough (after 10 PM), check and mark today as well
+    final now = DateTime.now();
+    if (now.hour >= 22) {
+      final recordsForDay = recordsByDate[todayDate];
+      final isHoliday = recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled);
+      
+      if (!isHoliday) {
+        for (final subject in subjects) {
+          final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(todayDate)).toList();
+          for (final slot in slotsForDay) {
+            final key = '${subject.id}_${todayDate.millisecondsSinceEpoch}_${slot.slotKey}';
+            if (!indexedRecords.containsKey(key)) {
+              final newRecord = Attendance(
+                subjectId: subject.id,
+                date: todayDate,
+                status: AttendanceStatus.attended,
+                slotKey: slot.slotKey,
+              );
+              mutableRecords.add(newRecord);
+              indexedRecords[key] = newRecord;
+              recordsByDate.putIfAbsent(todayDate, () => []).add(newRecord);
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      await databaseService.saveAttendance(mutableRecords);
+    }
   } catch (e) {
-    debugPrint('End of day attendance marking failed: $e');
+    debugPrint('Background attendance marking failed: $e');
   }
 }
 
@@ -142,6 +182,7 @@ Future<void> main() async {
       'updateCheck',
       frequency: const Duration(days: 1),
       initialDelay: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       constraints: Constraints(
         requiresBatteryNotLow: false,
         requiresCharging: false,
@@ -155,12 +196,13 @@ Future<void> main() async {
       'end_of_day_attendance_check',
       'endOfDayAttendanceCheck',
       frequency: const Duration(days: 1),
-      initialDelay: const Duration(hours: 22), // Start checking at 10 PM
+      initialDelay: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       constraints: Constraints(
         requiresBatteryNotLow: false,
         requiresCharging: false,
         requiresDeviceIdle: false,
-        networkType: NetworkType.connected,
+        networkType: NetworkType.notRequired,
       ),
     );
   } catch (e) {

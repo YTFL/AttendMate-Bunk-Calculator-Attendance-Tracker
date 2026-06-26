@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -59,8 +61,9 @@ class NotificationService {
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _plugin.initialize(
-      initSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     await _requestAndroidPermission();
@@ -115,14 +118,12 @@ class NotificationService {
 
         try {
           await _plugin.zonedSchedule(
-            notificationId,
-            'Mark attendance',
-            'Class ended: $displayName',
-            scheduleTime,
-            _notificationDetails(),
+            id: notificationId,
+            title: 'Mark attendance',
+            body: 'Class ended: $displayName',
+            scheduledDate: scheduleTime,
+            notificationDetails: _notificationDetails(),
             androidScheduleMode: scheduleMode,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
             payload: payload,
           );
           _scheduledNotifications.add(notificationId);
@@ -149,13 +150,13 @@ class NotificationService {
         AndroidNotificationAction(
           'mark_present',
           'Mark present',
-          showsUserInterface: true,
+          showsUserInterface: false,
           cancelNotification: false,
         ),
         AndroidNotificationAction(
           'mark_absent',
           'Mark absent',
-          showsUserInterface: true,
+          showsUserInterface: false,
           cancelNotification: false,
         ),
       ],
@@ -361,18 +362,125 @@ class NotificationService {
 
     try {
       await _plugin.show(
-        notificationId,
-        'Attendance',
-        statusText,
-        confirmationDetails,
+        id: notificationId,
+        title: 'Attendance',
+        body: statusText,
+        notificationDetails: confirmationDetails,
       );
       
       // Auto-dismiss after 2 seconds
       Future.delayed(const Duration(seconds: 2), () {
-        _plugin.cancel(notificationId);
+        _plugin.cancel(id: notificationId);
       });
     } catch (e) {
       // Silently fail - confirmation notification error
     }
+  }
+}
+
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+  
+  final payload = response.payload;
+  if (payload == null || payload.isEmpty) {
+    return;
+  }
+
+  if (response.actionId != 'mark_present' && response.actionId != 'mark_absent') {
+    return;
+  }
+
+  try {
+    final data = jsonDecode(payload) as Map<String, dynamic>;
+    final subjectId = data['subjectId'] as String?;
+    final dateString = data['date'] as String?;
+    final slotKey = data['slotKey'] as String?;
+
+    if (subjectId == null || dateString == null) {
+      return;
+    }
+
+    final status = response.actionId == 'mark_present'
+        ? AttendanceStatus.attended
+        : AttendanceStatus.absent;
+
+    final date = DateTime.parse(dateString);
+
+    // Save attendance directly using DatabaseService
+    final databaseService = DatabaseService();
+    await databaseService.init();
+
+    final records = await databaseService.loadAttendance();
+    final mutableRecords = List<Attendance>.from(records);
+
+    final normDate = DateTime(date.year, date.month, date.day);
+
+    // Index existing records to find duplicates
+    int matchIndex = -1;
+    for (int i = 0; i < mutableRecords.length; i++) {
+      final r = mutableRecords[i];
+      final rNormDate = DateTime(r.date.year, r.date.month, r.date.day);
+      if (r.subjectId == subjectId &&
+          rNormDate == normDate &&
+          (r.slotKey ?? '') == (slotKey ?? '')) {
+        matchIndex = i;
+        break;
+      }
+    }
+
+    final newRecord = Attendance(
+      subjectId: subjectId,
+      date: date,
+      status: status,
+      slotKey: slotKey,
+    );
+
+    if (matchIndex != -1) {
+      mutableRecords[matchIndex] = newRecord;
+    } else {
+      mutableRecords.add(newRecord);
+    }
+
+    await databaseService.saveAttendance(mutableRecords);
+
+    // Dismiss the original notification
+    final plugin = FlutterLocalNotificationsPlugin();
+    if (response.id != null) {
+      await plugin.cancel(id: response.id!);
+    }
+
+    // Show a confirmation notification
+    final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
+    
+    final confirmationDetails = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'attendance_reminders',
+        'Attendance reminders',
+        channelDescription: 'Reminders to mark attendance after class ends',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: 'icon_noti',
+        enableVibration: true,
+        autoCancel: true,
+      ),
+    );
+
+    if (response.id != null) {
+      await plugin.show(
+        id: response.id!,
+        title: 'Attendance',
+        body: statusText,
+        notificationDetails: confirmationDetails,
+      );
+      
+      // Auto-dismiss after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        plugin.cancel(id: response.id!);
+      });
+    }
+  } catch (e) {
+    debugPrint('Error in notificationTapBackground: $e');
   }
 }

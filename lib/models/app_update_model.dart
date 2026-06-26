@@ -83,7 +83,7 @@ class AppUpdate {
   }
 
   /// Get version string without build number
-  get versionInfo => version;
+  String get versionInfo => version;
 
   @override
   String toString() => 'AppUpdate(version: $version, buildNumber: $buildNumber, changelog: $changelog)';

@@ -7,6 +7,7 @@ import '../../models/app_update_model.dart';
 import '../../services/update_service.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
+import '../attendance/attendance_provider.dart';
 import '../bunk_meter/bunk_meter_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../settings/more_screen.dart';
@@ -14,6 +15,7 @@ import '../semester/semester_provider.dart';
 import '../semester/semester_screen.dart';
 import '../subject/add_subject_screen.dart';
 import '../subject/import_timetable_screen.dart';
+import '../subject/subject_provider.dart';
 import '../subject/subject_screen.dart';
 import 'todays_schedule.dart';
 import 'update_dialog.dart';
@@ -26,7 +28,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late int _selectedIndex;
   final UpdateService _updateService = UpdateService();
   AppUpdate? _pendingUpdate;
@@ -37,6 +39,28 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _selectedIndex = widget.initialPageIndex;
     _checkForUpdates();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      try {
+        final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+        final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+        
+        attendanceProvider.reloadAttendance();
+        subjectProvider.reloadSubjects();
+      } catch (e) {
+        debugPrint('Failed to reload database on app resume: $e');
+      }
+    }
   }
 
   Future<void> _checkForUpdates() async {

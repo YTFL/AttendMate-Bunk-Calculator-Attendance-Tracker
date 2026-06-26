@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../main.dart';
 import '../../utils/snackbar_utils.dart';
@@ -141,37 +141,6 @@ Tuesday,"PHY","CSE"
 ---
 
 > **Tip:** Want to skip manual JSON writing? Use the ready-to-use AI prompt below with your timetable image.
-
-## Ready-to-use AI Prompt
-Use the prompt below with your timetable image in Gemini/ChatGPT/Claude.
-
-```text
-I have attached an image/screenshot of my college timetable. Convert it into the following JSON format exactly:
-
-{
-  "subjects": [
-    {
-      "name": "Subject Name",
-      "acronym": "ACR",
-      "schedule": [
-        {
-          "day": "monday",
-          "startTime": "09:00",
-          "endTime": "10:00"
-        }
-      ]
-    }
-  ]
-}
-
-Rules to follow:
-- "name" is the full subject name as shown in the timetable.
-- "acronym" is a short 2–4 letter code for the subject (create one if not shown).
-- "day" must be fully lowercase: monday, tuesday, wednesday, thursday, friday, saturday, or sunday.
-- "startTime" and "endTime" must be in 24-hour HH:MM format (e.g. 09:00, 14:30).
-- Include every subject and every time slot shown in the timetable.
-- Return only the raw JSON with no extra explanation.
-```
 ''',
       aiPromptCopyText: _aiPrompt,
     ),

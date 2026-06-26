@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/time_format_utils.dart';
 
-/// Provider to manage user's time format preference
+enum ClockStyle { material, scroll }
+
+/// Provider to manage user's time format preference and time picker clock style
 class TimeFormatProvider with ChangeNotifier {
   static const String _timeFormatKey = 'time_format_preference';
+  static const String _clockStyleKey = 'clock_style_preference';
   
   TimeFormat _timeFormat = TimeFormat.format24Hr;
+  ClockStyle _clockStyle = ClockStyle.material;
   bool _isInitialized = false;
 
   TimeFormat get timeFormat => _timeFormat;
+  ClockStyle get clockStyle => _clockStyle;
   bool get isInitialized => _isInitialized;
 
   /// Initialize the provider by loading saved preferences
@@ -19,23 +24,33 @@ class TimeFormatProvider with ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedFormat = prefs.getString(_timeFormatKey);
       
+      // Load saved time format
+      final savedFormat = prefs.getString(_timeFormatKey);
       if (savedFormat != null) {
-        // Load saved preference
         _timeFormat = savedFormat == 'format12Hr' 
             ? TimeFormat.format12Hr 
             : TimeFormat.format24Hr;
       } else {
-        // Use device's system format preference
         final uses24Hour = systemUses24Hour ?? true;
         _timeFormat = uses24Hour ? TimeFormat.format24Hr : TimeFormat.format12Hr;
-        // Save the detected format
-        await _savePreference();
+        await _saveTimeFormatPreference();
+      }
+
+      // Load saved clock style
+      final savedClockStyle = prefs.getString(_clockStyleKey);
+      if (savedClockStyle != null) {
+        _clockStyle = savedClockStyle == 'scroll'
+            ? ClockStyle.scroll
+            : ClockStyle.material;
+      } else {
+        _clockStyle = ClockStyle.material;
+        await _saveClockStylePreference();
       }
     } catch (e) {
       debugPrint('Failed to initialize TimeFormatProvider: $e');
-      _timeFormat = TimeFormat.format24Hr; // Fallback to 24-hour
+      _timeFormat = TimeFormat.format24Hr;
+      _clockStyle = ClockStyle.material;
     }
     
     _isInitialized = true;
@@ -47,7 +62,7 @@ class TimeFormatProvider with ChangeNotifier {
     _timeFormat = _timeFormat == TimeFormat.format12Hr 
         ? TimeFormat.format24Hr 
         : TimeFormat.format12Hr;
-    await _savePreference();
+    await _saveTimeFormatPreference();
     notifyListeners();
   }
 
@@ -55,7 +70,7 @@ class TimeFormatProvider with ChangeNotifier {
   Future<void> set12HourFormat() async {
     if (_timeFormat != TimeFormat.format12Hr) {
       _timeFormat = TimeFormat.format12Hr;
-      await _savePreference();
+      await _saveTimeFormatPreference();
       notifyListeners();
     }
   }
@@ -64,7 +79,16 @@ class TimeFormatProvider with ChangeNotifier {
   Future<void> set24HourFormat() async {
     if (_timeFormat != TimeFormat.format24Hr) {
       _timeFormat = TimeFormat.format24Hr;
-      await _savePreference();
+      await _saveTimeFormatPreference();
+      notifyListeners();
+    }
+  }
+
+  /// Set time picker clock style
+  Future<void> setClockStyle(ClockStyle style) async {
+    if (_clockStyle != style) {
+      _clockStyle = style;
+      await _saveClockStylePreference();
       notifyListeners();
     }
   }
@@ -74,14 +98,19 @@ class TimeFormatProvider with ChangeNotifier {
     return _timeFormat == TimeFormat.format12Hr ? '12-hour (AM/PM)' : '24-hour';
   }
 
+  /// Get the current clock style as a user-friendly string
+  String get clockStyleDisplayName {
+    return _clockStyle == ClockStyle.scroll ? 'Scroll Wheel' : 'Material Dialog';
+  }
+
   /// Check if current format is 12-hour
   bool get is12Hour => _timeFormat == TimeFormat.format12Hr;
 
   /// Check if current format is 24-hour
   bool get is24Hour => _timeFormat == TimeFormat.format24Hr;
 
-  /// Save the current preference to SharedPreferences
-  Future<void> _savePreference() async {
+  /// Save the current time format preference to SharedPreferences
+  Future<void> _saveTimeFormatPreference() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final formatString = _timeFormat == TimeFormat.format12Hr 
@@ -90,6 +119,19 @@ class TimeFormatProvider with ChangeNotifier {
       await prefs.setString(_timeFormatKey, formatString);
     } catch (e) {
       debugPrint('Failed to save time format preference: $e');
+    }
+  }
+
+  /// Save the current clock style preference to SharedPreferences
+  Future<void> _saveClockStylePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final clockStyleString = _clockStyle == ClockStyle.scroll 
+          ? 'scroll' 
+          : 'material';
+      await prefs.setString(_clockStyleKey, clockStyleString);
+    } catch (e) {
+      debugPrint('Failed to save clock style preference: $e');
     }
   }
 }

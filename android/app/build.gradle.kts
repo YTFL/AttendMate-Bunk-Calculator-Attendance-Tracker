@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -14,10 +13,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
         isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
@@ -43,9 +38,9 @@ android {
             val keystoreFile = rootProject.file("app-release-key.jks")
             if (keystoreFile.exists()) {
                 storeFile = keystoreFile
-                storePassword = project.findProperty("KEYSTORE_PASSWORD") as String?
-                keyAlias = project.findProperty("KEY_ALIAS") as String?
-                keyPassword = project.findProperty("KEY_PASSWORD") as String?
+                storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: "flutter123"
+                keyAlias = project.findProperty("KEY_ALIAS") as String? ?: "app-key"
+                keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: "flutter123"
             }
         }
     }
@@ -77,4 +72,10 @@ dependencies {
 
 flutter {
     source = "../.."
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
 }

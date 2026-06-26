@@ -552,30 +552,34 @@ class SubjectProvider with ChangeNotifier {
 
   Future<void> markDayAsHoliday(DateTime date) async {
     final classesForDay = getClassesForDate(date);
+    final records = <Attendance>[];
     for (var subject in classesForDay) {
       for (final slot in subject.schedule) {
-        await _attendanceProvider.markAttendance(
-          subject.id,
-          date,
-          AttendanceStatus.cancelled,
+        records.add(Attendance(
+          subjectId: subject.id,
+          date: date,
+          status: AttendanceStatus.cancelled,
           slotKey: slot.slotKey,
-        );
+        ));
       }
     }
+    await _attendanceProvider.markMultipleAttendance(records);
   }
 
   Future<void> markDayAsAbsent(DateTime date) async {
     final classesForDay = getClassesForDate(date);
+    final records = <Attendance>[];
     for (var subject in classesForDay) {
       for (final slot in subject.schedule) {
-        await _attendanceProvider.markAttendance(
-          subject.id,
-          date,
-          AttendanceStatus.absent,
+        records.add(Attendance(
+          subjectId: subject.id,
+          date: date,
+          status: AttendanceStatus.absent,
           slotKey: slot.slotKey,
-        );
+        ));
       }
     }
+    await _attendanceProvider.markMultipleAttendance(records);
   }
 
   /// Check if a date is marked as a holiday
@@ -612,18 +616,19 @@ class SubjectProvider with ChangeNotifier {
   }
 
   Future<void> markDayAsPresent(DateTime date) async {
-    // Get all subjects (including those marked as holiday)
+    final records = <Attendance>[];
     for (var subject in _subjects) {
       final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date));
       for (final slot in slotsForDay) {
-        await _attendanceProvider.markAttendance(
-          subject.id,
-          date,
-          AttendanceStatus.attended,
+        records.add(Attendance(
+          subjectId: subject.id,
+          date: date,
+          status: AttendanceStatus.attended,
           slotKey: slot.slotKey,
-        );
+        ));
       }
     }
+    await _attendanceProvider.markMultipleAttendance(records);
   }
 
   /// Auto-mark all unmarked classes as present at end of day
@@ -635,6 +640,7 @@ class SubjectProvider with ChangeNotifier {
       return;
     }
 
+    final records = <Attendance>[];
     for (var subject in _subjects) {
       final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date)).toList();
       if (slotsForDay.isEmpty) {
@@ -649,14 +655,15 @@ class SubjectProvider with ChangeNotifier {
         );
 
         if (attendance == null) {
-          await _attendanceProvider.markAttendance(
-            subject.id,
-            date,
-            AttendanceStatus.attended,
+          records.add(Attendance(
+            subjectId: subject.id,
+            date: date,
+            status: AttendanceStatus.attended,
             slotKey: slot.slotKey,
-          );
+          ));
         }
       }
     }
+    await _attendanceProvider.markMultipleAttendance(records);
   }
 }

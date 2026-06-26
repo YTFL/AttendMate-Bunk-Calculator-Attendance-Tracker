@@ -84,14 +84,8 @@ class Subject {
 
   int getTotalScheduledClasses(DateTime startDate, DateTime endDate) {
     int total = 0;
-    for (DateTime date = startDate;
-        date.isBefore(endDate.add(const Duration(days: 1)));
-        date = date.add(const Duration(days: 1))) {
-      for (var slot in schedule) {
-        if (slot.occursOnDate(date)) {
-          total++;
-        }
-      }
+    for (final slot in schedule) {
+      total += slot.getOccurrences(startDate, endDate);
     }
     return total;
   }
@@ -278,6 +272,58 @@ class TimeSlot {
       return false;
     }
     return normalizedDate.weekday == day.index + 1;
+  }
+
+  int getOccurrences(DateTime startDate, DateTime endDate) {
+    final s = normalizeDate(startDate) ?? startDate;
+    final e = normalizeDate(endDate) ?? endDate;
+    if (s.isAfter(e)) {
+      return 0;
+    }
+
+    if (specificDate != null) {
+      final spec = specificDate!;
+      if ((spec.isAfter(s) || isSameDay(spec, s)) && (spec.isBefore(e) || isSameDay(spec, e))) {
+        return 1;
+      }
+      return 0;
+    }
+
+    // Determine the effective range overlap
+    var calcStart = s;
+    if (effectiveFrom != null && effectiveFrom!.isAfter(calcStart)) {
+      calcStart = effectiveFrom!;
+    }
+
+    var calcEnd = e;
+    if (effectiveUntil != null && effectiveUntil!.isBefore(calcEnd)) {
+      calcEnd = effectiveUntil!;
+    }
+
+    if (calcStart.isAfter(calcEnd)) {
+      return 0;
+    }
+
+    // Use UTC for difference calculation to avoid DST transitions
+    final calcStartUtc = DateTime.utc(calcStart.year, calcStart.month, calcStart.day);
+    final calcEndUtc = DateTime.utc(calcEnd.year, calcEnd.month, calcEnd.day);
+
+    final targetWeekday = day.index + 1;
+    final days = calcEndUtc.difference(calcStartUtc).inDays + 1;
+    int count = days ~/ 7;
+    final rem = days % 7;
+
+    if (rem > 0) {
+      int current = calcStartUtc.weekday;
+      for (int i = 0; i < rem; i++) {
+        if (current == targetWeekday) {
+          count++;
+          break;
+        }
+        current = current == 7 ? 1 : current + 1;
+      }
+    }
+    return count;
   }
 
   bool _isWithinEffectiveRange(DateTime date) {
