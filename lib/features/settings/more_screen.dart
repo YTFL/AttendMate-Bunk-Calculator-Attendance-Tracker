@@ -9,6 +9,7 @@ import '../../services/update_service.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/url_launcher_utils.dart';
 import '../home/update_dialog.dart';
+import 'google_calendar_sync_screen.dart';
 import 'setup_guide_screen.dart';
 import 'time_format_provider.dart';
 import 'whats_new_screen.dart';
@@ -262,6 +263,18 @@ class _MoreScreenState extends State<MoreScreen> {
                   ),
                 );
               },
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.sync),
+          title: const Text('Google Calendar Sync'),
+          subtitle: const Text('Sync your timetable with Google Calendar'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const GoogleCalendarSyncScreen()),
             );
           },
         ),

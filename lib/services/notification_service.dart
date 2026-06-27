@@ -17,12 +17,14 @@ class AttendanceAction {
   final DateTime date;
   final AttendanceStatus status;
   final String? slotKey;
+  final int? notificationId;
 
   AttendanceAction({
     required this.subjectId,
     required this.date,
     required this.status,
     this.slotKey,
+    this.notificationId,
   });
 }
 
@@ -34,6 +36,7 @@ class NavigationEvent {
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
+  static const String actionPortName = 'attendance_action_port';
 
   factory NotificationService() => _instance;
 
@@ -47,7 +50,6 @@ class NotificationService {
   bool _initialized = false;
   final Set<int> _scheduledNotifications = {};
   final Map<int, String> _payloadMap = {}; // Store payloads by notification ID
-  static const Duration _recentEndGrace = Duration(minutes: 5);
 
   Stream<AttendanceAction> get actionStream => _actionController.stream;
   Stream<NavigationEvent> get navigationStream => _navigationController.stream;
@@ -151,13 +153,13 @@ class NotificationService {
           'mark_present',
           'Mark present',
           showsUserInterface: false,
-          cancelNotification: false,
+          cancelNotification: true,
         ),
         AndroidNotificationAction(
           'mark_absent',
           'Mark absent',
           showsUserInterface: false,
-          cancelNotification: false,
+          cancelNotification: true,
         ),
       ],
     );
@@ -185,9 +187,6 @@ class NotificationService {
       );
 
       if (now.isAfter(scheduledEnd)) {
-        if (now.difference(scheduledEnd) <= _recentEndGrace) {
-          return now.add(const Duration(seconds: 5));
-        }
         return null;
       }
 
@@ -216,9 +215,6 @@ class NotificationService {
       );
 
       if (dayOffset == 0 && now.isAfter(candidateEnd)) {
-        if (now.difference(candidateEnd) <= _recentEndGrace) {
-          return now.add(const Duration(seconds: 5));
-        }
         continue;
       }
 
@@ -281,7 +277,7 @@ class NotificationService {
     return AndroidScheduleMode.inexactAllowWhileIdle;
   }
 
-  void _handleNotificationResponse(NotificationResponse response) {
+  Future<void> _handleNotificationResponse(NotificationResponse response) async {
     var payload = response.payload;
     
     // Handle notification tap (no action button pressed)
@@ -319,6 +315,10 @@ class NotificationService {
           : AttendanceStatus.absent;
 
       final date = DateTime.parse(dateString);
+
+      if (response.id != null) {
+        await _plugin.cancel(id: response.id!);
+      }
       
       // Show confirmation notification
       final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
@@ -331,6 +331,7 @@ class NotificationService {
           date: date,
           status: status,
           slotKey: slotKey,
+          notificationId: response.id,
         ),
       );
       
@@ -344,6 +345,14 @@ class NotificationService {
         _payloadMap.remove(response.id);
       }
     }
+  }
+
+  Future<void> showAttendanceMarkedNotification({
+    required int notificationId,
+    required AttendanceStatus status,
+  }) async {
+    final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
+    await _showConfirmationNotification(notificationId, statusText);
   }
 
   Future<void> _showConfirmationNotification(int notificationId, String statusText) async {
@@ -444,6 +453,16 @@ void notificationTapBackground(NotificationResponse response) async {
     }
 
     await databaseService.saveAttendance(mutableRecords);
+
+    final actionPort = IsolateNameServer.lookupPortByName(NotificationService.actionPortName);
+    actionPort?.send({
+      'type': 'attendance_marked',
+      'subjectId': subjectId,
+      'date': date.toIso8601String(),
+      'slotKey': slotKey,
+      'notificationId': response.id,
+      'status': status.index,
+    });
 
     // Dismiss the original notification
     final plugin = FlutterLocalNotificationsPlugin();

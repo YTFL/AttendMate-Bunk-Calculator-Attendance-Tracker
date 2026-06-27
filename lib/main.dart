@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:async';
 import 'dart:ui';
 
@@ -278,6 +279,26 @@ Future<void> main() async {
       try {
         final notificationService = NotificationService();
         await notificationService.init();
+
+        final receivePort = ReceivePort();
+        IsolateNameServer.removePortNameMapping(NotificationService.actionPortName);
+        IsolateNameServer.registerPortWithName(
+          receivePort.sendPort,
+          NotificationService.actionPortName,
+        );
+
+        receivePort.listen((message) async {
+          if (message is! Map) {
+            return;
+          }
+
+          final data = message.cast<String, dynamic>();
+          if (data['type'] != 'attendance_marked') {
+            return;
+          }
+
+          await attendanceProvider.reloadAttendance();
+        });
         
         // Listen for attendance action button taps
         notificationService.actionStream.listen((action) async {
@@ -290,17 +311,12 @@ Future<void> main() async {
                   slotKey: action.slotKey,
                 );
 
-            // Navigate to Today page after marking attendance
-            final navigatorState = navigatorKey.currentState;
-            if (navigatorState == null || !navigatorState.mounted) {
-              return;
+            if (action.notificationId != null) {
+              await notificationService.showAttendanceMarkedNotification(
+                notificationId: action.notificationId!,
+                status: action.status,
+              );
             }
-            navigatorState.pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => const HomeScreen(initialPageIndex: 0),
-              ),
-              (route) => false,
-            );
           } catch (e) {
             // Silently fail - navigation error
           }

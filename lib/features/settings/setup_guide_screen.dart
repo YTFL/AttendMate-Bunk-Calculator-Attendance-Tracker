@@ -8,6 +8,7 @@ import '../calendar/calendar_screen.dart';
 import '../home/home_screen.dart';
 import '../subject/add_subject_screen.dart';
 import '../subject/import_timetable_screen.dart';
+import 'google_calendar_sync_screen.dart';
 
 class SetupGuideScreen extends StatefulWidget {
   const SetupGuideScreen({super.key});
@@ -268,7 +269,31 @@ Tap notification body to open **Today**.
 ''',
     ),
   _GuideSection(
-      title: '9. More',
+      title: '9. Google Calendar Sync',
+      openInAppLabel: 'Open Google Calendar Sync',
+      openTarget: _GuideOpenTarget.googleCalendarSync,
+      markdown: '''
+## Overview
+AttendMate allows you to synchronize your weekly class timetable and semester schedule to your Google Calendar. This puts all your classes directly into your calendar with matching colors.
+
+---
+
+## Steps
+1. Go to the **More** tab in AttendMate.
+2. Tap **Google Calendar Sync**.
+3. Tap **Connect Account** and log in with your Google Account.
+4. Once connected, tap **Sync Now** to copy all subject schedules and classes to your Google Calendar.
+
+---
+
+## Key Rules
+- **Color Mapping**: AttendMate automatically maps subject colors to the closest matching Google Calendar event colors.
+- **Holidays & Mid-Semester Changes**: Days marked as holidays in AttendMate are automatically excluded from the Google Calendar events.
+- **Dynamic Updates**: Re-running the sync will update or remove modified/retired slots to keep your calendar clean.
+''',
+    ),
+  _GuideSection(
+      title: '10. More',
       openInAppLabel: 'Open More Page',
       openTarget: _GuideOpenTarget.moreTab,
       markdown: '''
@@ -296,7 +321,7 @@ The **More** page contains app info, update tools, guide access, and support lin
 ''',
     ),
   _GuideSection(
-      title: '10. Tips & Tricks',
+      title: '11. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -361,6 +386,8 @@ The **More** page contains app info, update tools, guide access, and support lin
         return _openHomeTab(1, subLevelBuilder: (context) => const ImportTimetableScreen());
       case _GuideOpenTarget.calendar:
         return _openHomeTab(0, subLevelBuilder: (context) => const CalendarScreen());
+      case _GuideOpenTarget.googleCalendarSync:
+        return _openHomeTab(4, subLevelBuilder: (context) => const GoogleCalendarSyncScreen());
     }
   }
 
@@ -514,6 +541,7 @@ enum _GuideOpenTarget {
   addSubject,
   importTimetable,
   calendar,
+  googleCalendarSync,
 }
 
 class _TableOfContentsPage extends StatelessWidget {
