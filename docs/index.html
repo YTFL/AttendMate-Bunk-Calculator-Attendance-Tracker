@@ -3,207 +3,715 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AttendMate - Timetable & Attendance Manager</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <title>AttendMate - Timetable & Attendance Tracker</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
     <style>
         :root {
-            --bg-color: #0b0f17;
-            --text-color: #f1f5f9;
-            --muted-color: #94a3b8;
-            --primary-color: #2563eb;
-            --primary-glow: rgba(37, 99, 235, 0.4);
-            --secondary-color: #3b82f6;
-            --glass-bg: rgba(30, 41, 59, 0.4);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            /* Colors */
+            --bg-obsidian: #030712;
+            --bg-surface: rgba(17, 24, 39, 0.7);
+            --bg-surface-hover: rgba(31, 41, 55, 0.85);
+            --border-glow: rgba(59, 130, 246, 0.2);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            
+            --primary: #3b82f6;
+            --primary-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-white: #ffffff;
+            
+            --font-display: 'Plus Jakarta Sans', sans-serif;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.15) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.12) 0%, transparent 40%);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
+            font-family: var(--font-sans);
+            background-color: var(--bg-obsidian);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            position: relative;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            align-items: center;
-            overflow-x: hidden;
         }
 
-        .container {
-            max-width: 800px;
-            width: 100%;
-            padding: 60px 20px;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            flex: 1;
-        }
-
-        .logo-container {
-            position: relative;
-            margin-bottom: 24px;
-            animation: float 6s ease-in-out infinite;
-        }
-
-        .logo-glow {
+        /* Ambient background glow */
+        body::before {
+            content: '';
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100px;
-            height: 100px;
-            background: var(--primary-glow);
-            border-radius: 50%;
-            filter: blur(30px);
-            z-index: 1;
+            top: -10%;
+            left: -10%;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, transparent 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            bottom: -10%;
+            right: -10%;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Container */
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        /* Header / Navbar */
+        header {
+            border-bottom: 1px solid var(--border-subtle);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(3, 7, 18, 0.85);
+        }
+
+        .nav-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-white);
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
         }
 
         .logo-icon {
-            font-size: 4rem;
-            position: relative;
-            z-index: 2;
+            width: 32px;
+            height: 32px;
+            background: var(--primary-gradient);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
-        h1 {
-            font-size: 3.5rem;
+        .logo-icon svg {
+            width: 18px;
+            height: 18px;
+            color: white;
+        }
+
+        .nav-btn {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-white);
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 60px 0 40px 0;
+            text-align: center;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(2.2rem, 7vw, 3.2rem);
             font-weight: 800;
-            margin: 0;
-            background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
+            line-height: 1.15;
+            color: var(--text-white);
+            letter-spacing: -1.5px;
+            margin-bottom: 16px;
+        }
+
+        .hero-title span {
+            background: var(--primary-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -0.03em;
         }
 
-        .tagline {
-            font-size: 1.25rem;
-            color: var(--muted-color);
-            margin-top: 12px;
-            margin-bottom: 40px;
-            max-width: 500px;
-            font-weight: 400;
+        .hero-tagline {
+            font-size: clamp(0.95rem, 3.5vw, 1.1rem);
+            color: var(--text-secondary);
+            max-width: 580px;
+            margin: 0 auto 32px auto;
         }
 
-        .glass-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            padding: 40px;
-            width: 100%;
-            box-sizing: border-box;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            margin-bottom: 30px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        @media (max-width: 600px) {
-            .grid {
-                grid-template-columns: 1fr;
-            }
-            h1 {
-                font-size: 2.5rem;
-            }
+        .hero-actions {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
         .btn {
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--glass-border);
-            border-radius: 16px;
-            padding: 24px;
-            color: #ffffff;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
             text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.2s ease;
+            width: fit-content;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45);
+        }
+
+        .btn-secondary {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-white);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--primary);
+        }
+
+        /* Screenshots / App Walkthrough Section */
+        .screenshots-section {
+            padding: 40px 0;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .screenshots-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .screenshots-title {
+            font-family: var(--font-display);
+            font-size: clamp(1.5rem, 5vw, 2rem);
+            font-weight: 800;
+            color: var(--text-white);
+            margin-bottom: 8px;
+        }
+
+        .screenshots-desc {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .screenshots-container {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding: 10px 4px 24px 4px;
+            scroll-snap-type: x mandatory;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(59, 130, 246, 0.4) transparent;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Hide scrollbars for Chrome/Safari */
+        .screenshots-container::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .screenshots-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .screenshots-container::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 10px;
+        }
+
+        .phone-wrapper {
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .phone-mockup {
+            width: 230px;
+            height: 480px;
+            border: 10px solid #1f2937;
+            border-radius: 36px;
+            background: #000;
             position: relative;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: #0f172a;
+            border-radius: 24px;
             overflow: hidden;
         }
 
-        .btn:hover {
-            background: rgba(59, 130, 246, 0.1);
-            border-color: var(--primary-color);
-            transform: translateY(-4px);
-            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.15);
-        }
-
-        .btn-icon {
-            font-size: 2rem;
-            margin-bottom: 12px;
-            color: var(--secondary-color);
-        }
-
-        .btn-title {
-            font-size: 1.15rem;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
-
-        .btn-desc {
-            font-size: 0.85rem;
-            color: var(--muted-color);
-            text-align: center;
-        }
-
-        footer {
+        .phone-screen img {
             width: 100%;
-            padding: 24px 0;
-            text-align: center;
-            color: var(--muted-color);
-            font-size: 0.9rem;
-            border-top: 1px solid var(--glass-border);
+            height: 100%;
+            object-fit: cover;
+            pointer-events: none;
         }
 
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+        .phone-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 40px 0;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            padding: 24px;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 25px -10px rgba(59, 130, 246, 0.15);
+        }
+
+        .feature-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .feature-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .feature-name {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-white);
+            margin-bottom: 8px;
+        }
+
+        .feature-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Quick Links Card */
+        .links-section {
+            padding: 40px 0 60px 0;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .links-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .links-card-title {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-white);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .link-card-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 14px;
+            color: var(--text-white);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.25s ease;
+        }
+
+        .link-card-btn:hover {
+            border-color: var(--primary);
+            background: rgba(15, 23, 42, 0.8);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.15);
+        }
+
+        .link-card-btn svg {
+            color: var(--primary);
+            flex-shrink: 0;
+        }
+
+        .link-card-btn .arrow-icon {
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border-subtle);
+            padding: 32px 0;
+            text-align: center;
+            background: #02040a;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        footer p {
+            margin-bottom: 8px;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .hero-actions {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 280px;
+            }
+
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .phone-mockup {
+                width: 200px;
+                height: 410px;
+                border-width: 8px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="logo-container">
-            <div class="logo-glow"></div>
-            <div class="logo-icon">📅</div>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="container nav-wrapper">
+            <a href="#" class="logo-area">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                        <polyline points="9 16 11 18 15 14"></polyline>
+                    </svg>
+                </div>
+                <span>AttendMate</span>
+            </a>
+            
+            <a href="https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker" target="_blank" class="nav-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                </svg>
+                GitHub
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="container hero">
+        <div class="badge">Google Calendar Synced</div>
+        <h1 class="hero-title">Stay Ahead of Your <span>Attendance</span></h1>
+        <p class="hero-tagline">
+            Manage your weekly class timetable, view attendance statistics, and calculate exactly how many classes you can skip or need to attend.
+        </p>
+        <div class="hero-actions">
+            <a href="https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/releases" class="btn btn-primary" target="_blank">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download APK
+            </a>
+            <a href="https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker" class="btn btn-secondary" target="_blank">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                </svg>
+                GitHub Project
+            </a>
+        </div>
+    </section>
+
+    <!-- App Walkthrough (Screenshots with Phone Mockup) -->
+    <section class="container screenshots-section">
+        <div class="screenshots-header">
+            <h2 class="screenshots-title">App Walkthrough</h2>
+            <p class="screenshots-desc">Swipe or scroll horizontally to preview the application interface</p>
         </div>
         
-        <h1>AttendMate</h1>
-        <p class="tagline">Simplify your timetable management and keep your attendance on track with Google Calendar synchronization.</p>
+        <div class="screenshots-container">
+            <!-- Screen 1: Today's Schedule -->
+            <div class="phone-wrapper">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <img src="screenshots/todays.png" alt="Today's Schedule Screen">
+                    </div>
+                </div>
+                <span class="phone-label">Today's Schedule</span>
+            </div>
+            
+            <!-- Screen 2: Bunk Meter -->
+            <div class="phone-wrapper">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <img src="screenshots/bunk_meter.png" alt="Bunk Meter Detail Screen">
+                    </div>
+                </div>
+                <span class="phone-label">Bunk Meter Details</span>
+            </div>
+            
+            <!-- Screen 3: Subjects List -->
+            <div class="phone-wrapper">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <img src="screenshots/subjects.png" alt="Subjects Management Screen">
+                    </div>
+                </div>
+                <span class="phone-label">Subjects List</span>
+            </div>
+            
+            <!-- Screen 4: Semester Setup -->
+            <div class="phone-wrapper">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <img src="screenshots/semester_setup.png" alt="Semester Settings Setup Screen">
+                    </div>
+                </div>
+                <span class="phone-label">Semester Setup</span>
+            </div>
+            
+            <!-- Screen 5: Import Timetable -->
+            <div class="phone-wrapper">
+                <div class="phone-mockup">
+                    <div class="phone-screen">
+                        <img src="screenshots/import_timetable.png" alt="Import Timetable Guide Screen">
+                    </div>
+                </div>
+                <span class="phone-label">Import Timetable</span>
+            </div>
+        </div>
+    </section>
 
-        <div class="glass-card">
-            <div class="grid">
-                <a href="privacy.html" class="btn">
-                    <span class="btn-icon">🔒</span>
-                    <span class="btn-title">Privacy Policy</span>
-                    <span class="btn-desc">Read about how we securely protect your calendar and personal information.</span>
+    <!-- Simple Features Grid -->
+    <section class="container features">
+        <div class="features-grid">
+            <!-- Feature 1 -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                </div>
+                <h3 class="feature-name">Google Calendar Sync</h3>
+                <p class="feature-description">
+                    Connect your Google account in settings to automatically synchronize weekly class schedules and calendar events.
+                </p>
+            </div>
+            
+            <!-- Feature 2 -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                        <line x1="8" y1="6" x2="16" y2="6"></line>
+                        <line x1="16" y1="14" x2="16" y2="18"></line>
+                        <circle cx="8" cy="12" r="1"></circle>
+                        <circle cx="12" cy="12" r="1"></circle>
+                        <circle cx="16" cy="12" r="1"></circle>
+                    </svg>
+                </div>
+                <h3 class="feature-name">Bunk Calculator</h3>
+                <p class="feature-description">
+                    Computes how many lectures you can skip safely or how many consecutive classes you must attend to meet your target.
+                </p>
+            </div>
+            
+            <!-- Feature 3 -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-name">Smart Reminders</h3>
+                <p class="feature-description">
+                    Get lock screen notifications when classes start and log your attendance directly without opening the app.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Links Card Section -->
+    <section class="container links-section">
+        <div class="links-card">
+            <div class="links-card-title">Resources</div>
+            <div class="links-grid">
+                <!-- Privacy Policy -->
+                <a href="privacy.html" class="link-card-btn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    Privacy Policy
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
                 </a>
-                <a href="terms.html" class="btn">
-                    <span class="btn-icon">📋</span>
-                    <span class="btn-title">Terms of Service</span>
-                    <span class="btn-desc">Review the terms governing the use of the AttendMate application.</span>
+                
+                <!-- Terms of Service -->
+                <a href="terms.html" class="link-card-btn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    Terms of Service
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </a>
+
+                <!-- GitHub Repo -->
+                <a href="https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker" target="_blank" class="link-card-btn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                    </svg>
+                    GitHub Project
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
                 </a>
             </div>
         </div>
-    </div>
+    </section>
 
+    <!-- Footer -->
     <footer>
-        <p>&copy; 2026 AttendMate. All rights reserved. | Contact: <a href="mailto:venkatpiyush327@gmail.com" style="color: var(--secondary-color); text-decoration: none;">venkatpiyush327@gmail.com</a></p>
+        <div class="container">
+            <p>&copy; 2026 AttendMate. All rights reserved.</p>
+            <p>Support & Feedback: <a href="mailto:venkatpiyush327@gmail.com">venkatpiyush327@gmail.com</a></p>
+        </div>
     </footer>
+
 </body>
 </html>

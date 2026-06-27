@@ -15,8 +15,9 @@ When you open AttendMate for the first time after installing, you’ll be prompt
 5. [Calendar View](#5-calendar-view)
 6. [Bunk Meter](#6-bunk-meter)
 7. [Notifications](#7-notifications)
-8. [More](#8-more)
-9. [Tips & Tricks](#9-tips--tricks)
+8. [Google Calendar Sync](#8-google-calendar-sync)
+9. [More](#9-more)
+10. [Tips & Tricks](#10-tips--tricks)
 
 ---
 
@@ -351,7 +352,26 @@ If you dismissed the permission prompt, go to **Android Settings → Apps → At
 
 ---
 
-## 8. More
+## 8. Google Calendar Sync
+
+AttendMate allows you to synchronize your weekly class timetable and semester schedule to your Google Calendar. This puts all your classes directly into your calendar with matching colors.
+
+### Steps
+
+1. Open AttendMate and navigate to the **More** tab.
+2. Tap **Google Calendar Sync**.
+3. Tap **Connect Account** and log in with your Google Account.
+4. Once connected, tap **Sync Now** to copy all subject schedules and classes to your Google Calendar.
+
+### Key Rules
+
+- **Color Mapping**: AttendMate automatically maps subject colors to the closest matching Google Calendar event colors.
+- **Holidays & Mid-Semester Changes**: Days marked as holidays in AttendMate are automatically excluded from the Google Calendar events.
+- **Dynamic Updates**: Re-running the sync will update or remove modified/retired slots to keep your calendar clean.
+
+---
+
+## 9. More
 
 ### Time Format
 
@@ -363,7 +383,7 @@ This preference applies everywhere in the app — subject cards, calendar view, 
 
 ---
 
-## 9. Tips & Tricks
+## 10. Tips & Tricks
 
 | Tip | Details |
 |---|---|

@@ -5,6 +5,40 @@ All notable changes to AttendMate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+---
+
+
+## [1.5.3] - 2026-06-27
+
+### Added
+- **Google Calendar Sync**: Added Google Calendar synchronization. Users can connect their Google account in settings to sync their weekly class schedules and semester calendars automatically, using matching color schemes.
+- **Calendar Sync Screen**: Introduced a dedicated sync settings page where users can manage their connection status, check their linked Google account, and force-trigger full synchronization.
+
+### Changed
+- **Background Notification Live Sync**: Configured Isolate communication via `IsolateNameServer` (`attendance_action_port`). This notifies the main app state when attendance is recorded from a background notification action, refreshing the UI instantly.
+- **Background Action Confirmation**: When marking attendance from notification action buttons, the original reminder notification is dismissed immediately, and a silent confirmation notification is shown instead of forcing the main app to launch.
+
+### Fixed
+- **Notification Scheduling Grace Period**: Removed legacy grace-period overrides that caused edge-case timing errors when scheduling reminders for classes starting immediately.
+
+---
+
+
+## [1.5.2] - 2026-06-26
+
+### Added
+- **Clock Style Selector**: Added a new clock style option in More so users can switch between the available clock styles from inside the app.
+- **Saved Clock Preference**: The selected clock style is now treated as a user preference, so the app remembers the user's choice instead of forcing a fixed clock layout.
+
+### Changed
+- **Older Device Performance**: Optimized the app to reduce unnecessary work on older devices, especially around the main screen and calendar flow.
+- **Add/Edit Subject UI**: Refreshed the Add Subject and Edit Subject screens with clearer spacing, control grouping, and a cleaner overall layout.
+- **Settings Presentation**: Moved the clock style option into the existing More/settings area so it is easier to find and manage.
+
+### Fixed
+- **Notification Reliability**: Fixed notification-related bugs so reminders and alerts stay in sync after edits, refreshes, and app resume.
+- **Data Refresh**: Improved app-resume and reload handling so older attendance or subject state is less likely to linger in the UI.
+- **UI Consistency**: Cleaned up small state-handling issues that could leave the clock style or refreshed subject screens looking out of date.
 
 ---
 
@@ -61,6 +95,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+
+## [1.4.7] - 2026-03-01
+
+### Open Source
+- **AttendMate is now open source** — the full source code is available in the same GitHub repository where the APK is distributed. Contributions, bug reports, and feature suggestions are welcome!
+
+### Fixed
+- **AppBar Scroll Tint**: Fixed the page header slightly changing colour when scrolling — it now stays pure white in light mode and pure black in dark mode regardless of scroll position
+
+---
+
+
 ## [1.4.6] - 2026-02-28
 
 ### Changed
@@ -72,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Holiday Day Class Visibility**: Classes are now shown even when an entire day is marked as holiday (class cards are no longer hidden); each class card includes a **Holiday** action to mark that individual class as holiday for the day
 
 ---
+
 
 ## [1.4.5] - 2026-02-26
 
@@ -507,6 +554,11 @@ This is the first public release of AttendMate, a comprehensive attendance track
 ---
 
 ## Version History
+
+- **1.5.2** (2026-06-26) - clock style selector, saved preference, older-device performance improvements, Add/Edit Subject UI refresh, notification fixes
+- **1.5.1** (2026-04-03) - Ccopy timetable to day, and updated UI
+- **1.5.0** (2026-03-29) - Import time table updates, and mid semester timetable updating
+- **1.4.7** (2026-03-01) - AttendMate goes open source, AppBar scroll tint fix
 - **1.4.6** (2026-02-28) - Collapsible subject cards default to collapsed, acronym filler word fix, time selection flash fix, holiday day class visibility fix
 - **1.4.5** (2026-02-26) - Collapsible subject/bunk meter cards, full-screen home update flow, update check on tap, What's New metadata/install section hidden, subject time selection flash fix
 - **1.4.4** (2026-02-22) - Acronym-aware subject search, simplified What's New page, dark mode dialog polish, toast/snackbar stacking fixes
@@ -538,6 +590,3 @@ While this is the initial release with a complete feature set, potential future 
 ---
 
 **Note:** This changelog will be updated with each new release to document all changes, additions, and fixes.
-
-
-
