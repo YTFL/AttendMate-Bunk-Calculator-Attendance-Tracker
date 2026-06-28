@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/calendar_service.dart';
 import '../../utils/snackbar_utils.dart';
@@ -271,6 +272,10 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                         ),
                       ],
                       const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      _buildPrivacyLinks(),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -710,6 +715,47 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPrivacyLinks() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        GestureDetector(
+          onTap: () async {
+            final url = Uri.parse('https://attend-mate.netlify.app/privacy.html');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: Text(
+            'Privacy Policy',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                  decoration: TextDecoration.underline,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        const SizedBox(width: 24),
+        GestureDetector(
+          onTap: () async {
+            final url = Uri.parse('https://attend-mate.netlify.app/terms.html');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: Text(
+            'Terms of Service',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
+                  decoration: TextDecoration.underline,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ],
     );
   }
 }
