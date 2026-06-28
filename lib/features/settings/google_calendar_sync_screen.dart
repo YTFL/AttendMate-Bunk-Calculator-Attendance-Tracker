@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'markdown_viewer_screen.dart';
 
 import '../../services/calendar_service.dart';
 import '../../utils/snackbar_utils.dart';
@@ -723,11 +723,15 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         GestureDetector(
-          onTap: () async {
-            final url = Uri.parse('https://attend-mate.netlify.app/privacy.html');
-            if (await canLaunchUrl(url)) {
-              await launchUrl(url, mode: LaunchMode.externalApplication);
-            }
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Privacy Policy',
+                  assetPath: 'git_public/privacy.md',
+                ),
+              ),
+            );
           },
           child: Text(
             'Privacy Policy',
@@ -740,11 +744,15 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
         ),
         const SizedBox(width: 24),
         GestureDetector(
-          onTap: () async {
-            final url = Uri.parse('https://attend-mate.netlify.app/terms.html');
-            if (await canLaunchUrl(url)) {
-              await launchUrl(url, mode: LaunchMode.externalApplication);
-            }
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Terms of Service',
+                  assetPath: 'git_public/terms.md',
+                ),
+              ),
+            );
           },
           child: Text(
             'Terms of Service',
