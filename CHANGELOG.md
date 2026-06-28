@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.5.4] - 2026-06-28
+
+### Added
+- **In-App Privacy Policy Links**: Added direct, clickable links to the live Privacy Policy and Terms of Service documents in the calendar synchronization settings screen. This ensures compliance with Google OAuth verification requirements.
+
+### Fixed
+- **Dynamic Status Card Theme**: Resolved a visual rendering issue in dark mode where the Calendar Sync status card appeared as a solid white block with invisible text due to theme color token overlap. The card and buttons now dynamically adjust their styling and borders to maintain perfect contrast and readability.
+
+---
+
+
 ## [1.5.3] - 2026-06-27
 
 ### Added
@@ -555,6 +566,8 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.5.4** (2026-06-28) - In-app privacy links, dynamic status card dark theme styling fix
+- **1.5.3** (2026-06-27) - Google Calendar Sync, background notification live sync, confirm notifications, scheduling grace period removal
 - **1.5.2** (2026-06-26) - clock style selector, saved preference, older-device performance improvements, Add/Edit Subject UI refresh, notification fixes
 - **1.5.1** (2026-04-03) - Ccopy timetable to day, and updated UI
 - **1.5.0** (2026-03-29) - Import time table updates, and mid semester timetable updating
