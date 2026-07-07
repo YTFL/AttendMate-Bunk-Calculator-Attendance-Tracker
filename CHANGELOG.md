@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.5.5] - 2026-07-07
+
+### Added
+- **In-App Data Protection Disclosures**: Added explicit data security and protection mechanism statements to the bundled in-app Privacy Policy (covering encryption in transit, secure storage, and sandboxing) to satisfy Google's sensitive OAuth scope verification requirements.
+
+### Changed
+- **Updated Web Policy Page**: Updated the online version of the Privacy Policy on the verified web domain with identical data protection disclosures.
+
+---
+
+
 ## [1.5.4] - 2026-06-28
 
 ### Added
@@ -566,6 +577,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.5.5** (2026-07-07) - In-app data protection disclosures for Google OAuth verification
 - **1.5.4** (2026-06-28) - In-app privacy links, dynamic status card dark theme styling fix
 - **1.5.3** (2026-06-27) - Google Calendar Sync, background notification live sync, confirm notifications, scheduling grace period removal
 - **1.5.2** (2026-06-26) - clock style selector, saved preference, older-device performance improvements, Add/Edit Subject UI refresh, notification fixes
