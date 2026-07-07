@@ -161,14 +161,23 @@
             <li>No data is uploaded to our servers or stored on any third-party infrastructure besides your own Google Calendar account.</li>
         </ul>
 
-        <h2>4. Access Revocation and Data Deletion</h2>
+        <h2>4. Data Protection Mechanisms</h2>
+        <p>We implement industry-standard security measures to safeguard your Google user data and prevent unauthorized access, alteration, or disclosure:</p>
+        <ul>
+            <li><strong>Encryption in Transit:</strong> All data transmitted between the App and Google API servers (such as OAuth access tokens and calendar details) is fully encrypted in transit using secure HTTPS (SSL/TLS 1.2 or TLS 1.3) protocols.</li>
+            <li><strong>On-Device Encryption:</strong> Google OAuth credentials and authentication tokens are stored securely in Android's EncryptedSharedPreferences (backed by the hardware-level Android Keystore system), ensuring other apps on the device cannot access them.</li>
+            <li><strong>Application Sandboxing:</strong> The local SQLite database holding your timetables and sync preferences is kept in the App's isolated sandbox storage, protected by system-level Linux user ID separation on Android.</li>
+            <li><strong>No Server-Side Retention:</strong> The App does not utilize any remote server or database to store or transfer your credentials. Your Google user data remains local to your device and is only shared directly with Google's API endpoints.</li>
+        </ul>
+
+        <h2>5. Access Revocation and Data Deletion</h2>
         <p>You have full control over the App's access to your Google Account:</p>
         <ul>
             <li>You can log out/disconnect from Google Calendar at any time directly through the Settings screen in the App. This immediately purges all OAuth access and refresh tokens from your device.</li>
             <li>You can revoke the App's permissions at any time through your Google Account security dashboard under "Apps with access to your account."</li>
         </ul>
 
-        <h2>5. Compliance with Google API Services User Data Policy</h2>
+        <h2>6. Compliance with Google API Services User Data Policy</h2>
         <p>AttendMate's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
         <div class="contact-info">
