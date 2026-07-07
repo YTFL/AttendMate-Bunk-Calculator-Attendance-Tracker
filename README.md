@@ -195,7 +195,7 @@ For questions or support, please [open an issue](../../issues/new).
 
 ## 📄 License
 
-This project is licensed under the [AGPL-v3.0](LICENSE).
+This project is licensed under the [AGPL-3.0](LICENSE).
 
 ---
 
