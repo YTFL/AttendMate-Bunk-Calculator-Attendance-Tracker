@@ -36,15 +36,13 @@ class SemesterProvider with ChangeNotifier {
   }
 
   SemesterProvider() {
-    _loadSemester();
+    loadSemester();
   }
 
-  Future<void> _loadSemester() async {
+  Future<void> loadSemester() async {
     try {
       final semester = await _databaseService.loadSemester();
-      if (semester != null) {
-        _semester = semester;
-      }
+      _semester = semester;
     } catch (e) {
       // Silently fail - semester remains null
     } finally {
