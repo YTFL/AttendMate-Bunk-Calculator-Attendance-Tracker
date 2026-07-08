@@ -57,7 +57,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     try {
       await CalendarService.syncFullTimetable(
         subjects: [], // Dry run to establish auth connection
-        semester: Provider.of<SemesterProvider>(context, listen: false).semester!,
+        semester: Provider.of<SemesterProvider>(context, listen: false).semester,
         isHoliday: Provider.of<SubjectProvider>(context, listen: false).isHoliday,
       );
       await _checkStatus();
@@ -265,12 +265,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                         'Automatically maps your customized subject colors inside AttendMate to the nearest matching official Google Calendar color palette.',
                       ),
 
-                      if (!hasSemester) ...[
-                        const SizedBox(height: 20),
-                        _buildWarningCard(
-                          'Semester dates must be configured in "Semester Details" before calendar synchronization can be initialized.',
-                        ),
-                      ],
+
                       const SizedBox(height: 24),
                       const Divider(),
                       const SizedBox(height: 16),
@@ -546,7 +541,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                 ),
                 elevation: 2,
               ),
-              onPressed: hasSemester ? _connect : null,
+              onPressed: _connect,
             ),
           ],
         ),
@@ -641,37 +636,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     );
   }
 
-  Widget _buildWarningCard(String message) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                    height: 1.4,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildInfoTile(IconData icon, String title, String description) {
     return Padding(

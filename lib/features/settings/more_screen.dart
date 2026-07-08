@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
 
 import '../../models/app_update_model.dart';
+import '../../services/database_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/url_launcher_utils.dart';
+import '../attendance/attendance_model.dart';
+import '../attendance/attendance_provider.dart';
 import '../home/update_dialog.dart';
-import 'google_calendar_sync_screen.dart';
+import '../semester/semester_model.dart';
+import '../semester/semester_provider.dart';
+import '../subject/subject_model.dart';
+import '../subject/subject_provider.dart';
+import 'calendar_sync_selection_screen.dart';
 import 'setup_guide_screen.dart';
 import 'time_format_provider.dart';
 import 'whats_new_screen.dart';
+import 'swipe_actions_settings_screen.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -194,6 +205,222 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
+  void _showDemoGenerationConfirmation() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Generate Timetable Data?'),
+          content: const Text(
+            'This will clear all current semester, subject, and attendance data, and replace it with a 120-day test timetable (60 days before and 60 days after today, 5 classes/day) with random attendance for past days. Proceed?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _generateDemoTimetable();
+              },
+              child: const Text('Generate', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showClearDataConfirmation() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Clear All App Data?'),
+          content: const Text(
+            'This will permanently delete your database and clear all user settings. Proceed?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _clearAppData();
+              },
+              child: const Text('Clear', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _generateDemoTimetable() async {
+    try {
+      final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
+      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+      final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+
+      await DatabaseService().clearSemesterAndAllData();
+
+      final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
+      final startDate = todayNormalized.subtract(const Duration(days: 60));
+      final endDate = todayNormalized.add(const Duration(days: 60));
+      
+      final semester = Semester(
+        startDate: startDate,
+        endDate: endDate,
+        targetPercentage: 75.0,
+      );
+
+      await semesterProvider.createNewSemester(semester);
+
+      final subjectsData = [
+        {'name': 'Mathematics', 'acronym': 'MATH', 'color': Colors.blue},
+        {'name': 'Physics', 'acronym': 'PHYS', 'color': Colors.red},
+        {'name': 'Chemistry', 'acronym': 'CHEM', 'color': Colors.green},
+        {'name': 'Computer Science', 'acronym': 'CS', 'color': Colors.deepPurple},
+        {'name': 'English', 'acronym': 'ENGL', 'color': Colors.orange},
+        {'name': 'Technical Comm.', 'acronym': 'TECH', 'color': Colors.teal},
+      ];
+
+      final dailySchedule = [
+        [0, 1, 2, 3, 4], // Mon
+        [1, 2, 3, 4, 5], // Tue
+        [2, 3, 4, 5, 0], // Wed
+        [3, 4, 5, 0, 1], // Thu
+        [4, 5, 0, 1, 2], // Fri
+      ];
+
+      final Map<int, List<TimeSlot>> subjectSchedules = {};
+      for (int sIdx = 0; sIdx < subjectsData.length; sIdx++) {
+        subjectSchedules[sIdx] = [];
+      }
+
+      final times = [
+        {'start': const TimeOfDay(hour: 9, minute: 0), 'end': const TimeOfDay(hour: 10, minute: 0)},
+        {'start': const TimeOfDay(hour: 10, minute: 0), 'end': const TimeOfDay(hour: 11, minute: 0)},
+        {'start': const TimeOfDay(hour: 11, minute: 0), 'end': const TimeOfDay(hour: 12, minute: 0)},
+        {'start': const TimeOfDay(hour: 13, minute: 0), 'end': const TimeOfDay(hour: 14, minute: 0)},
+        {'start': const TimeOfDay(hour: 14, minute: 0), 'end': const TimeOfDay(hour: 15, minute: 0)},
+      ];
+
+      for (int dayIdx = 0; dayIdx < dailySchedule.length; dayIdx++) {
+        final dayOfWeek = DayOfWeek.values[dayIdx];
+        final daySlots = dailySchedule[dayIdx];
+
+        for (int slotIdx = 0; slotIdx < daySlots.length; slotIdx++) {
+          final subIdx = daySlots[slotIdx];
+          final time = times[slotIdx];
+
+          subjectSchedules[subIdx]!.add(
+            TimeSlot(
+              day: dayOfWeek,
+              startTime: time['start']!,
+              endTime: time['end']!,
+            ),
+          );
+        }
+      }
+
+      final List<Subject> generatedSubjects = [];
+      final List<Attendance> allAttendance = [];
+      final random = Random();
+
+      for (int sIdx = 0; sIdx < subjectsData.length; sIdx++) {
+        final sub = subjectsData[sIdx];
+        final subjectId = uuid.v4();
+        final schedule = subjectSchedules[sIdx]!;
+
+        final List<Attendance> subjectAttendance = [];
+        for (int i = 0; i < 60; i++) {
+          final date = startDate.add(Duration(days: i));
+          for (final slot in schedule) {
+            if (slot.occursOnDate(date)) {
+              final status = random.nextDouble() < 0.70
+                  ? AttendanceStatus.attended
+                  : AttendanceStatus.absent;
+
+              final att = Attendance(
+                subjectId: subjectId,
+                date: date,
+                status: status,
+                slotKey: slot.slotKey,
+              );
+              subjectAttendance.add(att);
+              allAttendance.add(att);
+            }
+          }
+        }
+
+        generatedSubjects.add(
+          Subject(
+            id: subjectId,
+            name: sub['name'] as String,
+            acronym: sub['acronym'] as String?,
+            color: sub['color'] as Color,
+            schedule: schedule,
+            targetAttendance: 75,
+            attendanceRecords: subjectAttendance,
+          ),
+        );
+      }
+
+      await DatabaseService().saveSubjects(generatedSubjects);
+      await DatabaseService().saveAttendance(allAttendance);
+
+      await semesterProvider.loadSemester();
+      await subjectProvider.reloadSubjects();
+      await attendanceProvider.reloadAttendance();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Demo timetable and attendance generated successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating demo data: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearAppData() async {
+    try {
+      final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
+      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+      final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+
+      await DatabaseService().clearSemesterAndAllData();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      await semesterProvider.loadSemester();
+      await subjectProvider.reloadSubjects();
+      await attendanceProvider.reloadAttendance();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('App data cleared successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error clearing app data: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
@@ -268,13 +495,25 @@ class _MoreScreenState extends State<MoreScreen> {
         ),
         ListTile(
           leading: const Icon(Icons.sync),
-          title: const Text('Google Calendar Sync'),
-          subtitle: const Text('Sync your timetable with Google Calendar'),
+          title: const Text('Calendar Sync'),
+          subtitle: const Text('Sync your timetable with Google or Device Calendar'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const GoogleCalendarSyncScreen()),
+              MaterialPageRoute(builder: (context) => const CalendarSyncSelectionScreen()),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.swipe_outlined),
+          title: const Text('Swipe Actions'),
+          subtitle: const Text('Customize swipe gestures for your daily classes'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SwipeActionsSettingsScreen()),
             );
           },
         ),
@@ -310,24 +549,28 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
           title: const Text('App updates'),
           subtitle: Text(
-            _isCheckingForUpdate
-                ? 'Checking for updates...'
-                : _availableUpdate != null
-                    ? 'Update to v${_availableUpdate!.version}'
-                    : _hasCheckedForUpdate
-                        ? 'You are on the latest version'
-                        : 'Tap to check for updates',
+            kDebugMode
+                ? 'Unavailable in debug mode'
+                : _isCheckingForUpdate
+                    ? 'Checking for updates...'
+                    : _availableUpdate != null
+                        ? 'Update to v${_availableUpdate!.version}'
+                        : _hasCheckedForUpdate
+                            ? 'You are on the latest version'
+                            : 'Tap to check for updates',
           ),
-          trailing: _isCheckingForUpdate
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : _availableUpdate != null
-                  ? const _UpdateAvailableBadge()
-                  : const Icon(Icons.chevron_right),
-          onTap: _isCheckingForUpdate ? null : _onUpdateTileTap,
+          trailing: kDebugMode
+              ? null
+              : _isCheckingForUpdate
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : _availableUpdate != null
+                      ? const _UpdateAvailableBadge()
+                      : const Icon(Icons.chevron_right),
+          onTap: kDebugMode || _isCheckingForUpdate ? null : _onUpdateTileTap,
         ),
         FutureBuilder<PackageInfo>(
           future: _packageInfoFuture,
@@ -470,6 +713,31 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
+        if (kDebugMode) ...[
+          const Divider(),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Developer Options',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.playlist_add_check_outlined, color: Colors.red),
+            title: const Text('Generate Timetable Data'),
+            subtitle: const Text('Generates 120-day semester (60d before/after today, 5+ classes/day)'),
+            onTap: _showDemoGenerationConfirmation,
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
+            title: const Text('Clear App Data'),
+            subtitle: const Text('Wipes DB and SharedPreferences immediately'),
+            onTap: _showClearDataConfirmation,
+          ),
+        ],
       ],
     );
   }

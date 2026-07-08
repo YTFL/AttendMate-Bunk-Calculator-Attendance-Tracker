@@ -8,7 +8,8 @@ import '../calendar/calendar_screen.dart';
 import '../home/home_screen.dart';
 import '../subject/add_subject_screen.dart';
 import '../subject/import_timetable_screen.dart';
-import 'google_calendar_sync_screen.dart';
+import 'calendar_sync_selection_screen.dart';
+import 'swipe_actions_settings_screen.dart';
 
 class SetupGuideScreen extends StatefulWidget {
   const SetupGuideScreen({super.key});
@@ -207,8 +208,67 @@ Bulk actions are available for a full day:
 > Any class left unmarked at 10 PM is auto-marked as Present (holiday days are skipped).
 ''',
     ),
+    _GuideSection(
+      title: '5. Marking Attendance',
+      openInAppLabel: 'Open Today Page',
+      openTarget: _GuideOpenTarget.todayTab,
+      markdown: '''
+## Overview
+The **Today** tab shows all classes for the current day.
+
+---
+
+## Class Actions
+Use class actions:
+- **Mark Present**
+- **Mark Absent**
+- **Unmark**
+
+---
+
+## Bulk Day Actions
+Bulk actions are available for a full day:
+- **Mark Holiday**
+- **Skip Day**
+- **Mark Today as Present**
+
+> Any class left unmarked at 10 PM is auto-marked as Present (holiday days are skipped).
+''',
+    ),
+    _GuideSection(
+      title: '6. Swipe Gestures & Customization',
+      openInAppLabel: 'Open Swipe Settings',
+      openTarget: _GuideOpenTarget.swipeActions,
+      markdown: '''
+## Overview
+AttendMate supports swipe gestures to quickly mark and unmark attendance directly from the **Today** schedule list.
+
+---
+
+## Swipe Actions
+- **Swipe Right**: By default, swipe right to mark a class as **Present**.
+- **Swipe Left**: By default, swipe left to mark a class as **Absent**.
+
+---
+
+## Integrated Swipe-to-Unmark
+If you swipe a card in the direction of its already active status, it will toggle and **unmark** the attendance record:
+- Swipe **Right** on a class that is already marked **Present** to unmark it.
+- Swipe **Left** on a class that is already marked **Absent** to unmark it.
+
+---
+
+## Customization Settings
+You can customize which direction does what:
+1. Go to the **More** tab and tap **Swipe Actions**.
+2. Choose your preferred configuration (Option A: Right = Present / Left = Absent; Option B: Right = Absent / Left = Present).
+3. Duplicates are not allowed; changing one side automatically swaps the other to keep configuration consistent.
+
+> Swiping displays clean, text-free action icons (Check/Close/Undo) and animates back smoothly without flickering.
+''',
+    ),
   _GuideSection(
-      title: '6. Calendar View',
+      title: '7. Calendar View',
       openInAppLabel: 'Open Calendar',
       openTarget: _GuideOpenTarget.calendar,
       markdown: '''
@@ -227,7 +287,7 @@ Tap any past date to:
 ''',
     ),
   _GuideSection(
-      title: '7. Bunk Meter',
+      title: '8. Bunk Meter',
       openInAppLabel: 'Open Bunk Meter',
       openTarget: _GuideOpenTarget.bunkMeterTab,
       markdown: '''
@@ -249,7 +309,7 @@ It also tells whether you can bunk safely, need to attend more, or if the target
 ''',
     ),
   _GuideSection(
-      title: '8. Notifications',
+      title: '9. Notifications',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -268,32 +328,51 @@ Tap notification body to open **Today**.
 > Ensure notification permissions are enabled in Android settings.
 ''',
     ),
-  _GuideSection(
-      title: '9. Google Calendar Sync',
-      openInAppLabel: 'Open Google Calendar Sync',
+    _GuideSection(
+      title: '10. Calendar Synchronization',
+      openInAppLabel: 'Open Calendar Sync Settings',
       openTarget: _GuideOpenTarget.googleCalendarSync,
       markdown: '''
 ## Overview
-AttendMate allows you to synchronize your weekly class timetable and semester schedule to your Google Calendar. This puts all your classes directly into your calendar with matching colors.
+AttendMate supports two forms of calendar synchronization to keep your weekly timetable, classes, and cancellations perfectly synchronized:
+1. **Google Calendar Sync (Cloud)**: Links to your Google Account and syncs your schedules online.
+2. **Device Calendar Sync (Local)**: Writes your schedules directly to your phone's native calendar database (supporting Samsung Calendar, Outlook, or local offline calendars).
 
 ---
 
-## Steps
-1. Go to the **More** tab in AttendMate.
-2. Tap **Google Calendar Sync**.
-3. Tap **Connect Account** and log in with your Google Account.
-4. Once connected, tap **Sync Now** to copy all subject schedules and classes to your Google Calendar.
+## Setting Up Google Calendar Sync
+1. Open the **More** tab and tap **Calendar Sync**.
+2. Under **Google Calendar Sync**, tap the arrow to open settings, then tap **Connect Account** and log in.
+3. Once connected, AttendMate will automatically sync your timetable. You can also tap **Sync Now** to trigger an immediate full update.
+
+---
+
+## Setting Up Device Calendar Sync
+1. Open the **More** tab and tap **Calendar Sync**.
+2. Toggle **Device Calendar Sync** to **ON** (allow the calendar permission prompt when requested).
+3. Under **Select Destination Calendar**, choose the target calendar from the dropdown. 
+   - All Google account calendars, Samsung/Outlook accounts, and local offline phone calendars (labeled as `My Calendar (Local Offline)`) will be listed with their owner accounts.
+4. Tap **Sync to Device Calendar Now** to write all your schedules to your local calendar database.
+
+---
+
+## Automated Background Sync
+Once calendar synchronization is configured, you don't need to manually sync again! AttendMate automatically runs background sync operations (debounced at 1.5 seconds to protect your battery and network) whenever you:
+- Add, edit, or delete a subject or schedule timeslot.
+- Change a subject's name (automatically updates event titles).
+- Declare/unmark a holiday.
+- Mark a class as cancelled (automatically deletes that specific event occurrence).
 
 ---
 
 ## Key Rules
-- **Color Mapping**: AttendMate automatically maps subject colors to the closest matching Google Calendar event colors.
-- **Holidays & Mid-Semester Changes**: Days marked as holidays in AttendMate are automatically excluded from the Google Calendar events.
-- **Dynamic Updates**: Re-running the sync will update or remove modified/retired slots to keep your calendar clean.
+- **Color Mapping**: Google Calendar color mapping automatically groups related lecture and lab subjects together under the same color, using a linear probing collision loop to resolve overlaps.
+- **Smart Filtering**: Read-only holiday calendars, national calendars, and third-party subscription lists are automatically filtered out to keep your dropdown clean.
+- **Outlook Calendar Sync**: To sync with Outlook, open the native Outlook app settings and ensure **Sync calendars** is enabled for your Exchange account.
 ''',
     ),
   _GuideSection(
-      title: '10. More',
+      title: '11. More',
       openInAppLabel: 'Open More Page',
       openTarget: _GuideOpenTarget.moreTab,
       markdown: '''
@@ -321,7 +400,7 @@ The **More** page contains app info, update tools, guide access, and support lin
 ''',
     ),
   _GuideSection(
-      title: '11. Tips & Tricks',
+      title: '12. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -387,7 +466,9 @@ The **More** page contains app info, update tools, guide access, and support lin
       case _GuideOpenTarget.calendar:
         return _openHomeTab(0, subLevelBuilder: (context) => const CalendarScreen());
       case _GuideOpenTarget.googleCalendarSync:
-        return _openHomeTab(4, subLevelBuilder: (context) => const GoogleCalendarSyncScreen());
+        return _openHomeTab(4, subLevelBuilder: (context) => const CalendarSyncSelectionScreen());
+      case _GuideOpenTarget.swipeActions:
+        return _openHomeTab(4, subLevelBuilder: (context) => const SwipeActionsSettingsScreen());
     }
   }
 
@@ -542,6 +623,7 @@ enum _GuideOpenTarget {
   importTimetable,
   calendar,
   googleCalendarSync,
+  swipeActions,
 }
 
 class _TableOfContentsPage extends StatelessWidget {
