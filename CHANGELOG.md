@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 
+## [1.6.0] - 2026-07-08
+
+### Added
+- **Customizable Swipe Gestures**: Swipe right/left to mark classes as present or absent on Today's schedule. Preferences are easily configured and swappable on conflict in the new settings screen.
+- **Integrated Swipe-to-Unmark**: Swipe in the direction of an already active status (e.g. swiping right on a "Present" class when Swipe Right is configured as "Mark Present") to unmark it, avoiding visual clutter.
+- **Premium Bounce-Back Physics**: A custom swipe wrapper clamps swipe distance to 25% of the screen width and bounces back smoothly, displaying clean, minimalist, text-free action icons (Check, Close, Undo).
+- **Simplified Card Actions**: Replaced the multi-button row on class cards with a single toggle button (Mark Holiday / Unmark Holiday), keeping the interface clean and letting swipe gestures handle attendance marking.
+- **Automated Google Calendar Sync**: Replaced manual calendar synchronization with fully automated background sync. The app now triggers calendar updates automatically in the background (debounced at 1.5 seconds to optimize battery and network usage) whenever you add, edit, rename, or delete a subject, declare a holiday, or cancel/unmark a class.
+- **Device Calendar Sync**: Integrated device-level calendar synchronization supporting native calendars on Android (such as Samsung Calendar, Outlook, and local device-only calendars).
+- **Unified Sync Control Screen**: Added a unified settings panel that allows toggling and force-synchronizing both Google Calendar (online) and Device Calendar (local system).
+- **Smart Lab Color Grouping**: Added color grouping logic that identifies related lab and lecture subjects (e.g., "Algorithms" and "Algorithms Lab") by cleaning name suffixes, assigning them the same color automatically in Google Calendar.
+- **Linear Probing Color Mapping**: Implemented a linear probing allocation fallback loop for assigning calendar colors. If a subject's nearest theme color is already occupied, the app probes the next available slots sequentially (1-11) to ensure distinct, unique colors.
+- **Graceful Label Normalization**: Implemented clean label formatting that replaces repeated emails with clear app references (e.g., `Google Calendar (email)`) and maps offline phone calendars to `My Calendar (Local Offline)` (case-insensitive) to prevent user confusion.
+- **Smart Calendar Filtering**: Automatically filters out read-only national holidays and subscription feeds to keep the calendar selection list clean and personal.
+
+### Changed
+- **Flexible Account Sign-In**: Removed restrictions requiring semester dates configuration prior to logging in. Users can now sign in and connect their Google Account at any time (sync operations are safely bypassed until semester dates are set).
+
+---
+
+
 ## [1.5.5] - 2026-07-07
 
 ### Added
@@ -577,6 +598,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **1.6.0** (2026-07-08) - Automated background calendar sync, smart lab color grouping, linear probing color mapping, sign-in warning removal
 - **1.5.5** (2026-07-07) - In-app data protection disclosures for Google OAuth verification
 - **1.5.4** (2026-06-28) - In-app privacy links, dynamic status card dark theme styling fix
 - **1.5.3** (2026-06-27) - Google Calendar Sync, background notification live sync, confirm notifications, scheduling grace period removal
