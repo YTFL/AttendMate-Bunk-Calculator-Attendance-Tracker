@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.ytfl.bunkattendance"
+        applicationId = "com.ytfl.attendmate"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Set explicit minimum SDK to ensure plugin compatibility and predictable builds
@@ -31,6 +31,8 @@ android {
         ndk {
             abiFilters.addAll(listOf("arm64-v8a"))
         }
+
+        manifestPlaceholders["appName"] = "AttendMate"
     }
 
     signingConfigs {
@@ -46,6 +48,10 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appName"] = "AttendMate - Debug"
+        }
         release {
             signingConfig = if (file("app-release-key.jks").exists()) {
                 signingConfigs.getByName("release")
