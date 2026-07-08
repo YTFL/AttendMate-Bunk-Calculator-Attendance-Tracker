@@ -46,6 +46,23 @@ class CalendarService {
     return nearestId;
   }
 
+  static String _getBaseSubjectName(String name) {
+    // Normalizes name by converting to lowercase, removing non-alphanumeric chars,
+    // and stripping common "lab", "practical", "tutorial", "pract", "tut" keywords/suffixes.
+    String normalized = name.toLowerCase().trim();
+    
+    // Replace punctuation/delimiters with space to isolate words
+    normalized = normalized.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
+    
+    // Remove standalone words like lab, tutorial, practical, tut, pract, l, p, t
+    normalized = normalized.replaceAll(RegExp(r'\b(lab|practical|tutorial|pract|tut|l|p|t)\b', caseSensitive: false), ' ');
+    
+    // Normalize spaces
+    normalized = normalized.replaceAll(RegExp(r'\s+'), ' ').trim();
+    
+    return normalized;
+  }
+
   static bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -69,7 +86,7 @@ class CalendarService {
   /// Synchronizes all subjects and their timeslots to Google Calendar
   static Future<void> syncFullTimetable({
     required List<Subject> subjects,
-    required Semester semester,
+    required Semester? semester,
     required bool Function(DateTime) isHoliday,
   }) async {
     try {
@@ -82,6 +99,10 @@ class CalendarService {
         throw Exception("User cancelled the Google login.");
       }
 
+      if (semester == null || subjects.isEmpty) {
+        return;
+      }
+
       // 2. Wrap the authorized user session
       final httpClient = (await _googleSignIn.authenticatedClient())!;
       final calendarApi = cal.CalendarApi(httpClient);
@@ -89,9 +110,41 @@ class CalendarService {
       // Track active iCalUIDs to determine what to keep
       final Set<String> activeICalIds = {};
 
-      // 3. Sync each subject's schedule
+      // 3. Map colors for subjects using linear probing and base name matching
+      final Map<String, String> baseNameToColorId = {};
+      final Set<String> occupiedColorIds = {};
+
       for (final subject in subjects) {
-        final String colorId = _getNearestGoogleColorId(subject.color);
+        final String baseName = _getBaseSubjectName(subject.name);
+        if (baseNameToColorId.containsKey(baseName)) {
+          continue; // Already mapped (e.g. Lab matching its parent subject)
+        }
+
+        final String nearestId = _getNearestGoogleColorId(subject.color);
+        if (!occupiedColorIds.contains(nearestId)) {
+          baseNameToColorId[baseName] = nearestId;
+          occupiedColorIds.add(nearestId);
+        } else {
+          // Linear probing: search starting from nearestId
+          final int startIndex = int.parse(nearestId);
+          String assignedId = nearestId;
+          for (int i = 0; i < 11; i++) {
+            final int probedInt = ((startIndex - 1 + i) % 11) + 1;
+            final String probedId = probedInt.toString();
+            if (!occupiedColorIds.contains(probedId)) {
+              assignedId = probedId;
+              occupiedColorIds.add(probedId);
+              break;
+            }
+          }
+          baseNameToColorId[baseName] = assignedId;
+        }
+      }
+
+      // 4. Sync each subject's schedule
+      for (final subject in subjects) {
+        final String baseName = _getBaseSubjectName(subject.name);
+        final String colorId = baseNameToColorId[baseName] ?? _getNearestGoogleColorId(subject.color);
 
         for (final slot in subject.schedule) {
           DateTime startDateTime;

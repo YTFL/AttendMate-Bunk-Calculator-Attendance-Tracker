@@ -25,7 +25,7 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 4,
+        version: 5,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -83,6 +83,16 @@ class DatabaseService {
           ignoredVersion TEXT
         )
       ''');
+
+      // System Calendar Events mapping table
+      await db.execute('''
+        CREATE TABLE system_calendar_events (
+          eventId TEXT PRIMARY KEY,
+          subjectId TEXT NOT NULL,
+          slotKey TEXT NOT NULL,
+          date TEXT NOT NULL
+        )
+      ''');
     } catch (e) {
       debugPrint('DatabaseService onCreate error: $e');
       rethrow;
@@ -126,6 +136,16 @@ class DatabaseService {
             slotKey TEXT NOT NULL,
             status TEXT NOT NULL,
             UNIQUE(subjectId, date, slotKey)
+          )
+        ''');
+      }
+      if (oldVersion < 5) {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS system_calendar_events (
+            eventId TEXT PRIMARY KEY,
+            subjectId TEXT NOT NULL,
+            slotKey TEXT NOT NULL,
+            date TEXT NOT NULL
           )
         ''');
       }
@@ -408,6 +428,130 @@ class DatabaseService {
         );
       }
     } catch (e) {
+      rethrow;
+    }
+  }
+
+  // ==================== SYSTEM CALENDAR EVENTS ====================
+
+  Future<void> saveSystemCalendarEvent({
+    required String eventId,
+    required String subjectId,
+    required String slotKey,
+    required DateTime date,
+  }) async {
+    try {
+      final db = _getDb();
+      await db.insert(
+        'system_calendar_events',
+        {
+          'eventId': eventId,
+          'subjectId': subjectId,
+          'slotKey': slotKey,
+          'date': date.toIso8601String().split('T')[0],
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('DatabaseService saveSystemCalendarEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<String?> getSystemCalendarEvent({
+    required String subjectId,
+    required String slotKey,
+    required DateTime date,
+  }) async {
+    try {
+      final db = _getDb();
+      final maps = await db.query(
+        'system_calendar_events',
+        columns: ['eventId'],
+        where: 'subjectId = ? AND slotKey = ? AND date = ?',
+        whereArgs: [subjectId, slotKey, date.toIso8601String().split('T')[0]],
+      );
+      if (maps.isEmpty) return null;
+      return maps.first['eventId'] as String?;
+    } catch (e) {
+      debugPrint('DatabaseService getSystemCalendarEvent error: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSystemCalendarEventsForSubject(String subjectId) async {
+    try {
+      final db = _getDb();
+      return await db.query(
+        'system_calendar_events',
+        where: 'subjectId = ?',
+        whereArgs: [subjectId],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService getSystemCalendarEventsForSubject error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllSystemCalendarEvents() async {
+    try {
+      final db = _getDb();
+      return await db.query('system_calendar_events');
+    } catch (e) {
+      debugPrint('DatabaseService getAllSystemCalendarEvents error: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteSystemCalendarEvent(String eventId) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'system_calendar_events',
+        where: 'eventId = ?',
+        whereArgs: [eventId],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteSystemCalendarEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteSystemCalendarEventsForSubject(String subjectId) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'system_calendar_events',
+        where: 'subjectId = ?',
+        whereArgs: [subjectId],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteSystemCalendarEventsForSubject error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> clearSystemCalendarEvents() async {
+    try {
+      final db = _getDb();
+      await db.delete('system_calendar_events');
+    } catch (e) {
+      debugPrint('DatabaseService clearSystemCalendarEvents error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> clearSemesterAndAllData() async {
+    try {
+      final db = _getDb();
+      final batch = db.batch();
+      batch.delete('semester');
+      batch.delete('subjects');
+      batch.delete('attendance');
+      batch.delete('system_calendar_events');
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('DatabaseService clearSemesterAndAllData error: $e');
       rethrow;
     }
   }
