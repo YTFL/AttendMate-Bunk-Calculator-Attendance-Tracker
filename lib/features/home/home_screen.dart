@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -38,7 +39,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _selectedIndex = widget.initialPageIndex;
-    _checkForUpdates();
+    if (!kDebugMode) {
+      _checkForUpdates();
+    }
     WidgetsBinding.instance.addObserver(this);
   }
 

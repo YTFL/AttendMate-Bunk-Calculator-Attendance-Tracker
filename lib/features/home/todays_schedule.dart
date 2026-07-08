@@ -5,6 +5,8 @@ import '../../utils/snackbar_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../semester/semester_provider.dart';
 import '../settings/time_format_provider.dart';
+import '../settings/swipe_action_provider.dart';
+import '../settings/swipeable_card.dart';
 import '../subject/subject_provider.dart';
 import '../subject/subject_model.dart';
 import '../attendance/attendance_model.dart';
@@ -53,6 +55,90 @@ class TodaySchedule extends StatelessWidget {
     );
   }
 
+  Widget _buildSwipeBackground({
+    required SwipeAction action,
+    required Alignment alignment,
+    required ResponsiveScale rs,
+    required bool isUnmarking,
+  }) {
+    final Color color;
+    final IconData icon;
+
+    if (isUnmarking) {
+      color = Colors.grey.shade600;
+      icon = Icons.undo;
+    } else {
+      switch (action) {
+        case SwipeAction.present:
+          color = Colors.green.shade700;
+          icon = Icons.check;
+          break;
+        case SwipeAction.absent:
+          color = Colors.red.shade700;
+          icon = Icons.close;
+          break;
+      }
+    }
+
+    return Container(
+      margin: rs.insetsSymmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(rs.scale(12)),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: rs.width(20)),
+      alignment: alignment,
+      child: Icon(icon, color: Colors.white, size: rs.scale(24)),
+    );
+  }
+
+  Future<void> _handleSwipeAction({
+    required BuildContext context,
+    required SwipeAction action,
+    required bool isUnmarking,
+    required Subject subject,
+    required String? slotKey,
+    required DateTime today,
+    required SubjectProvider subjectProvider,
+  }) async {
+    final String message;
+    if (isUnmarking) {
+      await subjectProvider.unmarkAttendance(
+        subject.id,
+        today,
+        slotKey: slotKey,
+      );
+      message = 'Attendance unmarked for ${subject.acronym ?? subject.name}';
+    } else {
+      switch (action) {
+        case SwipeAction.present:
+          await subjectProvider.markAttendance(
+            subject.id,
+            today,
+            AttendanceStatus.attended,
+            slotKey: slotKey,
+          );
+          message = '${subject.acronym ?? subject.name} marked as Present';
+          break;
+        case SwipeAction.absent:
+          await subjectProvider.markAttendance(
+            subject.id,
+            today,
+            AttendanceStatus.absent,
+            slotKey: slotKey,
+          );
+          message = '${subject.acronym ?? subject.name} marked as Absent';
+          break;
+      }
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -60,6 +146,7 @@ class TodaySchedule extends StatelessWidget {
     final subjectProvider = Provider.of<SubjectProvider>(context);
     final semesterProvider = Provider.of<SemesterProvider>(context);
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
+    final swipeProvider = Provider.of<SwipeActionProvider>(context);
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
     final rs = context.rs;
@@ -306,184 +393,52 @@ class TodaySchedule extends StatelessWidget {
                     statusText = 'Attended';
                     statusColor = Colors.green.shade700;
                     statusIcon = Icons.check_circle_outline;
-                    // For attended classes, show "Mark Absent" and "Unmark" buttons
-                    if (showActions) {
-                      trailingWidget = Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            tooltip: 'Mark Absent',
-                            color: Colors.red,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.absent,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined),
-                            tooltip: 'Unmark',
-                            color: Colors.grey,
-                            onPressed: () => subjectProvider.unmarkAttendance(
-                              subject.id,
-                              today,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.celebration_outlined),
-                            tooltip: 'Mark Holiday',
-                            color: Colors.purple,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.cancelled,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                        ],
-                      );
-                    }
                     break;
                   case AttendanceStatus.absent:
                     statusText = 'Absent';
                     statusColor = Colors.red.shade700;
                     statusIcon = Icons.cancel_outlined;
-                    // For absent classes, show "Mark Present" and "Unmark" buttons
-                    if (showActions) {
-                      trailingWidget = Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.check),
-                            tooltip: 'Mark Present',
-                            color: Colors.green,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.attended,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined),
-                            tooltip: 'Unmark',
-                            color: Colors.grey,
-                            onPressed: () => subjectProvider.unmarkAttendance(
-                              subject.id,
-                              today,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.celebration_outlined),
-                            tooltip: 'Mark Holiday',
-                            color: Colors.purple,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.cancelled,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                        ],
-                      );
-                    }
                     break;
                   case AttendanceStatus.cancelled:
                     statusText = 'Holiday';
                     statusColor = Colors.grey.shade600;
                     statusIcon = Icons.celebration_outlined;
-                    if (showActions) {
-                      trailingWidget = Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.check),
-                            tooltip: 'Mark Present',
-                            color: Colors.green,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.attended,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            tooltip: 'Mark Absent',
-                            color: Colors.red,
-                            onPressed: () => subjectProvider.markAttendance(
-                              subject.id,
-                              today,
-                              AttendanceStatus.absent,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined),
-                            tooltip: 'Unmark',
-                            color: Colors.grey,
-                            onPressed: () => subjectProvider.unmarkAttendance(
-                              subject.id,
-                              today,
-                              slotKey: slotKey,
-                            ),
-                          ),
-                        ],
-                      );
-                    }
                     break;
                   default:
                     statusText = 'Awaiting Status';
-                    statusColor = Theme.of(context).colorScheme.onSurface.withAlpha(179);
+                    statusColor = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7);
                     statusIcon = Icons.hourglass_empty;
-                                    // For unmarked classes, show both buttons
-                                    if (showActions) {
-                                      trailingWidget = Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.check),
-                                            tooltip: 'Mark Present',
-                                            color: Colors.green,
-                                            onPressed: () => subjectProvider.markAttendance(
-                                              subject.id,
-                                              today,
-                                              AttendanceStatus.attended,
-                                              slotKey: slotKey,
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.close),
-                                            tooltip: 'Mark Absent',
-                                            color: Colors.red,
-                                            onPressed: () => subjectProvider.markAttendance(
-                                              subject.id,
-                                              today,
-                                              AttendanceStatus.absent,
-                                              slotKey: slotKey,
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.celebration_outlined),
-                                            tooltip: 'Mark Holiday',
-                                            color: Colors.purple,
-                                            onPressed: () => subjectProvider.markAttendance(
-                                              subject.id,
-                                              today,
-                                              AttendanceStatus.cancelled,
-                                              slotKey: slotKey,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }
                 }
 
-                return Card(
+                // Show a single button to toggle Holiday / Unmark Holiday
+                if (showActions) {
+                  if (attendance?.status == AttendanceStatus.cancelled) {
+                    trailingWidget = IconButton(
+                      icon: const Icon(Icons.cancel_outlined),
+                      tooltip: 'Unmark Holiday',
+                      color: Colors.grey,
+                      onPressed: () => subjectProvider.unmarkAttendance(
+                        subject.id,
+                        today,
+                        slotKey: slotKey,
+                      ),
+                    );
+                  } else {
+                    trailingWidget = IconButton(
+                      icon: const Icon(Icons.celebration_outlined),
+                      tooltip: 'Mark Holiday',
+                      color: Colors.purple,
+                      onPressed: () => subjectProvider.markAttendance(
+                        subject.id,
+                        today,
+                        AttendanceStatus.cancelled,
+                        slotKey: slotKey,
+                      ),
+                    );
+                  }
+                }
+
+                final cardWidget = Card(
                   elevation: 2.0,
                   margin: rs.insetsSymmetric(horizontal: 8, vertical: 6),
                   shadowColor: isDarkMode ? null : Colors.black.withValues(alpha: 0.4),
@@ -550,6 +505,56 @@ class TodaySchedule extends StatelessWidget {
                       trailing: trailingWidget,
                     ),
                   ),
+                );
+
+                if (semesterEnded) {
+                  return cardWidget;
+                }
+
+                final isUnmarkingRight = (attendance?.status == AttendanceStatus.attended &&
+                        swipeProvider.rightAction == SwipeAction.present) ||
+                    (attendance?.status == AttendanceStatus.absent &&
+                        swipeProvider.rightAction == SwipeAction.absent);
+
+                final isUnmarkingLeft = (attendance?.status == AttendanceStatus.attended &&
+                        swipeProvider.leftAction == SwipeAction.present) ||
+                    (attendance?.status == AttendanceStatus.absent &&
+                        swipeProvider.leftAction == SwipeAction.absent);
+
+                return SwipeableCard(
+                  key: ValueKey('${subject.id}_${slotKey}_${attendance?.status}'),
+                  swipeRightBackground: _buildSwipeBackground(
+                    action: swipeProvider.rightAction,
+                    alignment: Alignment.centerLeft,
+                    rs: rs,
+                    isUnmarking: isUnmarkingRight,
+                  ),
+                  swipeLeftBackground: _buildSwipeBackground(
+                    action: swipeProvider.leftAction,
+                    alignment: Alignment.centerRight,
+                    rs: rs,
+                    isUnmarking: isUnmarkingLeft,
+                  ),
+                  onSwipeRight: () => _handleSwipeAction(
+                    context: context,
+                    action: swipeProvider.rightAction,
+                    isUnmarking: isUnmarkingRight,
+                    subject: subject,
+                    slotKey: slotKey,
+                    today: today,
+                    subjectProvider: subjectProvider,
+                  ),
+                  onSwipeLeft: () => _handleSwipeAction(
+                    context: context,
+                    action: swipeProvider.leftAction,
+                    isUnmarking: isUnmarkingLeft,
+                    subject: subject,
+                    slotKey: slotKey,
+                    today: today,
+                    subjectProvider: subjectProvider,
+                  ),
+                  rs: rs,
+                  child: cardWidget,
                 );
               },
             ),
