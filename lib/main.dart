@@ -2,6 +2,7 @@ import 'dart:isolate';
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +15,7 @@ import 'features/home/home_screen.dart';
 import 'features/semester/semester_provider.dart';
 import 'features/settings/setup_guide_screen.dart';
 import 'features/settings/time_format_provider.dart';
+import 'features/settings/swipe_action_provider.dart';
 import 'features/subject/subject_provider.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
@@ -33,6 +35,7 @@ void callbackDispatcher() {
       await DatabaseService().init();
       
       if (task == 'updateCheck') {
+        if (kDebugMode) return true;
         // Check for updates
         final updateService = UpdateService();
         final shouldCheck = await updateService.shouldCheckForUpdate();
@@ -178,19 +181,21 @@ Future<void> main() async {
     );
     
     // Register periodic task: check for updates once daily
-    await Workmanager().registerPeriodicTask(
-      'app_update_check',
-      'updateCheck',
-      frequency: const Duration(days: 1),
-      initialDelay: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-      constraints: Constraints(
-        requiresBatteryNotLow: false,
-        requiresCharging: false,
-        requiresDeviceIdle: false,
-        networkType: NetworkType.connected,
-      ),
-    );
+    if (!kDebugMode) {
+      await Workmanager().registerPeriodicTask(
+        'app_update_check',
+        'updateCheck',
+        frequency: const Duration(days: 1),
+        initialDelay: const Duration(minutes: 15),
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+        constraints: Constraints(
+          requiresBatteryNotLow: false,
+          requiresCharging: false,
+          requiresDeviceIdle: false,
+          networkType: NetworkType.connected,
+        ),
+      );
+    }
 
     // Register periodic task: auto-mark unmarked classes at end of day
     await Workmanager().registerPeriodicTask(
@@ -258,19 +263,24 @@ Future<void> main() async {
   // Only create providers if database is initialized
   final attendanceProvider = AttendanceProvider();
   final timeFormatProvider = TimeFormatProvider();
+  final swipeActionProvider = SwipeActionProvider();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
         ChangeNotifierProvider(create: (context) => timeFormatProvider),
+        ChangeNotifierProvider(create: (context) => swipeActionProvider),
         ChangeNotifierProvider(create: (context) => SemesterProvider()),
         ChangeNotifierProvider(create: (context) => attendanceProvider),
         ChangeNotifierProvider(
           create: (context) => SubjectProvider(attendanceProvider),
         ),
       ],
-      child: MyApp(timeFormatProvider: timeFormatProvider),
+      child: MyApp(
+        timeFormatProvider: timeFormatProvider,
+        swipeActionProvider: swipeActionProvider,
+      ),
     ),
   );
 
@@ -392,8 +402,10 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
       final hasSeenPrompt = prefs.getBool(_hasSeenSetupPromptKey) ?? false;
 
       if (!hasSeenPrompt) {
-        shouldShowPrompt = true;
-        await prefs.setBool(_hasSeenSetupPromptKey, true);
+        if (!kDebugMode) {
+          shouldShowPrompt = true;
+          await prefs.setBool(_hasSeenSetupPromptKey, true);
+        }
       }
 
       // Mark previous days' attendance as present (fallback for missed end-of-day markings)
@@ -515,10 +527,12 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
 
 class MyApp extends StatelessWidget {
   final TimeFormatProvider timeFormatProvider;
+  final SwipeActionProvider swipeActionProvider;
 
   const MyApp({
     super.key,
     required this.timeFormatProvider,
+    required this.swipeActionProvider,
   });
 
   @override
@@ -607,10 +621,13 @@ class MyApp extends StatelessWidget {
 
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
-        // Initialize TimeFormatProvider on first build
+        // Initialize TimeFormatProvider and SwipeActionProvider on first build
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!timeFormatProvider.isInitialized) {
             timeFormatProvider.init(context);
+          }
+          if (!swipeActionProvider.isInitialized) {
+            swipeActionProvider.init();
           }
         });
 
