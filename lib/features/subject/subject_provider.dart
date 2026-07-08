@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +6,8 @@ import '../attendance/attendance_model.dart';
 import '../attendance/attendance_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/calendar_service.dart';
+import '../../services/system_calendar_service.dart';
 import 'subject_model.dart';
 
 class TimetableUpdateResult {
@@ -46,11 +49,14 @@ class SubjectProvider with ChangeNotifier {
   SubjectProvider(this._attendanceProvider) {
     _loadSubjects();
     _attendanceProvider.addListener(notifyListeners); // Listen for changes in attendance
+    _attendanceProvider.addListener(_onAttendanceChanged);
   }
 
   @override
   void dispose() {
     _attendanceProvider.removeListener(notifyListeners);
+    _attendanceProvider.removeListener(_onAttendanceChanged);
+    _autoSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -79,6 +85,7 @@ class SubjectProvider with ChangeNotifier {
       await _databaseService.saveSubjects(_subjects);
       await _refreshAttendanceReminders();
       notifyListeners();
+      _scheduleAutoSync();
     } catch (e) {
       // Rollback
       _subjects.removeWhere((s) => s.id == subject.id);
@@ -91,6 +98,7 @@ class SubjectProvider with ChangeNotifier {
     await _databaseService.saveSubjects(_subjects);
     await _refreshAttendanceReminders();
     notifyListeners();
+    _scheduleAutoSync();
   }
 
   Future<TimetableUpdateResult> applyTimetableUpdateFromDate(
@@ -198,6 +206,7 @@ class SubjectProvider with ChangeNotifier {
     await _databaseService.saveSubjects(_subjects);
     await _refreshAttendanceReminders();
     notifyListeners();
+    _scheduleAutoSync();
 
     return TimetableUpdateResult(
       matchedSubjects: matchedCount,
@@ -344,6 +353,7 @@ class SubjectProvider with ChangeNotifier {
       await _refreshAttendanceReminders();
       await _attendanceProvider.updateSubjectName(oldSubject.name, newSubject.name);
       notifyListeners();
+      _scheduleAutoSync();
     }
   }
 
@@ -460,6 +470,7 @@ class SubjectProvider with ChangeNotifier {
     await _attendanceProvider.deleteRecordsForDate(normalizedTarget);
     await _refreshAttendanceReminders();
     notifyListeners();
+    _scheduleAutoSync();
 
     return DayTimetableCopyResult(
       copiedClasses: sourceClassCount,
@@ -473,6 +484,7 @@ class SubjectProvider with ChangeNotifier {
     await _refreshAttendanceReminders();
     await _attendanceProvider.deleteRecordsForSubject(subject.id);
     notifyListeners();
+    _scheduleAutoSync();
   }
 
   Future<void> _refreshAttendanceReminders() async {
@@ -665,5 +677,48 @@ class SubjectProvider with ChangeNotifier {
       }
     }
     await _attendanceProvider.markMultipleAttendance(records);
+  }
+
+  Timer? _autoSyncTimer;
+
+  void _onAttendanceChanged() {
+    _scheduleAutoSync();
+  }
+
+  void _scheduleAutoSync() {
+    if (_isLoading) return;
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer(const Duration(milliseconds: 1500), () {
+      _runAutoSync();
+    });
+  }
+
+  Future<void> _runAutoSync() async {
+    try {
+      final semester = await _databaseService.loadSemester();
+      if (semester == null) {
+        return;
+      }
+
+      // 1. Google Calendar Auto-Sync
+      if (await CalendarService.isUserSignedIn()) {
+        await CalendarService.syncFullTimetable(
+          subjects: _subjects,
+          semester: semester,
+          isHoliday: isHoliday,
+        );
+      }
+
+      // 2. System Calendar Auto-Sync
+      if (await SystemCalendarService.isSystemSyncEnabled()) {
+        await SystemCalendarService.syncFullTimetable(
+          subjects: _subjects,
+          semester: semester,
+          isHoliday: isHoliday,
+        );
+      }
+    } catch (e) {
+      debugPrint("Auto-sync background error: $e");
+    }
   }
 }
