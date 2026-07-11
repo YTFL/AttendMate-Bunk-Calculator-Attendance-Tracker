@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as cal;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
@@ -7,29 +7,9 @@ import '../features/semester/semester_model.dart';
 import '../features/attendance/attendance_model.dart';
 
 class CalendarService {
-  static const MethodChannel _buildConfigChannel = MethodChannel('com.attendmate.app/build_config');
-  static GoogleSignIn? _googleSignIn;
-
-  static Future<GoogleSignIn> _getGoogleSignIn() async {
-    final existing = _googleSignIn;
-    if (existing != null) {
-      return existing;
-    }
-
-    String? clientId;
-    try {
-      clientId = await _buildConfigChannel.invokeMethod<String>('getGoogleClientId');
-    } catch (_) {
-      clientId = null;
-    }
-
-    final instance = GoogleSignIn(
-      scopes: [cal.CalendarApi.calendarEventsScope],
-      serverClientId: clientId,
-    );
-    _googleSignIn = instance;
-    return instance;
-  }
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: [cal.CalendarApi.calendarEventsScope],
+  );
 
   /// Map of Google Calendar event color IDs (1-11) to their RGB values
   static const Map<String, Color> _googleCalendarColors = {
@@ -89,21 +69,18 @@ class CalendarService {
 
   /// Checks if the user is currently signed in
   static Future<bool> isUserSignedIn() async {
-    final googleSignIn = await _getGoogleSignIn();
-    return await googleSignIn.isSignedIn();
+    return await _googleSignIn.isSignedIn();
   }
 
   /// Get the current signed-in user's email
   static Future<String?> getSignedInUserEmail() async {
-    final googleSignIn = await _getGoogleSignIn();
-    final account = googleSignIn.currentUser ?? await googleSignIn.signInSilently();
+    final account = _googleSignIn.currentUser ?? await _googleSignIn.signInSilently();
     return account?.email;
   }
 
   /// Sign out from Google Account
   static Future<void> signOut() async {
-    final googleSignIn = await _getGoogleSignIn();
-    await googleSignIn.signOut();
+    await _googleSignIn.signOut();
   }
 
   /// Synchronizes all subjects and their timeslots to Google Calendar
@@ -113,12 +90,10 @@ class CalendarService {
     required bool Function(DateTime) isHoliday,
   }) async {
     try {
-      final googleSignIn = await _getGoogleSignIn();
-
       // 1. Trigger Google login popup
-      GoogleSignInAccount? googleUser = googleSignIn.currentUser;
-      googleUser ??= await googleSignIn.signInSilently();
-      googleUser ??= await googleSignIn.signIn();
+      GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
+      googleUser ??= await _googleSignIn.signInSilently();
+      googleUser ??= await _googleSignIn.signIn();
       
       if (googleUser == null) {
         throw Exception("User cancelled the Google login.");
@@ -129,7 +104,7 @@ class CalendarService {
       }
 
       // 2. Wrap the authorized user session
-      final httpClient = (await googleSignIn.authenticatedClient())!;
+      final httpClient = (await _googleSignIn.authenticatedClient())!;
       final calendarApi = cal.CalendarApi(httpClient);
 
       // Track active iCalUIDs to determine what to keep
