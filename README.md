@@ -4,7 +4,7 @@
 
 ![App Version](https://img.shields.io/badge/version-1.6-blue)
 ![Platform](https://img.shields.io/badge/platform-Android-green)
-![License](https://img.shields.io/badge/license-MIT-orange)
+![License](https://img.shields.io/badge/license-AGPL-3.0-orange)
 
 ---
 
