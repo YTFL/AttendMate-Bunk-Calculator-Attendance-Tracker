@@ -4,10 +4,24 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun readGoogleClientId(jsonFileName: String): String {
+    val repoRoot = requireNotNull(projectDir.parentFile?.parentFile) {
+        "Unable to resolve repository root for $jsonFileName"
+    }
+    val jsonText = File(repoRoot, jsonFileName).readText()
+    val clientIdMatch = Regex("\"client_id\"\\s*:\\s*\"([^\"]+)\"").find(jsonText)
+        ?: error("Unable to find client_id in $jsonFileName")
+    return clientIdMatch.groupValues[1]
+}
+
 android {
     namespace = "com.ytfl.bunkattendance"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -51,6 +65,8 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".debug"
             manifestPlaceholders["appName"] = "AttendMate - Debug"
+            val googleClientId = readGoogleClientId("client_secret_debug.json")
+            buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
         }
         release {
             signingConfig = if (file("app-release-key.jks").exists()) {
@@ -58,6 +74,9 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+
+            val googleClientId = readGoogleClientId("client_secret_release.json")
+            buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
             
             // Enable optimization flags for smaller APK size
             isMinifyEnabled = true
