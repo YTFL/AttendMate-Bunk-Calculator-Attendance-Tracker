@@ -2,7 +2,7 @@
 
 **AttendMate** is an attendance tracking app for students — track classes, calculate bunking capacity, and stay on top of your attendance target throughout the semester.
 
-![App Version](https://img.shields.io/badge/version-1.4-blue)
+![App Version](https://img.shields.io/badge/version-1.6-blue)
 ![Platform](https://img.shields.io/badge/platform-Android-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
