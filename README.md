@@ -179,8 +179,6 @@ Download the latest APK from the [Releases](../../releases) section.
 ## 📝 Version Information
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.  
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for latest release notes.  
-See [FEATURES.md](FEATURES.md) for a complete feature reference.
 
 ---
 
