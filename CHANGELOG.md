@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1] - 2026-07-11
+
+### Fixed
+- Fixed the Google Calendar Sign-in issue that occurred because of updated Package Name in v1.6.0
+
+---
+
 
 ## [1.6.0] - 2026-07-08
 
