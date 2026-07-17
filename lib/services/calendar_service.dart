@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as cal;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
@@ -83,6 +85,52 @@ class CalendarService {
     await _googleSignIn.signOut();
   }
 
+  /// Deletes all events synced by AttendMate from Google Calendar for the active semester
+  static Future<void> deleteAllSyncedEvents(Semester? semester, {bool force = false}) async {
+    if (semester == null) return;
+    try {
+      if (kDebugMode && !force) {
+        final prefs = await SharedPreferences.getInstance();
+        final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+        if (!isDevSyncEnabled) {
+          debugPrint('Google Calendar deleteAllSyncedEvents bypassed in debug mode (disabled under Developer Options).');
+          return;
+        }
+      }
+      GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
+      googleUser ??= await _googleSignIn.signInSilently();
+      if (googleUser == null) return;
+
+      final httpClient = (await _googleSignIn.authenticatedClient())!;
+      final calendarApi = cal.CalendarApi(httpClient);
+
+      final cal.Events existingEvents = await calendarApi.events.list(
+        "primary",
+        q: "Imported from AttendMate",
+        maxResults: 250,
+      );
+
+      final List<cal.Event> items = existingEvents.items ?? [];
+      for (final event in items) {
+        final iCalUID = event.iCalUID;
+        if (iCalUID != null && iCalUID.startsWith("sched_") && iCalUID.endsWith("@attendmate.app")) {
+          final eventStart = event.start?.dateTime ?? event.start?.date;
+          if (eventStart != null) {
+            if ((eventStart.isAfter(semester.startDate) || _isSameDay(eventStart, semester.startDate)) &&
+                (eventStart.isBefore(semester.endDate) || _isSameDay(eventStart, semester.endDate))) {
+              final eventId = event.id;
+              if (eventId != null) {
+                await calendarApi.events.delete("primary", eventId);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Failed to clear Google Calendar events: $e");
+    }
+  }
+
   /// Synchronizes all subjects and their timeslots to Google Calendar
   static Future<void> syncFullTimetable({
     required List<Subject> subjects,
@@ -90,6 +138,14 @@ class CalendarService {
     required bool Function(DateTime) isHoliday,
   }) async {
     try {
+      if (kDebugMode) {
+        final prefs = await SharedPreferences.getInstance();
+        final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+        if (!isDevSyncEnabled) {
+          debugPrint('Google Calendar Sync bypassed in debug mode (disabled under Developer Options).');
+          return;
+        }
+      }
       // 1. Trigger Google login popup
       GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
       googleUser ??= await _googleSignIn.signInSilently();

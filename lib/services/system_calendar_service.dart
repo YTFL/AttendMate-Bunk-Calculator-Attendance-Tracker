@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:device_calendar_plus/device_calendar_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../features/subject/subject_model.dart';
@@ -74,8 +74,16 @@ class SystemCalendarService {
   }
 
   /// Deletes all events synced by AttendMate from the system calendar and purges SQLite mappings.
-  static Future<void> deleteSyncedEvents() async {
+  static Future<void> deleteSyncedEvents({bool force = false}) async {
     try {
+      if (kDebugMode && !force) {
+        final prefs = await SharedPreferences.getInstance();
+        final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+        if (!isDevSyncEnabled) {
+          debugPrint('System Calendar deleteSyncedEvents bypassed in debug mode (disabled under Developer Options).');
+          return;
+        }
+      }
       final plugin = DeviceCalendar.instance;
       final db = DatabaseService();
       final events = await db.getAllSystemCalendarEvents();
@@ -102,6 +110,14 @@ class SystemCalendarService {
     required bool Function(DateTime) isHoliday,
   }) async {
     try {
+      if (kDebugMode) {
+        final prefs = await SharedPreferences.getInstance();
+        final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+        if (!isDevSyncEnabled) {
+          debugPrint('System Calendar Sync bypassed in debug mode (disabled under Developer Options).');
+          return;
+        }
+      }
       if (semester == null || subjects.isEmpty) return;
 
       final calendarId = await getSystemCalendarId();

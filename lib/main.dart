@@ -146,7 +146,20 @@ Future<void> _performEndOfDayAttendanceMarking(DateTime todayDate) async {
     }
 
     if (changed) {
-      await databaseService.saveAttendance(mutableRecords);
+      final originalKeys = records.map((r) {
+        final normDate = DateTime(r.date.year, r.date.month, r.date.day);
+        return '${r.subjectId}_${normDate.millisecondsSinceEpoch}_${r.slotKey ?? ""}';
+      }).toSet();
+
+      final newRecords = mutableRecords.where((r) {
+        final normDate = DateTime(r.date.year, r.date.month, r.date.day);
+        final key = '${r.subjectId}_${normDate.millisecondsSinceEpoch}_${r.slotKey ?? ""}';
+        return !originalKeys.contains(key);
+      }).toList();
+
+      if (newRecords.isNotEmpty) {
+        await databaseService.saveMultipleAttendanceIncremental(newRecords);
+      }
     }
   } catch (e) {
     debugPrint('Background attendance marking failed: $e');

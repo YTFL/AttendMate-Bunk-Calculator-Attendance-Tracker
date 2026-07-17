@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
+import '../../services/calendar_service.dart';
+import '../../services/system_calendar_service.dart';
 import '../../models/app_update_model.dart';
 import '../../services/database_service.dart';
 import '../../services/update_service.dart';
@@ -40,6 +42,7 @@ class _MoreScreenState extends State<MoreScreen> {
   AppUpdate? _availableUpdate;
   bool _isCheckingForUpdate = false;
   bool _hasCheckedForUpdate = false;
+  bool _devModeCalendarSyncEnabled = false;
 
   static const String _issuesUrl =
       'https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues';
@@ -50,6 +53,9 @@ class _MoreScreenState extends State<MoreScreen> {
     super.initState();
     _packageInfoFuture = PackageInfo.fromPlatform();
     _currentVersionReleaseDateFuture = _loadBundledReleaseDate();
+    if (kDebugMode) {
+      _loadDevModeCalendarSync();
+    }
   }
 
   Future<DateTime?> _loadBundledReleaseDate() async {
@@ -203,6 +209,29 @@ class _MoreScreenState extends State<MoreScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _loadDevModeCalendarSync() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _devModeCalendarSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+      });
+    } catch (e) {
+      debugPrint('Error loading dev mode calendar sync setting: $e');
+    }
+  }
+
+  Future<void> _toggleDevModeCalendarSync(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('dev_mode_calendar_sync_enabled', value);
+      setState(() {
+        _devModeCalendarSyncEnabled = value;
+      });
+    } catch (e) {
+      debugPrint('Error toggling dev mode calendar sync setting: $e');
+    }
   }
 
   void _showDemoGenerationConfirmation() {
@@ -397,6 +426,28 @@ class _MoreScreenState extends State<MoreScreen> {
       final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
       final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+
+      if (kDebugMode) {
+        final prefs = await SharedPreferences.getInstance();
+        final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
+        if (isDevSyncEnabled) {
+          final semester = semesterProvider.semester;
+          
+          // Delete from System Calendar
+          try {
+            await SystemCalendarService.deleteSyncedEvents(force: true);
+          } catch (e) {
+            debugPrint('Failed to clear device calendar: $e');
+          }
+
+          // Delete from Google Calendar
+          try {
+            await CalendarService.deleteAllSyncedEvents(semester, force: true);
+          } catch (e) {
+            debugPrint('Failed to clear google calendar: $e');
+          }
+        }
+      }
 
       await DatabaseService().clearSemesterAndAllData();
 
@@ -724,6 +775,17 @@ class _MoreScreenState extends State<MoreScreen> {
                 color: Colors.red,
               ),
             ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync, color: Colors.red),
+            title: const Text('Enable Calendar Sync (Debug)'),
+            subtitle: const Text('Allows syncing generated timetable to Google/Device calendar during testing'),
+            trailing: Switch(
+              value: _devModeCalendarSyncEnabled,
+              onChanged: _toggleDevModeCalendarSync,
+              activeThumbColor: Colors.red,
+            ),
+            onTap: () => _toggleDevModeCalendarSync(!_devModeCalendarSyncEnabled),
           ),
           ListTile(
             leading: const Icon(Icons.playlist_add_check_outlined, color: Colors.red),
