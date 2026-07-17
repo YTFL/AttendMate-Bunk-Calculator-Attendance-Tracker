@@ -26,8 +26,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
-        // Only build for 64-bit ARM devices (modern Android devices)
-        // Excludes 32-bit ARM and x86/x86_64 architectures
+        // Only build for 64-bit ARM devices globally
         ndk {
             abiFilters.addAll(listOf("arm64-v8a"))
         }
