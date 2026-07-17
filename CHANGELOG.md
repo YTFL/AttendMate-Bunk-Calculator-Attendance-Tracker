@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.2] - 2026-07-17
+
+### Added
+- **Preserved Swipe Card State**: Subject cards now slide back smoothly instead of instantly popping back when you perform a swipe action on Today's page or in Settings.
+
+### Changed
+- **Smooth Liquid-like Easing**: Attendance swipe-back transition now uses a refined `Curves.easeOutQuint` easing over `450ms` for a fluid, organic, and premium feel.
+- **Action Retention**: The color and icon of the action performed remain visible during the slide-back animation, rather than prematurely switching to the "undo" state.
+- **Global ABI Filter**: Constrained compiles to 64-bit ARM (`arm64-v8a`) architecture globally for both debug and release builds, reducing the final compiled app size.
+- **Dependency Cleanup**: Stripped unused dependencies (`fl_chart`, `pie_chart`, `flutter_colorpicker`, `markdown`) from the configuration.
+
+### Fixed
+- **Setup Guide Bug**: Fixed a bug where a duplicate "5. Marking Attendance" page was displayed in the onboarding Setup Guide flow.
+
+---
+
+
 ## [1.6.1] - 2026-07-11
 
 ### Fixed
