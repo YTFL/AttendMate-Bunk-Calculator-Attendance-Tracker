@@ -522,7 +522,7 @@ class TodaySchedule extends StatelessWidget {
                         swipeProvider.leftAction == SwipeAction.absent);
 
                 return SwipeableCard(
-                  key: ValueKey('${subject.id}_${slotKey}_${attendance?.status}'),
+                  key: ValueKey('${subject.id}_$slotKey'),
                   swipeRightBackground: _buildSwipeBackground(
                     action: swipeProvider.rightAction,
                     alignment: Alignment.centerLeft,

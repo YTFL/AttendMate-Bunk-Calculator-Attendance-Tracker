@@ -132,7 +132,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           (_mockStatus == AttendanceStatus.absent && leftSwipeAction == SwipeAction.absent);
 
       return SwipeableCard(
-        key: UniqueKey(),
+        key: const ValueKey('mock_card'),
         swipeRightBackground: buildMockSwipeBackground(
           action: rightSwipeAction,
           alignment: Alignment.centerLeft,

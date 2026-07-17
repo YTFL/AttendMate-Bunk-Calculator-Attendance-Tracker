@@ -89,22 +89,6 @@ class Subject {
     }
     return total;
   }
-
-  Map<String, int> getMarkedAttendanceCounts() {
-    int attended = 0;
-    int absent = 0;
-    for (var record in attendanceRecords) {
-      if (record.status == AttendanceStatus.attended) {
-        attended++;
-      } else if (record.status == AttendanceStatus.absent) {
-        absent++;
-      }
-    }
-    return {
-      'attended': attended,
-      'absent': absent,
-    };
-  }
 }
 
 class ManualAttendanceOverride {
@@ -367,10 +351,6 @@ enum DayOfWeek {
   friday,
   saturday,
   sunday,
-}
-
-extension DayOfWeekExtension on DayOfWeek {
-  String get name => toString().split('.').last;
 }
 
 // Helper to check if two DateTime objects are the same day

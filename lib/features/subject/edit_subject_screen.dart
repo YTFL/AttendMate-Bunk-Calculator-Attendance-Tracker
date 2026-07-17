@@ -1055,23 +1055,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
               ),
               subtitle: _specialClassDate != null
                   ? Text(
-                      _specialClassDate!.weekday == DateTime.monday
-                          ? 'Monday'
-                          : _specialClassDate!.weekday == DateTime.tuesday
-                              ? 'Tuesday'
-                              : _specialClassDate!.weekday ==
-                                      DateTime.wednesday
-                                  ? 'Wednesday'
-                                  : _specialClassDate!.weekday ==
-                                          DateTime.thursday
-                                      ? 'Thursday'
-                                      : _specialClassDate!.weekday ==
-                                              DateTime.friday
-                                          ? 'Friday'
-                                          : _specialClassDate!.weekday ==
-                                                  DateTime.saturday
-                                              ? 'Saturday'
-                                              : 'Sunday',
+                      const ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][_specialClassDate!.weekday - 1],
                       style: TextStyle(
                           fontSize: 11,
                           color: colorScheme.onSurface

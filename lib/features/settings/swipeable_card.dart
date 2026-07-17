@@ -29,13 +29,14 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
   double _dragOffset = 0.0;
   double _startOffset = 0.0;
   late double _maxDragDistance;
+  Widget? _animatingBackground;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 450),
     );
     _animation = _controller.drive(Tween<double>(begin: 0.0, end: 0.0));
   }
@@ -58,6 +59,14 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
+    // Capture the active background BEFORE parent rebuilds
+    Widget? activeBackground;
+    if (_dragOffset > 0) {
+      activeBackground = widget.swipeRightBackground;
+    } else if (_dragOffset < 0) {
+      activeBackground = widget.swipeLeftBackground;
+    }
+
     final threshold = _maxDragDistance * 0.5;
     if (_dragOffset >= threshold) {
       widget.onSwipeRight();
@@ -66,9 +75,11 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
     }
 
     _startOffset = _dragOffset;
+    _animatingBackground = activeBackground;
+
     _animation = _controller.drive(
       Tween<double>(begin: _startOffset, end: 0.0).chain(
-        CurveTween(curve: Curves.easeOutCubic),
+        CurveTween(curve: Curves.easeOutQuint),
       ),
     );
     
@@ -77,6 +88,7 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
       if (mounted) {
         setState(() {
           _dragOffset = 0.0;
+          _animatingBackground = null;
         });
       }
     });
@@ -102,10 +114,14 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
                   borderRadius: BorderRadius.circular(widget.rs.scale(12)),
                   child: Stack(
                     children: [
-                      if (currentOffset > 0)
-                        Positioned.fill(child: widget.swipeRightBackground),
-                      if (currentOffset < 0)
-                        Positioned.fill(child: widget.swipeLeftBackground),
+                      if (_controller.isAnimating && _animatingBackground != null)
+                        Positioned.fill(child: _animatingBackground!)
+                      else ...[
+                        if (currentOffset > 0)
+                          Positioned.fill(child: widget.swipeRightBackground),
+                        if (currentOffset < 0)
+                          Positioned.fill(child: widget.swipeLeftBackground),
+                      ],
                     ],
                   ),
                 ),

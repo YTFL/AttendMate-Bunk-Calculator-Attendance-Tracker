@@ -351,7 +351,6 @@ class SubjectProvider with ChangeNotifier {
       _subjects[index] = newSubject;
       await _databaseService.saveSubjects(_subjects);
       await _refreshAttendanceReminders();
-      await _attendanceProvider.updateSubjectName(oldSubject.name, newSubject.name);
       notifyListeners();
       _scheduleAutoSync();
     }
@@ -700,10 +699,19 @@ class SubjectProvider with ChangeNotifier {
         return;
       }
 
+      // Combine subject's manual override records with active attendance records from AttendanceProvider
+      final syncedSubjects = _subjects.map((subject) {
+        final normalRecords = _attendanceProvider.attendanceRecords
+            .where((r) => r.subjectId == subject.id)
+            .toList();
+        final combined = [...subject.attendanceRecords, ...normalRecords];
+        return subject.copyWith(attendanceRecords: combined);
+      }).toList();
+
       // 1. Google Calendar Auto-Sync
       if (await CalendarService.isUserSignedIn()) {
         await CalendarService.syncFullTimetable(
-          subjects: _subjects,
+          subjects: syncedSubjects,
           semester: semester,
           isHoliday: isHoliday,
         );
@@ -712,7 +720,7 @@ class SubjectProvider with ChangeNotifier {
       // 2. System Calendar Auto-Sync
       if (await SystemCalendarService.isSystemSyncEnabled()) {
         await SystemCalendarService.syncFullTimetable(
-          subjects: _subjects,
+          subjects: syncedSubjects,
           semester: semester,
           isHoliday: isHoliday,
         );

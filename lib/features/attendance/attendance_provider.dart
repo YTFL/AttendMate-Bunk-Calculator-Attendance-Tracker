@@ -58,7 +58,7 @@ class AttendanceProvider with ChangeNotifier {
       );
       _attendanceRecords.add(newRecord);
 
-      await _databaseService.saveAttendance(_attendanceRecords);
+      await _databaseService.saveSingleAttendance(newRecord);
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -77,7 +77,7 @@ class AttendanceProvider with ChangeNotifier {
         );
         _attendanceRecords.add(record);
       }
-      await _databaseService.saveAttendance(_attendanceRecords);
+      await _databaseService.saveMultipleAttendanceIncremental(records);
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -116,21 +116,16 @@ class AttendanceProvider with ChangeNotifier {
     return recordsForDay.every((record) => record.status == AttendanceStatus.cancelled);
   }
 
-  Future<void> updateSubjectName(String oldName, String newName) async {
-    // This method is no longer needed as we are using subjectId
-    // However, if you have old data that needs migration, you would implement that here.
-  }
-
   Future<void> deleteRecordsForSubject(String subjectId) async {
     _attendanceRecords.removeWhere((record) => record.subjectId == subjectId);
-    await _databaseService.saveAttendance(_attendanceRecords);
+    await _databaseService.deleteAttendanceForSubject(subjectId);
     notifyListeners();
   }
 
   /// Delete all attendance records for a specific date
   Future<void> deleteRecordsForDate(DateTime date) async {
     _attendanceRecords.removeWhere((record) => record.date == date);
-    await _databaseService.saveAttendance(_attendanceRecords);
+    await _databaseService.deleteAttendanceForDate(date);
     notifyListeners();
   }
 
@@ -146,7 +141,11 @@ class AttendanceProvider with ChangeNotifier {
           record.date == date &&
           (slotKey == null || (record.slotKey ?? '') == slotKey),
     );
-    await _databaseService.saveAttendance(_attendanceRecords);
+    await _databaseService.deleteSingleAttendance(
+      subjectId: subjectId,
+      date: date,
+      slotKey: slotKey,
+    );
     notifyListeners();
   }
 
@@ -181,6 +180,7 @@ class AttendanceProvider with ChangeNotifier {
       }
 
       bool changed = false;
+      final newRecords = <Attendance>[];
 
       // Check all days from checkFromDate to yesterday
       for (DateTime date = checkFromDate;
@@ -223,6 +223,7 @@ class AttendanceProvider with ChangeNotifier {
                 slotKey: slot.slotKey,
               );
               _attendanceRecords.add(newRecord);
+              newRecords.add(newRecord);
               indexedRecords[key] = newRecord;
               changed = true;
             }
@@ -231,7 +232,7 @@ class AttendanceProvider with ChangeNotifier {
       }
 
       if (changed) {
-        await _databaseService.saveAttendance(_attendanceRecords);
+        await _databaseService.saveMultipleAttendanceIncremental(newRecords);
         notifyListeners();
       }
     } catch (e) {

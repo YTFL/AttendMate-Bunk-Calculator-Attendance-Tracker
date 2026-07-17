@@ -182,33 +182,6 @@ You can export your weekly timetable in **JSON**, **CSV**, or **PDF** directly f
 ''',
     ),
     _GuideSection(
-  title: '5. Marking Attendance',
-      openInAppLabel: 'Open Today Page',
-      openTarget: _GuideOpenTarget.todayTab,
-      markdown: '''
-## Overview
-The **Today** tab shows all classes for the current day.
-
----
-
-## Class Actions
-Use class actions:
-- **Mark Present**
-- **Mark Absent**
-- **Unmark**
-
----
-
-## Bulk Day Actions
-Bulk actions are available for a full day:
-- **Mark Holiday**
-- **Skip Day**
-- **Mark Today as Present**
-
-> Any class left unmarked at 10 PM is auto-marked as Present (holiday days are skipped).
-''',
-    ),
-    _GuideSection(
       title: '5. Marking Attendance',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
