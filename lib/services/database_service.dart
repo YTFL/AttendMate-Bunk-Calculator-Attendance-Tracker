@@ -25,7 +25,7 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 5,
+        version: 6,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -93,6 +93,12 @@ class DatabaseService {
           date TEXT NOT NULL
         )
       ''');
+
+      // Create lookup index to speed up calendar sync operations
+      await db.execute('''
+        CREATE INDEX idx_system_calendar_events_lookup 
+        ON system_calendar_events (subjectId, slotKey, date)
+      ''');
     } catch (e) {
       debugPrint('DatabaseService onCreate error: $e');
       rethrow;
@@ -147,6 +153,12 @@ class DatabaseService {
             slotKey TEXT NOT NULL,
             date TEXT NOT NULL
           )
+        ''');
+      }
+      if (oldVersion < 6) {
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_system_calendar_events_lookup 
+          ON system_calendar_events (subjectId, slotKey, date)
         ''');
       }
     } catch (e) {
@@ -552,6 +564,101 @@ class DatabaseService {
       await batch.commit(noResult: true);
     } catch (e) {
       debugPrint('DatabaseService clearSemesterAndAllData error: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== INCREMENTAL ATTENDANCE WRITES ====================
+
+  /// Save a single attendance record, replacing it if it already exists
+  Future<void> saveSingleAttendance(Attendance record) async {
+    try {
+      final db = _getDb();
+      await db.insert(
+        'attendance',
+        {
+          'subjectId': record.subjectId,
+          'date': record.date.toIso8601String(),
+          'slotKey': record.slotKey ?? '',
+          'status': record.status.toString().split('.').last,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('DatabaseService saveSingleAttendance error: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a single attendance record matching subjectId, date, and slotKey
+  Future<void> deleteSingleAttendance({
+    required String subjectId,
+    required DateTime date,
+    String? slotKey,
+  }) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'attendance',
+        where: 'subjectId = ? AND date = ? AND slotKey = ?',
+        whereArgs: [subjectId, date.toIso8601String(), slotKey ?? ''],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteSingleAttendance error: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete all attendance records associated with a subject
+  Future<void> deleteAttendanceForSubject(String subjectId) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'attendance',
+        where: 'subjectId = ?',
+        whereArgs: [subjectId],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteAttendanceForSubject error: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete all attendance records on a specific date
+  Future<void> deleteAttendanceForDate(DateTime date) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'attendance',
+        where: 'date = ?',
+        whereArgs: [date.toIso8601String()],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteAttendanceForDate error: $e');
+      rethrow;
+    }
+  }
+
+  /// Insert or replace multiple attendance records using a transaction batch
+  Future<void> saveMultipleAttendanceIncremental(List<Attendance> records) async {
+    try {
+      final db = _getDb();
+      final batch = db.batch();
+      for (final record in records) {
+        batch.insert(
+          'attendance',
+          {
+            'subjectId': record.subjectId,
+            'date': record.date.toIso8601String(),
+            'slotKey': record.slotKey ?? '',
+            'status': record.status.toString().split('.').last,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('DatabaseService saveMultipleAttendanceIncremental error: $e');
       rethrow;
     }
   }

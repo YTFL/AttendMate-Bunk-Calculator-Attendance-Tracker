@@ -452,7 +452,7 @@ void notificationTapBackground(NotificationResponse response) async {
       mutableRecords.add(newRecord);
     }
 
-    await databaseService.saveAttendance(mutableRecords);
+    await databaseService.saveSingleAttendance(newRecord);
 
     final actionPort = IsolateNameServer.lookupPortByName(NotificationService.actionPortName);
     actionPort?.send({
