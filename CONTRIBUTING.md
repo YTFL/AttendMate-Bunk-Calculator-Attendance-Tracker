@@ -30,7 +30,7 @@ Be respectful, constructive, and collaborative. Harassment or hostile behaviour 
 ## Getting Started
 
 1. **Fork** this repository
-2. **Clone** your fork: `git clone https://github.com/<your-username>/bunk-attendance.git`
+2. **Clone** your fork: `git clone https://github.com/<your-username>/AttendMate-Bunk-Calculator-Attendance-Tracker.git`
 3. **Set up** the development environment (see [Development Setup](#development-setup))
 4. **Create a branch** for your change: `git checkout -b fix/my-bug-fix`
 5. **Make your changes**, commit, and push
