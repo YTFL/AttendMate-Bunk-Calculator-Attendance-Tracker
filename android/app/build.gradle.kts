@@ -1,3 +1,20 @@
+import java.util.Properties
+
+val envProps = Properties()
+val rootEnvFile = rootProject.file("../.env")
+val androidEnvFile = rootProject.file(".env")
+
+if (rootEnvFile.exists()) {
+    rootEnvFile.inputStream().use { envProps.load(it) }
+} else if (androidEnvFile.exists()) {
+    androidEnvFile.inputStream().use { envProps.load(it) }
+}
+
+val mapsApiKey: String = envProps.getProperty("MAPS_API_KEY")
+    ?: System.getenv("MAPS_API_KEY")
+    ?: (project.findProperty("MAPS_API_KEY") as String?)
+    ?: "YOUR_GOOGLE_MAPS_API_KEY"
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -32,6 +49,7 @@ android {
         }
 
         manifestPlaceholders["appName"] = "AttendMate"
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
@@ -73,6 +91,7 @@ android {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
 
 flutter {
