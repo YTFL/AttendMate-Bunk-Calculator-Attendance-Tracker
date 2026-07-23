@@ -48,7 +48,12 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
   }
 
   void _onHorizontalDragStart(DragStartDetails details) {
-    _controller.stop();
+    if (_controller.isAnimating) {
+      _dragOffset = _animation.value;
+      _controller.stop();
+    } else {
+      _dragOffset = 0.0;
+    }
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {

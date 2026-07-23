@@ -1,15 +1,19 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/snackbar_utils.dart';
 import '../../utils/string_extension.dart';
-import 'package:flutter/cupertino.dart' show CupertinoPicker;
+import '../../widgets/app_time_picker.dart';
 import '../settings/time_format_provider.dart';
 import 'class_color_palettes.dart';
 import 'subject_model.dart';
 import 'subject_provider.dart';
+import '../../services/database_service.dart';
+import '../location/location_model.dart';
+import '../location/location_manager_screen.dart';
 
 class EditSubjectScreen extends StatefulWidget {
   final Subject subject;
@@ -27,8 +31,12 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
 
   late Color _selectedColor;
   late bool _isSpecialClass;
+  late int _targetAttendance;
   DateTime? _specialClassDate;
   final List<TimeSlot> _schedule = [];
+  List<LocationConfig> _locations = [];
+  LocationConfig? _selectedLocation;
+  bool _loadingLocations = true;
 
   @override
   void initState() {
@@ -37,12 +45,37 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     _acronymController.text = widget.subject.acronym ?? '';
     _selectedColor = widget.subject.color;
     _isSpecialClass = widget.subject.isSpecialClass;
+    _targetAttendance = widget.subject.targetAttendance;
     _specialClassDate = widget.subject.specialClassDate;
     _schedule.addAll(widget.subject.schedule);
     _sortSchedule();
 
     _nameController.addListener(() => setState(() {}));
     _acronymController.addListener(() => setState(() {}));
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    final locs = await DatabaseService().loadLocations();
+    if (mounted) {
+      setState(() {
+        _locations = locs;
+        // Pre-select from the subject's saved locationId
+        if (widget.subject.locationId != null) {
+          try {
+            _selectedLocation = locs.firstWhere((l) => l.id == widget.subject.locationId);
+          } catch (_) {
+            // Location was deleted; create a ghost entry
+            _selectedLocation = LocationConfig(
+              id: widget.subject.locationId!,
+              name: widget.subject.room ?? '',
+              block: widget.subject.block,
+            );
+          }
+        }
+        _loadingLocations = false;
+      });
+    }
   }
 
   @override
@@ -124,43 +157,18 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     return const TimeOfDay(hour: 23, minute: 59);
   }
 
-  // ── Time picker builder (respects time format setting) ───────────────────
 
-  Widget _timePickerBuilder(BuildContext ctx, Widget? child) {
-    final tfp = Provider.of<TimeFormatProvider>(ctx, listen: false);
-    return MediaQuery(
-      data: MediaQuery.of(ctx).copyWith(
-        alwaysUse24HourFormat: tfp.is24Hour,
-      ),
-      child: child ?? const SizedBox.shrink(),
-    );
-  }
 
   Future<TimeOfDay?> _selectTime({
     required BuildContext context,
     required TimeOfDay initialTime,
     required String helpText,
   }) async {
-    final provider = Provider.of<TimeFormatProvider>(context, listen: false);
-    if (provider.clockStyle == ClockStyle.material) {
-      return await showTimePicker(
-        context: context,
-        initialTime: initialTime,
-        helpText: helpText,
-        builder: _timePickerBuilder,
-      );
-    } else {
-      return await showDialog<TimeOfDay>(
-        context: context,
-        builder: (BuildContext dialogCtx) {
-          return _CustomScrollTimePickerDialog(
-            initialTime: initialTime,
-            helpText: helpText,
-            is24Hour: provider.is24Hour,
-          );
-        },
-      );
-    }
+    return await showAppTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: helpText,
+    );
   }
 
   // ── Date formatting ──────────────────────────────────────────────────────
@@ -195,10 +203,15 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
 
     bool timeError = _toMinutes(endTime) <= _toMinutes(startTime);
 
+    if (!mounted) return;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      barrierColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.12)
+          : null,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -331,10 +344,11 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                 top: 24,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(
                     child: Container(
                       width: 36,
@@ -466,6 +480,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                       ),
                   ],
 
+
                   const SizedBox(height: 32),
 
                   // Save button
@@ -567,6 +582,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                   ),
                 ],
               ),
+              ),
             );
           },
         );
@@ -594,6 +610,9 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
             startTime: slot.startTime,
             endTime: slot.endTime,
             specificDate: normalized,
+            locationId: slot.locationId,
+            room: slot.room,
+            block: slot.block,
           )).toList();
       _schedule
         ..clear()
@@ -613,6 +632,9 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      barrierColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.12)
+          : null,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -797,6 +819,10 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
       acronym: acronym,
       color: _selectedColor,
       schedule: _schedule,
+      targetAttendance: _targetAttendance,
+      locationId: () => _selectedLocation?.id,
+      room: () => _selectedLocation?.name,
+      block: () => _selectedLocation?.block,
     );
 
     Provider.of<SubjectProvider>(context, listen: false).updateSubject(
@@ -913,6 +939,138 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 ),
                 onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Target Attendance Percentage ───────────────────────
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.track_changes_rounded,
+                              size: 20,
+                              color: colorScheme.onSurface.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Target Attendance',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$_targetAttendance%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: _targetAttendance.toDouble(),
+                      min: 50,
+                      max: 100,
+                      divisions: 50,
+                      label: '$_targetAttendance%',
+                      onChanged: (val) {
+                        final newTarget = val.round();
+                        if (newTarget != _targetAttendance) {
+                          HapticFeedback.vibrate();
+                          setState(() {
+                            _targetAttendance = newTarget;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Class Location ───────────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<LocationConfig?>(
+                      initialValue: _loadingLocations ? null : _selectedLocation,
+                      decoration: InputDecoration(
+                        labelText: 'Class Location (Optional)',
+                        hintText: _loadingLocations ? 'Loading...' : 'Select a room / location',
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
+                        prefixIcon: Icon(Icons.pin_drop_outlined, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+                        filled: true,
+                        fillColor: colorScheme.surfaceContainerLowest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: _selectedColor, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      ),
+                      items: [
+                        const DropdownMenuItem<LocationConfig?>(
+                          value: null,
+                          child: Text('No location'),
+                        ),
+                        ..._locations.map((loc) => DropdownMenuItem<LocationConfig?>(
+                          value: loc,
+                          child: Text('${loc.name}${loc.block != null ? " (${loc.block})" : ""}'),
+                        )),
+                      ],
+                      onChanged: _loadingLocations ? null : (val) {
+                        setState(() => _selectedLocation = val);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    tooltip: 'Manage locations',
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LocationManagerScreen()),
+                      );
+                      _loadLocations();
+                    },
+                  ),
+                ],
               ),
 
               const SizedBox(height: 28),
@@ -1184,7 +1342,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      slot.formatTimeRange(timeFormat),
+                      slot.formatTimeRange(timeFormat) + (slot.room != null ? ' • ${slot.room}${slot.block != null ? " (${slot.block})" : ""}' : ''),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -1214,231 +1372,4 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
   }
 }
 
-class _CustomScrollTimePickerDialog extends StatefulWidget {
-  final TimeOfDay initialTime;
-  final String helpText;
-  final bool is24Hour;
 
-  const _CustomScrollTimePickerDialog({
-    required this.initialTime,
-    required this.helpText,
-    required this.is24Hour,
-  });
-
-  @override
-  State<_CustomScrollTimePickerDialog> createState() => _CustomScrollTimePickerDialogState();
-}
-
-class _CustomScrollTimePickerDialogState extends State<_CustomScrollTimePickerDialog> {
-  late FixedExtentScrollController _hourController;
-  late FixedExtentScrollController _minuteController;
-  FixedExtentScrollController? _periodController;
-
-  @override
-  void initState() {
-    super.initState();
-    final hour = widget.initialTime.hour;
-    final minute = widget.initialTime.minute;
-
-    if (widget.is24Hour) {
-      _hourController = FixedExtentScrollController(initialItem: hour);
-      _minuteController = FixedExtentScrollController(initialItem: minute);
-    } else {
-      final isPm = hour >= 12;
-      final hour12 = hour % 12;
-      final initialHourIndex = (hour12 == 0 ? 12 : hour12) - 1;
-
-      _hourController = FixedExtentScrollController(initialItem: initialHourIndex);
-      _minuteController = FixedExtentScrollController(initialItem: minute);
-      _periodController = FixedExtentScrollController(initialItem: isPm ? 1 : 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _hourController.dispose();
-    _minuteController.dispose();
-    _periodController?.dispose();
-    super.dispose();
-  }
-
-  int _wrapIndex(int value, int length) {
-    return value % length < 0 ? (value % length) + length : value % length;
-  }
-
-  TimeOfDay _getCurrentTime() {
-    if (widget.is24Hour) {
-      return TimeOfDay(
-        hour: _wrapIndex(_hourController.selectedItem, 24),
-        minute: _wrapIndex(_minuteController.selectedItem, 60),
-      );
-    } else {
-      final hour12 = _wrapIndex(_hourController.selectedItem, 12) + 1;
-      final isPm = (_periodController?.selectedItem ?? 0) == 1;
-      int hour24;
-      if (isPm) {
-        hour24 = hour12 == 12 ? 12 : hour12 + 12;
-      } else {
-        hour24 = hour12 == 12 ? 0 : hour12;
-      }
-      return TimeOfDay(
-        hour: hour24,
-        minute: _wrapIndex(_minuteController.selectedItem, 60),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textStyle = TextStyle(
-      color: theme.colorScheme.onSurface,
-      fontSize: 34, // Increased font size for selector text
-      fontWeight: FontWeight.bold,
-    );
-
-    return AlertDialog(
-      backgroundColor: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-      ),
-      contentPadding: EdgeInsets.zero,
-      titlePadding: const EdgeInsets.only(top: 20, left: 24, right: 24),
-      title: Text(
-        widget.helpText,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Hours Wheel
-              SizedBox(
-                width: 80,
-                height: 220,
-                child: CupertinoPicker(
-                  scrollController: _hourController,
-                  itemExtent: 48,
-                  looping: true,
-                  onSelectedItemChanged: (_) {},
-                  children: List.generate(widget.is24Hour ? 24 : 12, (index) {
-                    final val = widget.is24Hour ? index : index + 1;
-                    return Center(
-                      child: Text(
-                        val.toString().padLeft(2, '0'),
-                        style: textStyle,
-                      ),
-                    );
-                  }),
-                ),
-              ),
-              
-              // Separator colon with spacing
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  ':',
-                  style: textStyle.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-              
-              // Minutes Wheel
-              SizedBox(
-                width: 80,
-                height: 220,
-                child: CupertinoPicker(
-                  scrollController: _minuteController,
-                  itemExtent: 48,
-                  looping: true,
-                  onSelectedItemChanged: (_) {},
-                  children: List.generate(60, (index) {
-                    return Center(
-                      child: Text(
-                        index.toString().padLeft(2, '0'),
-                        style: textStyle,
-                      ),
-                    );
-                  }),
-                ),
-              ),
-
-              if (!widget.is24Hour) ...[
-                const SizedBox(width: 24), // Large spacing before AM/PM
-                SizedBox(
-                  width: 80,
-                  height: 220,
-                  child: CupertinoPicker(
-                    scrollController: _periodController,
-                    itemExtent: 48,
-                    onSelectedItemChanged: (_) {},
-                    children: [
-                      Center(
-                        child: Text(
-                          'AM',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      Center(
-                        child: Text(
-                          'PM',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 24),
-          Divider(
-            height: 1,
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Cancel',
-            style: TextStyle(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context, _getCurrentTime());
-          },
-          child: Text(
-            'Done',
-            style: TextStyle(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

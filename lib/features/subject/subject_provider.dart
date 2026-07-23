@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../attendance/attendance_model.dart';
 import '../attendance/attendance_provider.dart';
+import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/calendar_service.dart';
@@ -84,6 +85,7 @@ class SubjectProvider with ChangeNotifier {
       _subjects.add(subject);
       await _databaseService.saveSubjects(_subjects);
       await _refreshAttendanceReminders();
+      await BackupService().notifyDataChanged();
       notifyListeners();
       _scheduleAutoSync();
     } catch (e) {
@@ -97,6 +99,7 @@ class SubjectProvider with ChangeNotifier {
     _subjects.addAll(subjects);
     await _databaseService.saveSubjects(_subjects);
     await _refreshAttendanceReminders();
+    await BackupService().notifyDataChanged();
     notifyListeners();
     _scheduleAutoSync();
   }
@@ -351,6 +354,7 @@ class SubjectProvider with ChangeNotifier {
       _subjects[index] = newSubject;
       await _databaseService.saveSubjects(_subjects);
       await _refreshAttendanceReminders();
+      await BackupService().notifyDataChanged();
       notifyListeners();
       _scheduleAutoSync();
     }
@@ -482,6 +486,7 @@ class SubjectProvider with ChangeNotifier {
     await _databaseService.saveSubjects(_subjects);
     await _refreshAttendanceReminders();
     await _attendanceProvider.deleteRecordsForSubject(subject.id);
+    await BackupService().notifyDataChanged();
     notifyListeners();
     _scheduleAutoSync();
   }
@@ -681,10 +686,12 @@ class SubjectProvider with ChangeNotifier {
   Timer? _autoSyncTimer;
 
   void _onAttendanceChanged() {
-    _scheduleAutoSync();
+    scheduleAutoSync();
   }
 
-  void _scheduleAutoSync() {
+  void _scheduleAutoSync() => scheduleAutoSync();
+
+  void scheduleAutoSync() {
     if (_isLoading) return;
     _autoSyncTimer?.cancel();
     _autoSyncTimer = Timer(const Duration(milliseconds: 1500), () {

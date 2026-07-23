@@ -7,6 +7,7 @@ import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sig
 import '../features/subject/subject_model.dart';
 import '../features/semester/semester_model.dart';
 import '../features/attendance/attendance_model.dart';
+import 'database_service.dart';
 
 class CalendarService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -159,6 +160,8 @@ class CalendarService {
         return;
       }
 
+      final plannedLeaves = await DatabaseService().loadPlannedLeaves();
+
       // 2. Wrap the authorized user session
       final httpClient = (await _googleSignIn.authenticatedClient())!;
       final calendarApi = cal.CalendarApi(httpClient);
@@ -209,26 +212,38 @@ class CalendarService {
 
           if (slot.isSpecialClass) {
             final date = slot.specificDate!;
-            
-            // Check if special class is a holiday or specifically cancelled
-            final isDayHoliday = isHoliday(date);
-            bool isSlotCancelled = false;
+            final occStart = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
+            final occEnd = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
+
+            bool isExcluded = isHoliday(date);
+            if (!isExcluded) {
+              for (final leave in plannedLeaves) {
+                if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
+                  if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
+                    isExcluded = true;
+                    break;
+                  }
+                }
+              }
+            }
             for (final record in subject.attendanceRecords) {
-              if (_isSameDay(record.date, date) &&
-                  record.slotKey == slot.slotKey &&
-                  record.status == AttendanceStatus.cancelled) {
-                isSlotCancelled = true;
+              if (_isSameDay(record.date, date) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
+                if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
+                  isExcluded = true;
+                } else if (record.status == AttendanceStatus.attended) {
+                  isExcluded = false;
+                }
                 break;
               }
             }
 
-            if (isDayHoliday || isSlotCancelled) {
+            if (isExcluded) {
               // Skip importing entirely (cleanup will delete it if it existed)
               continue;
             }
 
-            startDateTime = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
-            endDateTime = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
+            startDateTime = occStart;
+            endDateTime = occEnd;
             untilDate = date; // One-time event
           } else {
             // Find first occurrence date on/after semester start (or slot effectiveFrom)
@@ -258,33 +273,38 @@ class CalendarService {
             final String untilFormatted = "${untilDate.toUtc().toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
             recurrenceRule = ["RRULE:FREQ=WEEKLY;UNTIL=$untilFormatted"];
 
-            // Find all occurrence dates and check for holidays/cancellations
+            // Find all occurrence dates and check for holidays/cancellations/leaves/absences
             DateTime currentDate = DateTime(startDateTime.year, startDateTime.month, startDateTime.day);
             final DateTime checkUntil = DateTime(untilDate.year, untilDate.month, untilDate.day);
 
             while (currentDate.isBefore(checkUntil) || _isSameDay(currentDate, checkUntil)) {
-              final isDayHoliday = isHoliday(currentDate);
-              bool isSlotCancelled = false;
+              final occStart = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.startTime.hour, slot.startTime.minute);
+              final occEnd = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.endTime.hour, slot.endTime.minute);
 
+              bool isExcluded = isHoliday(currentDate);
+              if (!isExcluded) {
+                for (final leave in plannedLeaves) {
+                  if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
+                    if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
+                      isExcluded = true;
+                      break;
+                    }
+                  }
+                }
+              }
               for (final record in subject.attendanceRecords) {
-                if (_isSameDay(record.date, currentDate) &&
-                    record.slotKey == slot.slotKey &&
-                    record.status == AttendanceStatus.cancelled) {
-                  isSlotCancelled = true;
+                if (_isSameDay(record.date, currentDate) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
+                  if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
+                    isExcluded = true;
+                  } else if (record.status == AttendanceStatus.attended) {
+                    isExcluded = false;
+                  }
                   break;
                 }
               }
 
-              if (isDayHoliday || isSlotCancelled) {
-                // Convert occurrence local start time to UTC for the EXDATE
-                final occurrenceLocalStart = DateTime(
-                  currentDate.year,
-                  currentDate.month,
-                  currentDate.day,
-                  slot.startTime.hour,
-                  slot.startTime.minute,
-                );
-                final occurrenceUtcStart = occurrenceLocalStart.toUtc();
+              if (isExcluded) {
+                final occurrenceUtcStart = occStart.toUtc();
                 final exdateStr = "${occurrenceUtcStart.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
                 recurrenceRule.add("EXDATE:$exdateStr");
               }

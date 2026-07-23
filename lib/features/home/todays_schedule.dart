@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/snackbar_utils.dart';
@@ -30,8 +31,10 @@ class TodaySchedule extends StatelessWidget {
     required String content,
     required VoidCallback onConfirm,
   }) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
+      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: Text(content),
@@ -42,6 +45,7 @@ class TodaySchedule extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
+              HapticFeedback.vibrate();
               onConfirm();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showReplacingSnackBar(
@@ -101,6 +105,7 @@ class TodaySchedule extends StatelessWidget {
     required DateTime today,
     required SubjectProvider subjectProvider,
   }) async {
+    HapticFeedback.vibrate();
     final String message;
     if (isUnmarking) {
       await subjectProvider.unmarkAttendance(
@@ -417,23 +422,29 @@ class TodaySchedule extends StatelessWidget {
                       icon: const Icon(Icons.cancel_outlined),
                       tooltip: 'Unmark Holiday',
                       color: Colors.grey,
-                      onPressed: () => subjectProvider.unmarkAttendance(
-                        subject.id,
-                        today,
-                        slotKey: slotKey,
-                      ),
+                      onPressed: () {
+                        HapticFeedback.vibrate();
+                        subjectProvider.unmarkAttendance(
+                          subject.id,
+                          today,
+                          slotKey: slotKey,
+                        );
+                      },
                     );
                   } else {
                     trailingWidget = IconButton(
                       icon: const Icon(Icons.celebration_outlined),
                       tooltip: 'Mark Holiday',
                       color: Colors.purple,
-                      onPressed: () => subjectProvider.markAttendance(
-                        subject.id,
-                        today,
-                        AttendanceStatus.cancelled,
-                        slotKey: slotKey,
-                      ),
+                      onPressed: () {
+                        HapticFeedback.vibrate();
+                        subjectProvider.markAttendance(
+                          subject.id,
+                          today,
+                          AttendanceStatus.cancelled,
+                          slotKey: slotKey,
+                        );
+                      },
                     );
                   }
                 }

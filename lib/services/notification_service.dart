@@ -10,6 +10,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../features/attendance/attendance_model.dart';
 import '../features/subject/subject_model.dart';
+import 'package:workmanager/workmanager.dart';
 import 'database_service.dart';
 
 class AttendanceAction {
@@ -130,6 +131,75 @@ class NotificationService {
           );
           _scheduledNotifications.add(notificationId);
           _payloadMap[notificationId] = payload; // Store payload for action handling
+
+          // Queue background geofence check if the subject has a location configured
+          if (subject.locationId != null) {
+            final now = DateTime.now();
+            final startDateTime = DateTime(
+              scheduleDateOnly.year,
+              scheduleDateOnly.month,
+              scheduleDateOnly.day,
+              slot.startTime.hour,
+              slot.startTime.minute,
+            );
+            final geofenceCheckTime = startDateTime.add(const Duration(minutes: 5));
+            Duration delay = geofenceCheckTime.difference(now);
+            if (delay.isNegative) {
+              delay = Duration.zero;
+            }
+
+            final classEnd = DateTime(
+              scheduleDateOnly.year,
+              scheduleDateOnly.month,
+              scheduleDateOnly.day,
+              slot.endTime.hour,
+              slot.endTime.minute,
+            );
+
+            if (now.isBefore(classEnd)) {
+              final taskKey = 'geofence_${subject.id}_${slot.slotKey}_${scheduleDateOnly.millisecondsSinceEpoch}';
+              try {
+                await DatabaseService().logAppEvent(
+                  tag: 'NotificationService',
+                  message: 'Registering geofenceCheckTask for "${subject.name}" ($taskKey) with delay: $delay',
+                );
+                await Workmanager().registerOneOffTask(
+                  taskKey,
+                  'geofenceCheckTask',
+                  initialDelay: delay,
+                  inputData: {
+                    'subjectId': subject.id,
+                    'locationId': subject.locationId,
+                    'date': scheduleDateOnly.toIso8601String(),
+                    'slotKey': slot.slotKey,
+                    'subjectName': subject.name,
+                    'notificationId': notificationId,
+                  },
+                  existingWorkPolicy: ExistingWorkPolicy.replace,
+                  constraints: Constraints(
+                    networkType: NetworkType.notRequired,
+                    requiresBatteryNotLow: false,
+                    requiresCharging: false,
+                    requiresDeviceIdle: false,
+                    requiresStorageNotLow: false,
+                  ),
+                );
+              } catch (e) {
+                debugPrint('Failed to register Workmanager task: $e');
+                await DatabaseService().logAppEvent(
+                  tag: 'NotificationService',
+                  message: 'Failed to register Workmanager task for "${subject.name}": $e',
+                  level: 'ERROR',
+                );
+              }
+            } else {
+              await DatabaseService().logAppEvent(
+                tag: 'NotificationService',
+                message: 'Skipped registering geofenceCheckTask for "${subject.name}": class has already ended.',
+                level: 'WARNING',
+              );
+            }
+          }
         } catch (e) {
           // Silently fail - notification scheduling error
         }
@@ -321,8 +391,8 @@ class NotificationService {
       }
       
       // Show confirmation notification
-      final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
-      _showConfirmationNotification(response.id ?? 0, statusText);
+      final statusText = status == AttendanceStatus.attended ? 'Present' : 'Absent';
+      _showConfirmationNotification(response.id ?? 0, subjectId, statusText);
       
       // Emit action to mark attendance
       _actionController.add(
@@ -349,13 +419,25 @@ class NotificationService {
 
   Future<void> showAttendanceMarkedNotification({
     required int notificationId,
+    required String subjectId,
     required AttendanceStatus status,
   }) async {
-    final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
-    await _showConfirmationNotification(notificationId, statusText);
+    final statusText = status == AttendanceStatus.attended ? 'Present' : 'Absent';
+    await _showConfirmationNotification(notificationId, subjectId, statusText);
   }
 
-  Future<void> _showConfirmationNotification(int notificationId, String statusText) async {
+  Future<void> _showConfirmationNotification(int notificationId, String subjectId, String statusText) async {
+    final databaseService = DatabaseService();
+    final subjects = await databaseService.loadSubjects();
+    Subject? subject;
+    for (final s in subjects) {
+      if (s.id == subjectId) {
+        subject = s;
+        break;
+      }
+    }
+    final subjectName = subject?.name ?? 'Class';
+
     final confirmationDetails = NotificationDetails(
       android: AndroidNotificationDetails(
         'attendance_reminders',
@@ -372,18 +454,132 @@ class NotificationService {
     try {
       await _plugin.show(
         id: notificationId,
-        title: 'Attendance',
-        body: statusText,
+        title: 'Attendance Marked',
+        body: '$subjectName marked as $statusText',
         notificationDetails: confirmationDetails,
       );
-      
-      // Auto-dismiss after 2 seconds
-      Future.delayed(const Duration(seconds: 2), () {
-        _plugin.cancel(id: notificationId);
-      });
     } catch (e) {
       // Silently fail - confirmation notification error
     }
+  }
+
+  /// Displays a system notification when a backup is generated
+  Future<void> showBackupNotification({
+    required String title,
+    required String body,
+  }) async {
+    await init();
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'semester_backups',
+        'Semester Backups',
+        channelDescription: 'Notifications for automatic and manual semester backups',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: 'icon_noti',
+        autoCancel: true,
+      ),
+    );
+
+    try {
+      await _plugin.show(
+        id: 99999,
+        title: title,
+        body: body,
+        notificationDetails: details,
+      );
+    } catch (e) {
+      debugPrint('Error showing backup notification: $e');
+    }
+  }
+
+  /// Finds the most recent unmarked class attendance of today, and schedules a notification
+  /// to fire exactly 15 seconds from now.
+  /// Returns the name/acronym of the subject if scheduled, or null if no unmarked classes exist.
+  Future<String?> triggerTestNotificationAfter15Seconds(List<Subject> subjects) async {
+    await init();
+    final now = tz.TZDateTime.now(tz.local);
+    final today = DateTime(now.year, now.month, now.day);
+    final existingAttendance = await DatabaseService().loadAttendance();
+    final List<Map<String, dynamic>> todayUnmarkedSlots = [];
+
+    for (final subject in subjects) {
+      for (final slot in subject.schedule) {
+        if (!slot.occursOnDate(today)) {
+          continue;
+        }
+
+        final isAlreadyMarked = existingAttendance.any((record) =>
+            record.subjectId == subject.id &&
+            DateTime(record.date.year, record.date.month, record.date.day) == today &&
+            (record.slotKey ?? '') == slot.slotKey
+        );
+
+        if (!isAlreadyMarked) {
+          todayUnmarkedSlots.add({
+            'subject': subject,
+            'slot': slot,
+          });
+        }
+      }
+    }
+
+    if (todayUnmarkedSlots.isEmpty) {
+      return null;
+    }
+
+    DateTime getSlotEnd(TimeSlot slot) {
+      return DateTime(today.year, today.month, today.day, slot.endTime.hour, slot.endTime.minute);
+    }
+
+    // Sort unmarked slots by their end time chronologically
+    todayUnmarkedSlots.sort((a, b) {
+      final slotA = a['slot'] as TimeSlot;
+      final slotB = b['slot'] as TimeSlot;
+      return getSlotEnd(slotA).compareTo(getSlotEnd(slotB));
+    });
+
+    final nowDateTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    
+    // Find the one that ended most recently before or at "now"
+    Map<String, dynamic>? selected;
+    for (final item in todayUnmarkedSlots.reversed) {
+      final slot = item['slot'] as TimeSlot;
+      final end = getSlotEnd(slot);
+      if (!end.isAfter(nowDateTime)) {
+        selected = item;
+        break;
+      }
+    }
+
+    // If none has ended yet, pick the first one (earliest ending slot of the day)
+    selected ??= todayUnmarkedSlots.first;
+
+    final triggerTime = now.add(const Duration(seconds: 15));
+    final subject = selected['subject'] as Subject;
+    final slot = selected['slot'] as TimeSlot;
+    final notificationId = _notificationId(subject.id, slot);
+    final displayName = subject.acronym ?? subject.name;
+
+    final payload = jsonEncode({
+      'subjectId': subject.id,
+      'date': today.toIso8601String(),
+      'slotKey': slot.slotKey,
+    });
+
+    final scheduleMode = await _androidScheduleMode();
+
+    await _plugin.zonedSchedule(
+      id: notificationId,
+      title: 'Mark attendance',
+      body: 'Class ended: $displayName',
+      scheduledDate: triggerTime,
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: scheduleMode,
+      payload: payload,
+    );
+
+    return displayName;
   }
 }
 
@@ -471,7 +667,7 @@ void notificationTapBackground(NotificationResponse response) async {
     }
 
     // Show a confirmation notification
-    final statusText = status == AttendanceStatus.attended ? 'Marked as Present' : 'Marked as Absent';
+    final statusText = status == AttendanceStatus.attended ? 'Present' : 'Absent';
     
     final confirmationDetails = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -487,17 +683,22 @@ void notificationTapBackground(NotificationResponse response) async {
     );
 
     if (response.id != null) {
+      final subjects = await databaseService.loadSubjects();
+      Subject? subject;
+      for (final s in subjects) {
+        if (s.id == subjectId) {
+          subject = s;
+          break;
+        }
+      }
+      final subjectName = subject?.name ?? 'Class';
+
       await plugin.show(
         id: response.id!,
-        title: 'Attendance',
-        body: statusText,
+        title: 'Attendance Marked',
+        body: '$subjectName marked as $statusText',
         notificationDetails: confirmationDetails,
       );
-      
-      // Auto-dismiss after 2 seconds
-      Future.delayed(const Duration(seconds: 2), () {
-        plugin.cancel(id: response.id!);
-      });
     }
   } catch (e) {
     debugPrint('Error in notificationTapBackground: $e');

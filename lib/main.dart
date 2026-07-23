@@ -13,13 +13,19 @@ import 'features/attendance/attendance_model.dart';
 import 'features/attendance/attendance_provider.dart';
 import 'features/home/home_screen.dart';
 import 'features/semester/semester_provider.dart';
-import 'features/settings/setup_guide_screen.dart';
 import 'features/settings/time_format_provider.dart';
 import 'features/settings/swipe_action_provider.dart';
 import 'features/subject/subject_provider.dart';
+import 'features/tutorial/tutorial_controller.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'features/location/location_model.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/update_service.dart';
+import 'services/backup_service.dart';
+import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -34,6 +40,11 @@ void callbackDispatcher() {
       // Initialize database in background context
       await DatabaseService().init();
       
+      await DatabaseService().logAppEvent(
+        tag: 'Workmanager',
+        message: 'Task "$task" started with inputData: $inputData',
+      );
+      
       if (task == 'updateCheck') {
         if (kDebugMode) return true;
         // Check for updates
@@ -47,13 +58,271 @@ void callbackDispatcher() {
         final today = DateTime.now();
         final today0 = DateTime(today.year, today.month, today.day);
         await _performEndOfDayAttendanceMarking(today0);
+      } else if (task == 'geofenceCheckTask') {
+        final subjectId = inputData?['subjectId'] as String?;
+        final locationId = inputData?['locationId'] as String?;
+        final dateStr = inputData?['date'] as String?;
+        final slotKey = inputData?['slotKey'] as String?;
+        final subjectName = inputData?['subjectName'] as String?;
+        final notificationId = inputData?['notificationId'] as int?;
+        if (subjectId != null && locationId != null && dateStr != null) {
+          final date = DateTime.parse(dateStr);
+          await _performGeofenceCheck(subjectId, locationId, date, slotKey, subjectName, notificationId);
+        } else {
+          await DatabaseService().logAppEvent(
+            tag: 'Workmanager',
+            message: 'Geofence task aborted: missing subjectId, locationId, or date.',
+            level: 'WARNING',
+          );
+        }
+      } else if (task == 'dailySemesterBackup' || task == 'testBackgroundBackup' || task == 'appCloseBackupTask') {
+        await BackupService().createBackup(
+          showNotification: true,
+          triggerReason: task == 'appCloseBackupTask'
+              ? '15-minute app exit auto-backup'
+              : task == 'testBackgroundBackup'
+                  ? '30s Debug Test Backup'
+                  : 'Daily 10 PM background backup',
+          force: task == 'testBackgroundBackup',
+        );
       }
       return true;
     } catch (e) {
       debugPrint('Background task failed: $e');
+      try {
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: 'Background task failed: $e',
+          level: 'ERROR',
+        );
+      } catch (_) {}
       return false;
     }
   });
+}
+
+@pragma('vm:entry-point')
+Future<void> _performGeofenceCheck(
+  String subjectId,
+  String locationId,
+  DateTime date,
+  String? slotKey,
+  String? subjectName,
+  int? notificationId,
+) async {
+  final db = DatabaseService();
+  try {
+    await db.logAppEvent(
+      tag: 'Geofence',
+      message: 'Starting check for subject: $subjectName ($subjectId), locationId: $locationId',
+    );
+
+    // Load the specific location configuration
+    final locations = await db.loadLocations();
+    LocationConfig? targetLocation;
+    for (final loc in locations) {
+      if (loc.id == locationId) {
+        targetLocation = loc;
+        break;
+      }
+    }
+    
+    if (targetLocation == null) {
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Aborted: Target location configuration not found in DB.',
+        level: 'ERROR',
+      );
+      return;
+    }
+
+    if (targetLocation.latitude == null || targetLocation.longitude == null) {
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Aborted: Location "${targetLocation.name}" has no coordinates configured.',
+        level: 'ERROR',
+      );
+      return;
+    }
+
+    await db.logAppEvent(
+      tag: 'Geofence',
+      message: 'Target location: "${targetLocation.name}" at (${targetLocation.latitude}, ${targetLocation.longitude})',
+    );
+
+    // Check location permission before fetching GPS
+    final permission = await Geolocator.checkPermission();
+    await db.logAppEvent(
+      tag: 'Geofence',
+      message: 'Current background permission level: $permission',
+    );
+
+    if (permission != LocationPermission.always) {
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Aborted: Background location permission ("Allow all the time") is required (current: $permission).',
+        level: 'ERROR',
+      );
+      return;
+    }
+
+    // Fetch current coordinates
+    Position position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Retrieved GPS: (${position.latitude}, ${position.longitude}) with accuracy ${position.accuracy}m',
+      );
+    } catch (e) {
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Failed to fetch current GPS coordinates: $e. Attempting last known position...',
+        level: 'WARNING',
+      );
+      
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown == null) {
+        await db.logAppEvent(
+          tag: 'Geofence',
+          message: 'Aborted: Last known position was also null.',
+          level: 'ERROR',
+        );
+        return;
+      }
+      position = lastKnown;
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Using last known GPS: (${position.latitude}, ${position.longitude})',
+      );
+    }
+
+    // Calculate distance
+    final distance = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      targetLocation.latitude!,
+      targetLocation.longitude!,
+    );
+
+    await db.logAppEvent(
+      tag: 'Geofence',
+      message: 'Distance to class location is ${distance.toStringAsFixed(2)} meters.',
+    );
+
+    // 25m radius — accounts for room-level proximity
+    if (distance <= 25.0) {
+      final records = await db.loadAttendance();
+      final normDate = DateTime(date.year, date.month, date.day);
+
+      // Check if already marked
+      final alreadyMarked = records.any((r) {
+        final rNorm = DateTime(r.date.year, r.date.month, r.date.day);
+        return r.subjectId == subjectId &&
+            rNorm == normDate &&
+            (r.slotKey ?? '') == (slotKey ?? '');
+      });
+
+      if (alreadyMarked) {
+        await db.logAppEvent(
+          tag: 'Geofence',
+          message: 'Attendance already marked for today/slot. Skipping auto-marking.',
+        );
+        return;
+      }
+
+      final newRecord = Attendance(
+        subjectId: subjectId,
+        date: date,
+        status: AttendanceStatus.attended,
+        slotKey: slotKey,
+      );
+      await db.saveSingleAttendance(newRecord);
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Auto-marked subject "$subjectName" as ATTENDED.',
+      );
+
+      // Notify main isolate if active (no-op if app is closed)
+      final actionPort = IsolateNameServer.lookupPortByName(
+          NotificationService.actionPortName);
+      if (actionPort != null) {
+        actionPort.send({
+          'type': 'attendance_marked',
+          'subjectId': subjectId,
+          'date': date.toIso8601String(),
+          'slotKey': slotKey,
+          'notificationId': notificationId,
+          'status': AttendanceStatus.attended.index,
+        });
+        await db.logAppEvent(
+          tag: 'Geofence',
+          message: 'Sent attendance_marked event to main isolate.',
+        );
+      } else {
+        await db.logAppEvent(
+          tag: 'Geofence',
+          message: 'Main isolate not running (app closed). Notification not sent via port.',
+        );
+      }
+
+      // Initialize notification plugin in the background isolate
+      const androidSettings = AndroidInitializationSettings('icon_noti');
+      const initSettings = InitializationSettings(android: androidSettings);
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(settings: initSettings);
+
+      // Cancel the end-of-class "mark attendance" reminder
+      if (notificationId != null) {
+        await plugin.cancel(id: notificationId);
+        await db.logAppEvent(
+          tag: 'Geofence',
+          message: 'Cancelled original end-of-class reminder notification (ID: $notificationId).',
+        );
+      }
+
+      // Show confirmation notification
+      const confirmationDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'attendance_reminders',
+          'Attendance reminders',
+          channelDescription: 'Reminders to mark attendance after class ends',
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: 'icon_noti',
+          enableVibration: true,
+          autoCancel: true,
+        ),
+      );
+      
+      await plugin.show(
+        id: notificationId ?? 999999,
+        title: 'Auto-Attendance Marked ✓',
+        body: '${subjectName ?? "Class"} marked Present (you were nearby)',
+        notificationDetails: confirmationDetails,
+      );
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'Displayed Auto-Attendance confirmation notification.',
+      );
+    } else {
+      await db.logAppEvent(
+        tag: 'Geofence',
+        message: 'You are outside the 25-meter range (${distance.toStringAsFixed(2)}m). Auto-marking skipped.',
+      );
+    }
+  } catch (e) {
+    await db.logAppEvent(
+      tag: 'Geofence',
+      message: 'Uncaught error in geofence check: $e',
+      level: 'ERROR',
+    );
+  }
 }
 
 /// Helper function to perform end-of-day attendance marking
@@ -168,6 +437,17 @@ Future<void> _performEndOfDayAttendanceMarking(DateTime todayDate) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Android Google Maps Renderer Surface
+  try {
+    final GoogleMapsFlutterPlatform mapsImplementation = GoogleMapsFlutterPlatform.instance;
+    if (mapsImplementation is GoogleMapsFlutterAndroid) {
+      mapsImplementation.useAndroidViewSurface = true;
+      mapsImplementation.initializeWithRenderer(AndroidMapRenderer.latest);
+    }
+  } catch (e) {
+    debugPrint('Google Maps renderer initialization note: $e');
+  }
   
   // Global error handler to catch any unhandled exceptions
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -189,9 +469,7 @@ Future<void> main() async {
 
   // Initialize WorkManager for background update checks
   try {
-    await Workmanager().initialize(
-      callbackDispatcher,
-    );
+    await Workmanager().initialize(callbackDispatcher);
     
     // Register periodic task: check for updates once daily
     if (!kDebugMode) {
@@ -216,6 +494,28 @@ Future<void> main() async {
       'endOfDayAttendanceCheck',
       frequency: const Duration(days: 1),
       initialDelay: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      constraints: Constraints(
+        requiresBatteryNotLow: false,
+        requiresCharging: false,
+        requiresDeviceIdle: false,
+        networkType: NetworkType.notRequired,
+      ),
+    );
+
+    // Register periodic task: daily semester backup at 10:00 PM
+    final now = DateTime.now();
+    var backupTargetTime = DateTime(now.year, now.month, now.day, 22, 0, 0);
+    if (now.isAfter(backupTargetTime)) {
+      backupTargetTime = backupTargetTime.add(const Duration(days: 1));
+    }
+    final backupInitialDelay = backupTargetTime.difference(now);
+
+    await Workmanager().registerPeriodicTask(
+      'daily_semester_backup',
+      'dailySemesterBackup',
+      frequency: const Duration(days: 1),
+      initialDelay: backupInitialDelay,
       existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       constraints: Constraints(
         requiresBatteryNotLow: false,
@@ -289,6 +589,7 @@ Future<void> main() async {
         ChangeNotifierProvider(
           create: (context) => SubjectProvider(attendanceProvider),
         ),
+        ChangeNotifierProvider(create: (context) => TutorialController()),
       ],
       child: MyApp(
         timeFormatProvider: timeFormatProvider,
@@ -337,6 +638,7 @@ Future<void> main() async {
             if (action.notificationId != null) {
               await notificationService.showAttendanceMarkedNotification(
                 notificationId: action.notificationId!,
+                subjectId: action.subjectId,
                 status: action.status,
               );
             }
@@ -439,7 +741,7 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
         if (!mounted) {
           return;
         }
-        _showFirstLaunchPrompt();
+        Provider.of<TutorialController>(context, listen: false).startTutorial();
       });
     }
   }
@@ -483,45 +785,6 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
       debugPrint('Error in fallback attendance marking: $e');
       // Silently fail - this is a non-critical operation
     }
-  }
-
-  Future<void> _showFirstLaunchPrompt() async {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: isDarkMode
-          ? Colors.white.withValues(alpha: 0.12)
-          : null,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Welcome to AttendMate'),
-          content: const Text(
-            'Do you want to check the Setup Guide first, or start using the app directly?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const SetupGuideScreen(),
-                  ),
-                );
-              },
-              child: const Text('Check Setup Guide'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Start Using App'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   @override
@@ -592,6 +855,64 @@ class MyApp extends StatelessWidget {
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
       ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: Colors.white,
+        elevation: 6,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        headerBackgroundColor: Colors.black,
+        headerForegroundColor: Colors.white,
+        headerHeadlineStyle: GoogleFonts.roboto(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        headerHelpStyle: GoogleFonts.roboto(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white70,
+        ),
+        weekdayStyle: GoogleFonts.roboto(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+        dayStyle: GoogleFonts.roboto(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        dayShape: WidgetStateProperty.all<OutlinedBorder>(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.black;
+          }
+          return null;
+        }),
+        dayForegroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          if (states.contains(WidgetState.disabled)) {
+            return Colors.grey.shade400;
+          }
+          return Colors.black;
+        }),
+        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+        todayForegroundColor: WidgetStateProperty.all(Colors.black),
+        todayBorder: const BorderSide(color: Colors.black, width: 1.8),
+        cancelButtonStyle: TextButton.styleFrom(
+          foregroundColor: Colors.grey.shade700,
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        confirmButtonStyle: TextButton.styleFrom(
+          foregroundColor: Colors.black,
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+      ),
     );
 
     final ThemeData darkTheme = ThemeData(
@@ -629,6 +950,68 @@ class MyApp extends StatelessWidget {
         backgroundColor: Colors.black,
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.grey,
+      ),
+      dialogTheme: DialogThemeData(
+        barrierColor: Colors.white.withValues(alpha: 0.12),
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
+        ),
+        headerBackgroundColor: Colors.black,
+        headerForegroundColor: Colors.white,
+        headerHeadlineStyle: GoogleFonts.roboto(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        headerHelpStyle: GoogleFonts.roboto(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white70,
+        ),
+        weekdayStyle: GoogleFonts.roboto(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Colors.white70,
+        ),
+        dayStyle: GoogleFonts.roboto(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        dayShape: WidgetStateProperty.all<OutlinedBorder>(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        dayBackgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return null;
+        }),
+        dayForegroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.black;
+          }
+          if (states.contains(WidgetState.disabled)) {
+            return Colors.white24;
+          }
+          return Colors.white;
+        }),
+        todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
+        todayForegroundColor: WidgetStateProperty.all(Colors.white),
+        todayBorder: const BorderSide(color: Colors.white, width: 1.8),
+        cancelButtonStyle: TextButton.styleFrom(
+          foregroundColor: Colors.grey.shade400,
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        confirmButtonStyle: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
       ),
     );
 

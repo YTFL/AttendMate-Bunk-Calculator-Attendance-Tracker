@@ -15,6 +15,9 @@ class Subject {
   final List<TimeSlot> schedule;
   final int targetAttendance;
   final List<Attendance> attendanceRecords;
+  final String? locationId;
+  final String? room;
+  final String? block;
 
   Subject({
     String? id,
@@ -24,6 +27,9 @@ class Subject {
     required this.schedule,
     this.targetAttendance = 75,
     this.attendanceRecords = const [],
+    this.locationId,
+    this.room,
+    this.block,
   }) : id = id ?? uuid.v4();
 
   factory Subject.fromJson(Map<String, dynamic> json) {
@@ -39,6 +45,9 @@ class Subject {
       attendanceRecords: (json['attendanceRecords'] as List<dynamic>? ?? [])
           .map((e) => Attendance.fromJson(e as Map<String, dynamic>))
           .toList(),
+      locationId: json['locationId'] as String?,
+      room: json['room'] as String?,
+      block: json['block'] as String?,
     );
   }
 
@@ -50,6 +59,9 @@ class Subject {
         'schedule': schedule.map((e) => e.toJson()).toList(),
         'targetAttendance': targetAttendance,
         'attendanceRecords': attendanceRecords.map((e) => e.toJson()).toList(),
+        'locationId': locationId,
+        'room': room,
+        'block': block,
       };
 
   Subject copyWith({
@@ -60,6 +72,9 @@ class Subject {
     List<TimeSlot>? schedule,
     int? targetAttendance,
     List<Attendance>? attendanceRecords,
+    String? Function()? locationId,
+    String? Function()? room,
+    String? Function()? block,
   }) {
     return Subject(
       id: id ?? this.id,
@@ -69,6 +84,9 @@ class Subject {
       schedule: schedule ?? this.schedule,
       targetAttendance: targetAttendance ?? this.targetAttendance,
       attendanceRecords: attendanceRecords ?? this.attendanceRecords,
+      locationId: locationId != null ? locationId() : this.locationId,
+      room: room != null ? room() : this.room,
+      block: block != null ? block() : this.block,
     );
   }
 
@@ -170,6 +188,9 @@ class TimeSlot {
   final DateTime? specificDate;
   final DateTime? effectiveFrom;
   final DateTime? effectiveUntil;
+  final String? locationId;
+  final String? room;
+  final String? block;
 
   TimeSlot({
     required this.day,
@@ -178,6 +199,9 @@ class TimeSlot {
     this.specificDate,
     this.effectiveFrom,
     this.effectiveUntil,
+    this.locationId,
+    this.room,
+    this.block,
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
@@ -199,6 +223,9 @@ class TimeSlot {
       specificDate: normalizedDate,
       effectiveFrom: normalizeDate(parsedEffectiveFrom),
       effectiveUntil: normalizeDate(parsedEffectiveUntil),
+      locationId: json['locationId'] as String?,
+      room: json['room'] as String?,
+      block: json['block'] as String?,
     );
   }
 
@@ -209,6 +236,9 @@ class TimeSlot {
         if (specificDate != null) 'specificDate': specificDate!.toIso8601String(),
         if (effectiveFrom != null) 'effectiveFrom': effectiveFrom!.toIso8601String(),
         if (effectiveUntil != null) 'effectiveUntil': effectiveUntil!.toIso8601String(),
+        if (locationId != null) 'locationId': locationId,
+        if (room != null) 'room': room,
+        if (block != null) 'block': block,
       };
 
   TimeSlot copyWith({
@@ -218,9 +248,13 @@ class TimeSlot {
     DateTime? specificDate,
     DateTime? effectiveFrom,
     DateTime? effectiveUntil,
+    String? locationId,
+    String? room,
+    String? block,
     bool clearSpecificDate = false,
     bool clearEffectiveFrom = false,
     bool clearEffectiveUntil = false,
+    bool clearLocation = false,
   }) {
     return TimeSlot(
       day: day ?? this.day,
@@ -235,6 +269,9 @@ class TimeSlot {
       effectiveUntil: clearEffectiveUntil
           ? null
           : normalizeDate(effectiveUntil ?? this.effectiveUntil),
+      locationId: clearLocation ? null : (locationId ?? this.locationId),
+      room: clearLocation ? null : (room ?? this.room),
+      block: clearLocation ? null : (block ?? this.block),
     );
   }
 

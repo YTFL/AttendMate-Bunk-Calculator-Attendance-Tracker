@@ -1,4 +1,4 @@
-enum AttendanceStatus { attended, absent, cancelled }
+enum AttendanceStatus { attended, absent, cancelled, plannedAbsent }
 
 class Attendance {
   final String subjectId;

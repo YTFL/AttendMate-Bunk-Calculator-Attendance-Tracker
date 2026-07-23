@@ -9,6 +9,7 @@ class UpdateFullScreen extends StatelessWidget {
   final VoidCallback onInstallNow;
   final VoidCallback onRemindLater;
   final bool isDownloading;
+  final double downloadProgress;
 
   const UpdateFullScreen({
     super.key,
@@ -17,6 +18,7 @@ class UpdateFullScreen extends StatelessWidget {
     required this.onInstallNow,
     required this.onRemindLater,
     this.isDownloading = false,
+    this.downloadProgress = 0.0,
   });
 
   @override
@@ -38,39 +40,114 @@ class UpdateFullScreen extends StatelessWidget {
           top: false,
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: isDownloading ? null : onRemindLater,
-                    child: const Text('Remind Later'),
+            child: isDownloading
+                ? _buildProgressBar(context, downloadProgress)
+                : Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: onRemindLater,
+                          child: const Text('Remind Later'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onInstallNow,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Install Now'),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: isDownloading ? null : onInstallNow,
-                    icon: isDownloading
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Theme.of(context).primaryColor,
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.download),
-                    label: Text(isDownloading ? 'Downloading...' : 'Install Now'),
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildProgressBar(BuildContext context, double progress) {
+    final percent = (progress * 100).clamp(0, 100).toInt();
+    final textString = progress > 0 ? 'Downloading... $percent%' : 'Downloading...';
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final backgroundColor = isDark ? primaryColor.withValues(alpha: 0.4) : primaryColor;
+    const progressColor = Colors.white;
+    const textOnBackground = Colors.white;
+    const textOnProgress = Colors.black87;
+
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final totalWidth = constraints.maxWidth;
+          final filledWidth = totalWidth * progress.clamp(0.0, 1.0);
+
+          return Stack(
+            children: [
+              // Background Layer Text
+              SizedBox(
+                width: totalWidth,
+                height: 48,
+                child: Center(
+                  child: Text(
+                    textString,
+                    style: const TextStyle(
+                      color: textOnBackground,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+              // White progress fill layer with dark text clipped to filledWidth
+              if (filledWidth > 0)
+                ClipRect(
+                  clipper: _ProgressClipper(filledWidth),
+                  child: Container(
+                    width: totalWidth,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: progressColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        textString,
+                        style: const TextStyle(
+                          color: textOnProgress,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ProgressClipper extends CustomClipper<Rect> {
+  final double width;
+  _ProgressClipper(this.width);
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTRB(0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(_ProgressClipper oldClipper) {
+    return oldClipper.width != width;
   }
 }
 

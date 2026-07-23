@@ -10,9 +10,13 @@ import '../subject/add_subject_screen.dart';
 import '../subject/import_timetable_screen.dart';
 import 'calendar_sync_selection_screen.dart';
 import 'swipe_actions_settings_screen.dart';
+import '../location/location_manager_screen.dart';
+import '../planner/leave_planner_screen.dart';
+import 'semester_backup_screen.dart';
 
 class SetupGuideScreen extends StatefulWidget {
-  const SetupGuideScreen({super.key});
+  final int initialPage;
+  const SetupGuideScreen({super.key, this.initialPage = 0});
 
   @override
   State<SetupGuideScreen> createState() => _SetupGuideScreenState();
@@ -204,8 +208,6 @@ Bulk actions are available for a full day:
 - **Mark Holiday**
 - **Skip Day**
 - **Mark Today as Present**
-
-> Any class left unmarked at 10 PM is auto-marked as Present (holiday days are skipped).
 ''',
     ),
     _GuideSection(
@@ -345,7 +347,96 @@ Once calendar synchronization is configured, you don't need to manually sync aga
 ''',
     ),
   _GuideSection(
-      title: '11. More',
+    title: '11. Setting up Locations & Auto-Attendance',
+    openInAppLabel: 'Open Location Manager',
+    openTarget: _GuideOpenTarget.locationManager,
+    markdown: '''
+## Overview
+AttendMate supports location-based auto-attendance to automatically mark you as Present when you are in your classroom.
+
+---
+
+## Steps to Configure Locations
+1. Go to the **More** tab and tap **Location Manager**.
+2. Tap the **+** (Add) button in the bottom-right corner.
+3. Enter a **Location Name** (e.g. *Room 402*) and **Block** (e.g. *Block C*).
+4. (Optional) Capture GPS coordinates:
+   - Tap **Set to Current Location** to grab your device's current coordinates.
+   - Or tap **Select from Map** to open maps, copy coordinates, and paste them.
+5. Tap **Save Location**.
+
+---
+
+## Link Locations to Subjects
+1. Go to the **Subjects** tab and edit or add a subject.
+2. Under **Class Location**, select your saved room configuration from the dropdown.
+3. Tap **Save** / **Add Subject**.
+
+---
+
+## How Auto-Attendance Works
+- **Low-Power Trigger**: Exactly 5 minutes after a scheduled class starts, a background task wakes up and checks your location.
+- **Range Check**: If you are within a **25-meter radius** of the classroom coordinates, it automatically marks you as **Present**.
+- **Notification**: A confirmation notification is displayed: *"Auto-logged Present for DBMS in Room 402"*.
+
+> **Background Location**: This feature requires setting location permissions to **"Allow all the time"** in device settings.
+''',
+  ),
+  _GuideSection(
+    title: '12. The Bunk Calculator',
+    openInAppLabel: 'Open Bunk Meter',
+    openTarget: _GuideOpenTarget.bunkMeterTab,
+    markdown: '''
+## Overview
+The **What-If Calculator** helps you run hypothetical scenarios to see the impact of future attendance actions on your overall percentages.
+
+---
+
+## How to Simulate Scenarios
+1. Go to the **Bunk Meter** tab.
+2. Tap the **Calculator** icon in the top app bar (upper-right corner).
+3. Select a subject to simulate.
+4. Adjust the variables using the sliders or input fields:
+   - *"What if I bunk the next N classes?"*
+   - *"What if I attend the next M classes?"*
+5. The sheet will instantly compute and compare:
+   - **Current Attendance %**
+   - **Simulated Attendance %**
+6. If the simulated percentage falls below your target limit (e.g., 75%), a red warning is shown.
+''',
+  ),
+  _GuideSection(
+    title: '13. Planning Future Trips & Leaves',
+    openInAppLabel: 'Open Leave Planner',
+    openTarget: _GuideOpenTarget.leavePlanner,
+    markdown: '''
+## Overview
+The **Leave Planner** allows you to schedule fests, medical leaves, or personal trips in advance. The app forecasts the impact on your attendance so you can prepare buffer classes beforehand.
+
+---
+
+## Creating a Planned Leave
+1. Go to the **Bunk Meter** tab.
+2. Tap the **Leave Planner** (calendar checklist) icon in the top app bar.
+3. Tap **Add Planned Leave** or the **+** button.
+4. Select the **Start Date** and **End Date** for your leave.
+5. Provide a **Reason** (e.g., *Technical Fest*, *Medical Leave*).
+6. Tap **Save**.
+
+---
+
+## Impact & Forecasting
+- **Projected Percentage**: The **Bunk Meter** screen will display both your **Current Attendance** and a **Projected Attendance (after Leave)**.
+- **Warnings**: The system warns you if your scheduled leaves will drag any subject below your target attendance limit.
+
+---
+
+## Resolving Planned Leaves
+Once the leave period passes, a dialog prompt will ask you to confirm your absences to automatically record them in your attendance logs.
+''',
+  ),
+  _GuideSection(
+      title: '14. More',
       openInAppLabel: 'Open More Page',
       openTarget: _GuideOpenTarget.moreTab,
       markdown: '''
@@ -373,7 +464,41 @@ The **More** page contains app info, update tools, guide access, and support lin
 ''',
     ),
   _GuideSection(
-      title: '12. Tips & Tricks',
+      title: '15. Semester Backup & Restore',
+      openInAppLabel: 'Open Semester Backup',
+      openTarget: _GuideOpenTarget.semesterBackup,
+      markdown: '''
+## Overview
+Semester Backup allows you to protect your attendance records, timetable schedules, subject details, location geofences, and app settings against accidental deletion or app uninstallation.
+
+---
+
+## Setting Up Your Backup Location
+1. Go to the **More** tab and tap **Semester Backup**.
+2. Tap **Select Location** or **Change Location** to select a dedicated folder on your device storage.
+3. Once a custom folder is selected, AttendMate will automatically manage up to **3 rolling backups** in that location.
+
+> **Important**: Internal app storage gets deleted if you uninstall the app. Choosing a custom folder on your device storage ensures your backups survive app uninstallation.
+
+---
+
+## Automatic Backups & Notifications
+AttendMate automatically creates a fresh backup and sends a system notification in two scenarios:
+1. **App Close / Exit**: When you finish using the app and minimize/close it.
+2. **Daily 10:00 PM Backup**: Background task running every night at 10:00 PM.
+
+> AttendMate keeps at most **3 latest backups** in your selected directory, automatically deleting older ones.
+
+---
+
+## Restoring a Backup
+1. Open **Semester Backup** from the **More** tab.
+2. Tap **Restore This Backup** on any of your saved rolling backups, or tap **Import File** to restore from any `.json` backup file.
+3. Confirm the restoration. AttendMate will restore 1:1 exact data state, including all subjects, colors, schedules, attendance history, and preferences.
+''',
+    ),
+  _GuideSection(
+      title: '16. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -393,7 +518,8 @@ The **More** page contains app info, update tools, guide access, and support lin
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _currentPage = widget.initialPage;
+    _pageController = PageController(initialPage: widget.initialPage);
   }
 
   @override
@@ -442,6 +568,12 @@ The **More** page contains app info, update tools, guide access, and support lin
         return _openHomeTab(4, subLevelBuilder: (context) => const CalendarSyncSelectionScreen());
       case _GuideOpenTarget.swipeActions:
         return _openHomeTab(4, subLevelBuilder: (context) => const SwipeActionsSettingsScreen());
+      case _GuideOpenTarget.locationManager:
+        return _openHomeTab(4, subLevelBuilder: (context) => const LocationManagerScreen());
+      case _GuideOpenTarget.leavePlanner:
+        return _openHomeTab(3, subLevelBuilder: (context) => const LeavePlannerScreen());
+      case _GuideOpenTarget.semesterBackup:
+        return _openHomeTab(4, subLevelBuilder: (context) => const SemesterBackupScreen());
     }
   }
 
@@ -597,6 +729,9 @@ enum _GuideOpenTarget {
   calendar,
   googleCalendarSync,
   swipeActions,
+  locationManager,
+  leavePlanner,
+  semesterBackup,
 }
 
 class _TableOfContentsPage extends StatelessWidget {

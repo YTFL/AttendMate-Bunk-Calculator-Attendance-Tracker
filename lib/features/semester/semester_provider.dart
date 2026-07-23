@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import 'semester_model.dart';
 
@@ -55,6 +56,7 @@ class SemesterProvider with ChangeNotifier {
     try {
       _semester = semester;
       await _databaseService.saveSemester(semester);
+      await BackupService().notifyDataChanged();
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -70,6 +72,7 @@ class SemesterProvider with ChangeNotifier {
       // Save the new semester
       _semester = semester;
       await _databaseService.saveSemester(semester);
+      await BackupService().notifyDataChanged();
       notifyListeners();
     } catch (e) {
       rethrow;

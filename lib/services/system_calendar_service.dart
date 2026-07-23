@@ -127,6 +127,8 @@ class SystemCalendarService {
       final plugin = DeviceCalendar.instance;
       final db = DatabaseService();
 
+      final plannedLeaves = await db.loadPlannedLeaves();
+
       // Track active event IDs in this run
       final Set<String> activeEventIds = {};
 
@@ -159,16 +161,42 @@ class SystemCalendarService {
               }
 
               if (withinValidity) {
-                // Check if this slot key has a cancellation or is marked holiday
-                final isDayHoliday = isHoliday(dateOnly);
-                bool isSlotCancelled = false;
+                final startDateTime = DateTime(
+                  dateOnly.year,
+                  dateOnly.month,
+                  dateOnly.day,
+                  slot.startTime.hour,
+                  slot.startTime.minute,
+                );
+                final endDateTime = DateTime(
+                  dateOnly.year,
+                  dateOnly.month,
+                  dateOnly.day,
+                  slot.endTime.hour,
+                  slot.endTime.minute,
+                );
+
+                bool isExcluded = isHoliday(dateOnly);
+                if (!isExcluded) {
+                  for (final leave in plannedLeaves) {
+                    if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
+                      if (startDateTime.isBefore(leave.endDate) && endDateTime.isAfter(leave.startDate)) {
+                        isExcluded = true;
+                        break;
+                      }
+                    }
+                  }
+                }
                 for (final record in subject.attendanceRecords) {
                   if (record.date.year == dateOnly.year &&
                       record.date.month == dateOnly.month &&
                       record.date.day == dateOnly.day &&
-                      record.slotKey == slot.slotKey &&
-                      record.status == AttendanceStatus.cancelled) {
-                    isSlotCancelled = true;
+                      (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
+                    if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
+                      isExcluded = true;
+                    } else if (record.status == AttendanceStatus.attended) {
+                      isExcluded = false;
+                    }
                     break;
                   }
                 }
@@ -180,8 +208,8 @@ class SystemCalendarService {
                   date: dateOnly,
                 );
 
-                if (isDayHoliday || isSlotCancelled) {
-                  // If it's cancelled/holiday, delete the event if it exists
+                if (isExcluded) {
+                  // If it's cancelled/holiday/leave/absent, delete the event if it exists
                   if (existingEventId != null) {
                     try {
                       await plugin.deleteEvent(eventId: existingEventId);

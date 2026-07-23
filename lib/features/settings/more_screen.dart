@@ -7,11 +7,14 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 
+import 'package:workmanager/workmanager.dart';
+import '../../services/backup_service.dart';
 import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
 import '../../models/app_update_model.dart';
 import '../../services/database_service.dart';
 import '../../services/update_service.dart';
+import '../../services/notification_service.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/url_launcher_utils.dart';
 import '../attendance/attendance_model.dart';
@@ -23,9 +26,14 @@ import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import 'calendar_sync_selection_screen.dart';
 import 'setup_guide_screen.dart';
+import '../tutorial/tutorial_controller.dart';
 import 'time_format_provider.dart';
 import 'whats_new_screen.dart';
 import 'swipe_actions_settings_screen.dart';
+import '../location/location_manager_screen.dart';
+import 'diagnostics_log_screen.dart';
+import 'markdown_viewer_screen.dart';
+import 'semester_backup_screen.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -47,6 +55,12 @@ class _MoreScreenState extends State<MoreScreen> {
   static const String _issuesUrl =
       'https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues';
   static final String _repoUrl = _issuesUrl.replaceFirst('/issues', '');
+
+  final GlobalKey _locationManagerKey = GlobalKey();
+  final GlobalKey _calendarSyncKey = GlobalKey();
+  final GlobalKey _semesterBackupKey = GlobalKey();
+  final GlobalKey _interactiveTourKey = GlobalKey();
+  final GlobalKey _setupGuideKey = GlobalKey();
 
   @override
   void initState() {
@@ -116,6 +130,7 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _showUpdateScreen(AppUpdate update) async {
     var isDownloading = false;
+    var downloadProgress = 0.0;
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -128,16 +143,27 @@ class _MoreScreenState extends State<MoreScreen> {
                 update: update,
                 currentVersion: currentVersion,
                 isDownloading: isDownloading,
+                downloadProgress: downloadProgress,
                 onInstallNow: () async {
                   routeSetState(() {
                     isDownloading = true;
+                    downloadProgress = 0.0;
                   });
 
                   final navigator = Navigator.of(routeContext);
                   final messenger = ScaffoldMessenger.of(context);
 
                   try {
-                    final apkFile = await _updateService.downloadAPK(update.version);
+                    final apkFile = await _updateService.downloadAPK(
+                      update.version,
+                      onProgress: (progress) {
+                        if (mounted) {
+                          routeSetState(() {
+                            downloadProgress = progress;
+                          });
+                        }
+                      },
+                    );
                     if (apkFile != null && mounted) {
                       final installResult = await _updateService.installAPK(apkFile);
                       if (!mounted) return;
@@ -234,14 +260,92 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
+  Future<void> _triggerTestNotification() async {
+    try {
+      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+      final subjects = subjectProvider.subjects;
+      
+      final notificationService = NotificationService();
+      final scheduledSubjectName = await notificationService
+          .triggerTestNotificationAfter15Seconds(subjects);
+
+      if (!mounted) return;
+
+      if (scheduledSubjectName != null) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          SnackBar(
+            content: Text('Test notification for "$scheduledSubjectName" scheduled in 15 seconds.'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('No unmarked classes scheduled for today.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        SnackBar(
+          content: Text('Failed to trigger test notification: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _triggerTestBackgroundBackup() async {
+    try {
+      final hasBackupFolder = await BackupService().hasUserSetBackupDirectory();
+      if (!hasBackupFolder) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('Please select a Backup Storage Folder in Semester Backup first.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      await Workmanager().registerOneOffTask(
+        'test_background_backup_${DateTime.now().millisecondsSinceEpoch}',
+        'testBackgroundBackup',
+        initialDelay: const Duration(seconds: 30),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        SnackBar(
+          content: const Text('Background backup scheduled in 30 seconds! Close the app now to test.'),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        SnackBar(
+          content: Text('Failed to schedule test background backup: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _showDemoGenerationConfirmation() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
+      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Generate Timetable Data?'),
           content: const Text(
-            'This will clear all current semester, subject, and attendance data, and replace it with a 120-day test timetable (60 days before and 60 days after today, 5 classes/day) with random attendance for past days. Proceed?',
+            'This will clear all current semester, subject, and attendance data, and replace it with a test timetable. Choose duration:',
           ),
           actions: [
             TextButton(
@@ -251,9 +355,16 @@ class _MoreScreenState extends State<MoreScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                _generateDemoTimetable();
+                _generateDemoTimetable(justToday: true);
               },
-              child: const Text('Generate', style: TextStyle(color: Colors.red)),
+              child: const Text('Just Today'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _generateDemoTimetable(justToday: false);
+              },
+              child: const Text('120-Day Semester', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -262,8 +373,10 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   void _showClearDataConfirmation() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
+      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Clear All App Data?'),
@@ -288,7 +401,7 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
-  Future<void> _generateDemoTimetable() async {
+  Future<void> _generateDemoTimetable({required bool justToday}) async {
     try {
       final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
@@ -298,8 +411,8 @@ class _MoreScreenState extends State<MoreScreen> {
 
       final today = DateTime.now();
       final todayNormalized = DateTime(today.year, today.month, today.day);
-      final startDate = todayNormalized.subtract(const Duration(days: 60));
-      final endDate = todayNormalized.add(const Duration(days: 60));
+      final startDate = justToday ? todayNormalized : todayNormalized.subtract(const Duration(days: 60));
+      final endDate = justToday ? todayNormalized : todayNormalized.add(const Duration(days: 60));
       
       final semester = Semester(
         startDate: startDate,
@@ -324,6 +437,8 @@ class _MoreScreenState extends State<MoreScreen> {
         [2, 3, 4, 5, 0], // Wed
         [3, 4, 5, 0, 1], // Thu
         [4, 5, 0, 1, 2], // Fri
+        [0, 1, 2, 3, 4], // Sat
+        [1, 2, 3, 4, 5], // Sun
       ];
 
       final Map<int, List<TimeSlot>> subjectSchedules = {};
@@ -367,7 +482,8 @@ class _MoreScreenState extends State<MoreScreen> {
         final schedule = subjectSchedules[sIdx]!;
 
         final List<Attendance> subjectAttendance = [];
-        for (int i = 0; i < 60; i++) {
+        final limit = justToday ? 0 : 60;
+        for (int i = 0; i < limit; i++) {
           final date = startDate.add(Duration(days: i));
           for (final slot in schedule) {
             if (slot.occursOnDate(date)) {
@@ -409,7 +525,13 @@ class _MoreScreenState extends State<MoreScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Demo timetable and attendance generated successfully!')),
+          SnackBar(
+            content: Text(
+              justToday
+                  ? 'Demo timetable for today generated successfully!'
+                  : 'Demo timetable and attendance generated successfully!',
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -474,10 +596,19 @@ class _MoreScreenState extends State<MoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    tutorialController.registerKey('key_location_manager', _locationManagerKey);
+    tutorialController.registerKey('key_calendar_sync', _calendarSyncKey);
+    tutorialController.registerKey('key_semester_backup', _semesterBackupKey);
+    tutorialController.registerKey('key_interactive_tour', _interactiveTourKey);
+    tutorialController.registerKey('key_setup_guide', _setupGuideKey);
+
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ListView(
       children: [
+        _buildSectionHeader('Customization & Gestures', colorScheme),
         ListTile(
           leading: const Icon(Icons.schedule_outlined),
           title: const Text('Use 24-hour format'),
@@ -507,8 +638,10 @@ class _MoreScreenState extends State<MoreScreen> {
           title: const Text('Time picker style'),
           subtitle: Text('Currently: ${timeFormatProvider.clockStyleDisplayName}'),
           onTap: () {
+            final isDarkMode = Theme.of(context).brightness == Brightness.dark;
             showDialog<void>(
               context: context,
+              barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
               builder: (ctx) {
                 return AlertDialog(
                   title: const Text('Select Time Picker Style'),
@@ -525,13 +658,13 @@ class _MoreScreenState extends State<MoreScreen> {
                         },
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: [
+                          children: const [
                             RadioListTile<ClockStyle>(
-                              title: const Text('Material Dialog'),
+                              title: Text('Material Dialog'),
                               value: ClockStyle.material,
                             ),
                             RadioListTile<ClockStyle>(
-                              title: const Text('Scroll Wheel'),
+                              title: Text('Scroll Wheel'),
                               value: ClockStyle.scroll,
                             ),
                           ],
@@ -541,18 +674,6 @@ class _MoreScreenState extends State<MoreScreen> {
                   ),
                 );
               },
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.sync),
-          title: const Text('Calendar Sync'),
-          subtitle: const Text('Sync your timetable with Google or Device Calendar'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CalendarSyncSelectionScreen()),
             );
           },
         ),
@@ -568,60 +689,87 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
-        FutureBuilder<PackageInfo>(
-          future: _packageInfoFuture,
-          builder: (context, snapshot) {
-            final version = snapshot.data?.version ?? 'Loading...';
 
-            return ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('App version'),
-              subtitle: Text(version),
-            );
-          },
+        const Divider(),
+        _buildSectionHeader('Features & Integrations', colorScheme),
+        KeyedSubtree(
+          key: _locationManagerKey,
+          child: ListTile(
+            leading: const Icon(Icons.pin_drop_outlined),
+            title: const Text('Locations & Geofencing'),
+            subtitle: const Text('Manage classroom coordinates and auto-attendance'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LocationManagerScreen()),
+              );
+            },
+          ),
         ),
-        FutureBuilder<PackageInfo>(
-          future: _packageInfoFuture,
-          builder: (context, snapshot) {
-            final buildNumber = snapshot.data?.buildNumber ?? 'Loading...';
+        KeyedSubtree(
+          key: _calendarSyncKey,
+          child: ListTile(
+            enabled: !(kDebugMode && !_devModeCalendarSyncEnabled),
+            leading: const Icon(Icons.sync),
+            title: const Text('Calendar Sync'),
+            subtitle: const Text('Sync your timetable with Google or Device Calendar'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: (kDebugMode && !_devModeCalendarSyncEnabled)
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CalendarSyncSelectionScreen()),
+                    );
+                  },
+          ),
+        ),
+        KeyedSubtree(
+          key: _semesterBackupKey,
+          child: ListTile(
+            leading: const Icon(Icons.backup_outlined),
+            title: const Text('Semester Backup'),
+            subtitle: const Text('Backup & restore attendance data (3 rolling backups kept)'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SemesterBackupScreen()),
+              );
+            },
+          ),
+        ),
 
-            return ListTile(
-              leading: const Icon(Icons.tag_outlined),
-              title: const Text('Build number'),
-              subtitle: Text(buildNumber),
-            );
-          },
+
+        const Divider(),
+        _buildSectionHeader('Help & Support', colorScheme),
+        KeyedSubtree(
+          key: _interactiveTourKey,
+          child: ListTile(
+            leading: const Icon(Icons.explore_outlined),
+            title: const Text('Interactive App Tour'),
+            subtitle: const Text('Take the guided feature walkthrough'),
+            trailing: const Icon(Icons.play_arrow_rounded),
+            onTap: () {
+              Provider.of<TutorialController>(context, listen: false).startTutorial(force: true);
+            },
+          ),
         ),
-        ListTile(
-          leading: Icon(
-            _availableUpdate != null
-                ? Icons.system_update_alt_outlined
-                : Icons.system_update_outlined,
+        KeyedSubtree(
+          key: _setupGuideKey,
+          child: ListTile(
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('Setup Guide'),
+            subtitle: const Text('Learn how to import schedules, set up geofencing, sync calendars, and more'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SetupGuideScreen()),
+              );
+            },
           ),
-          title: const Text('App updates'),
-          subtitle: Text(
-            kDebugMode
-                ? 'Unavailable in debug mode'
-                : _isCheckingForUpdate
-                    ? 'Checking for updates...'
-                    : _availableUpdate != null
-                        ? 'Update to v${_availableUpdate!.version}'
-                        : _hasCheckedForUpdate
-                            ? 'You are on the latest version'
-                            : 'Tap to check for updates',
-          ),
-          trailing: kDebugMode
-              ? null
-              : _isCheckingForUpdate
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : _availableUpdate != null
-                      ? const _UpdateAvailableBadge()
-                      : const Icon(Icons.chevron_right),
-          onTap: kDebugMode || _isCheckingForUpdate ? null : _onUpdateTileTap,
         ),
         FutureBuilder<PackageInfo>(
           future: _packageInfoFuture,
@@ -646,37 +794,10 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
-        FutureBuilder<DateTime?>(
-          future: _currentVersionReleaseDateFuture,
-          builder: (context, snapshot) {
-            final releaseDate = snapshot.data;
-            final subtitle = releaseDate != null
-                ? DateFormat.yMMMd().format(releaseDate)
-                : (snapshot.connectionState == ConnectionState.waiting
-                    ? 'Loading...'
-                    : 'Unavailable');
-
-            return ListTile(
-              leading: const Icon(Icons.update_outlined),
-              title: const Text('Current version release date'),
-              subtitle: Text(subtitle),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.menu_book_outlined),
-          title: const Text('Setup Guide'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SetupGuideScreen()),
-            );
-          },
-        ),
         ListTile(
           leading: const Icon(Icons.favorite_border_outlined),
           title: const Text('Support me'),
+          subtitle: const Text('Star the project repository on GitHub'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -722,6 +843,7 @@ class _MoreScreenState extends State<MoreScreen> {
         ListTile(
           leading: const Icon(Icons.bug_report_outlined),
           title: const Text('Request feature / Report bug'),
+          subtitle: const Text('Submit feedback or suggest improvements'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -764,17 +886,127 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
+        const Divider(),
+        _buildSectionHeader('Privacy & Terms', colorScheme),
+        ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Privacy Policy'),
+          subtitle: const Text('Read how your data and location permissions are protected'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Privacy Policy',
+                  assetPath: 'git_public/privacy.md',
+                ),
+              ),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.gavel_outlined),
+          title: const Text('Terms of Service'),
+          subtitle: const Text('Terms and conditions for using AttendMate'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Terms of Service',
+                  assetPath: 'git_public/terms.md',
+                ),
+              ),
+            );
+          },
+        ),
+
+        const Divider(),
+        _buildSectionHeader('System', colorScheme),
+        ListTile(
+          leading: Icon(
+            _availableUpdate != null
+                ? Icons.system_update_alt_outlined
+                : Icons.system_update_outlined,
+          ),
+          title: const Text('App updates'),
+          subtitle: Text(
+            kDebugMode
+                ? 'Unavailable in debug mode'
+                : _isCheckingForUpdate
+                    ? 'Checking for updates...'
+                    : _availableUpdate != null
+                        ? 'Update to v${_availableUpdate!.version}'
+                        : _hasCheckedForUpdate
+                            ? 'You are on the latest version'
+                            : 'Tap to check for updates',
+          ),
+          trailing: kDebugMode
+              ? null
+              : _isCheckingForUpdate
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : _availableUpdate != null
+                      ? const _UpdateAvailableBadge()
+                      : const Icon(Icons.chevron_right),
+          onTap: kDebugMode || _isCheckingForUpdate ? null : _onUpdateTileTap,
+        ),
+        FutureBuilder<PackageInfo>(
+          future: _packageInfoFuture,
+          builder: (context, snapshot) {
+            final version = snapshot.data?.version ?? 'Loading...';
+            final buildNumber = snapshot.data?.buildNumber ?? 'Loading...';
+
+            return ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('App version'),
+              subtitle: Text('v$version (Build $buildNumber)'),
+            );
+          },
+        ),
+        FutureBuilder<DateTime?>(
+          future: _currentVersionReleaseDateFuture,
+          builder: (context, snapshot) {
+            final releaseDate = snapshot.data;
+            final subtitle = releaseDate != null
+                ? DateFormat.yMMMd().format(releaseDate)
+                : (snapshot.connectionState == ConnectionState.waiting
+                    ? 'Loading...'
+                    : 'Unavailable');
+
+            return ListTile(
+              leading: const Icon(Icons.update_outlined),
+              title: const Text('Current version release date'),
+              subtitle: Text(subtitle),
+            );
+          },
+        ),
+
         if (kDebugMode) ...[
           const Divider(),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              'Developer Options',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.red,
-              ),
-            ),
+          _buildSectionHeader('Developer Options', colorScheme),
+          ListTile(
+            leading: const Icon(Icons.terminal_outlined, color: Colors.red),
+            title: const Text('Diagnostics Log'),
+            subtitle: const Text('View and copy app events/errors for debugging'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DiagnosticsLogScreen()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.system_update_outlined, color: Colors.red),
+            title: const Text('Simulate Update Screen'),
+            subtitle: const Text('Fetch latest release from GitHub and test the update UI & progress'),
+            onTap: _simulateUpdateScreen,
           ),
           ListTile(
             leading: const Icon(Icons.sync, color: Colors.red),
@@ -788,9 +1020,21 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => _toggleDevModeCalendarSync(!_devModeCalendarSyncEnabled),
           ),
           ListTile(
+            leading: const Icon(Icons.notification_important_outlined, color: Colors.red),
+            title: const Text('Trigger Test Notification (15s)'),
+            subtitle: const Text('Schedules a reminder for the most recent unmarked class of today in 15 seconds'),
+            onTap: _triggerTestNotification,
+          ),
+          ListTile(
+            leading: const Icon(Icons.backup_outlined, color: Colors.red),
+            title: const Text('Trigger Test Background Backup (30s)'),
+            subtitle: const Text('Schedules a WorkManager background backup in 30 seconds. Close the app to test.'),
+            onTap: _triggerTestBackgroundBackup,
+          ),
+          ListTile(
             leading: const Icon(Icons.playlist_add_check_outlined, color: Colors.red),
             title: const Text('Generate Timetable Data'),
-            subtitle: const Text('Generates 120-day semester (60d before/after today, 5+ classes/day)'),
+            subtitle: const Text('Generates 120-day semester or just today\'s timetable (5 classes/day)'),
             onTap: _showDemoGenerationConfirmation,
           ),
           ListTile(
@@ -801,6 +1045,83 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _simulateUpdateScreen() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showReplacingSnackBar(
+      const SnackBar(
+        content: Text('Fetching latest release from GitHub...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    final update = await _updateService.fetchLatestReleaseForSimulation();
+    if (!mounted) return;
+
+    var isDownloading = false;
+    var downloadProgress = 0.0;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (routeContext) => StatefulBuilder(
+          builder: (routeContext, routeSetState) => FutureBuilder<PackageInfo>(
+            future: _packageInfoFuture,
+            builder: (routeContext, snapshot) {
+              final currentVersion = snapshot.data?.version ?? '1.0.1';
+              return UpdateFullScreen(
+                update: update,
+                currentVersion: currentVersion,
+                isDownloading: isDownloading,
+                downloadProgress: downloadProgress,
+                onInstallNow: () async {
+                  routeSetState(() {
+                    isDownloading = true;
+                    downloadProgress = 0.0;
+                  });
+
+                  const totalSteps = 30;
+                  for (var i = 1; i <= totalSteps; i++) {
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    if (!routeContext.mounted) return;
+                    routeSetState(() {
+                      downloadProgress = i / totalSteps;
+                    });
+                  }
+
+                  if (!routeContext.mounted) return;
+
+                  ScaffoldMessenger.of(routeContext).showReplacingSnackBar(
+                    const SnackBar(
+                      content: Text('Simulated download complete! (Installation skipped in debug mode)'),
+                    ),
+                  );
+                  Navigator.of(routeContext).pop();
+                },
+                onRemindLater: () {
+                  Navigator.of(routeContext).pop();
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.0,
+          color: colorScheme.primary,
+        ),
+      ),
     );
   }
 }

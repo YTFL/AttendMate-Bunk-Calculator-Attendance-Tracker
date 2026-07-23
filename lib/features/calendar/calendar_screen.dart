@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/attendance/attendance_model.dart';
 import '../../features/attendance/attendance_provider.dart';
+import '../../features/planner/planned_leave_model.dart';
 import '../../features/semester/semester_provider.dart';
 import '../../features/settings/time_format_provider.dart';
 import '../../features/subject/subject_model.dart';
 import '../../features/subject/subject_provider.dart';
+import '../../services/database_service.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
+import '../tutorial/tutorial_controller.dart';
+import '../tutorial/tutorial_overlay.dart';
 import 'calendar_utils.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -21,23 +26,108 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _selectedMonth;
   DateTime? _pressedDate;
+  DayState? _selectedStateFilter;
   PageController? _monthPageController;
   List<DateTime> _monthPages = [];
+  List<PlannedLeave> _plannedLeaves = [];
+
+  final GlobalKey _calendarHeaderKey = GlobalKey();
+  final GlobalKey _calendarLegendKey = GlobalKey();
+  final GlobalKey _calendarGridKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _selectedMonth = DateTime.now();
+    _loadPlannedLeaves();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final tutorialController = Provider.of<TutorialController>(context, listen: false);
+        tutorialController.addListener(_onTutorialStepChanged);
+      }
+    });
+  }
+
+  void _onTutorialStepChanged() {
+    if (!mounted) return;
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    if (tutorialController.isActive && (tutorialController.currentStepIndex < 16 || tutorialController.currentStepIndex >= 19)) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _loadPlannedLeaves() async {
+    final leaves = await DatabaseService().loadPlannedLeaves();
+    if (mounted) {
+      setState(() {
+        _plannedLeaves = leaves;
+      });
+    }
+  }
+
+  Future<void> _autoMarkPlannedLeaves(
+    List<PlannedLeave> plannedLeaves,
+    List<Subject> subjects,
+    AttendanceProvider attendanceProvider,
+  ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day, 23, 59);
+
+    for (final leave in plannedLeaves) {
+      DateTime current = DateTime(leave.startDate.year, leave.startDate.month, leave.startDate.day);
+      final end = DateTime(leave.endDate.year, leave.endDate.month, leave.endDate.day);
+
+      while (!current.isAfter(end) && !current.isAfter(today)) {
+        for (final subject in subjects) {
+          if (leave.affectedSubjectIds.isNotEmpty && !leave.affectedSubjectIds.contains(subject.id)) continue;
+          for (final slot in subject.schedule) {
+            if (slot.occursOnDate(current)) {
+              final slotStart = DateTime(current.year, current.month, current.day, slot.startTime.hour, slot.startTime.minute);
+              final slotEnd = DateTime(current.year, current.month, current.day, slot.endTime.hour, slot.endTime.minute);
+              if (slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate)) {
+                final hasRecord = attendanceProvider.attendanceRecords.any(
+                  (r) => r.subjectId == subject.id &&
+                         r.date.year == current.year &&
+                         r.date.month == current.month &&
+                         r.date.day == current.day &&
+                         (r.slotKey == null || r.slotKey == slot.slotKey || r.slotKey!.isEmpty),
+                );
+
+                if (!hasRecord) {
+                  await attendanceProvider.markAttendance(
+                    subject.id,
+                    current,
+                    AttendanceStatus.absent,
+                    slotKey: slot.slotKey,
+                  );
+                }
+              }
+            }
+          }
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
   }
 
   @override
   void dispose() {
+    try {
+      final tutorialController = Provider.of<TutorialController>(context, listen: false);
+      tutorialController.removeListener(_onTutorialStepChanged);
+    } catch (_) {}
     _monthPageController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    tutorialController.registerKey('key_calendar_header', _calendarHeaderKey);
+    tutorialController.registerKey('key_calendar_legend', _calendarLegendKey);
+    tutorialController.registerKey('key_calendar_grid', _calendarGridKey);
+
     final semesterProvider = Provider.of<SemesterProvider>(context);
     final subjectProvider = Provider.of<SubjectProvider>(context);
     final attendanceProvider = Provider.of<AttendanceProvider>(context);
@@ -46,6 +136,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const Scaffold(
         body: Center(child: Text('Semester not set')),
       );
+    }
+
+    if (_plannedLeaves.isNotEmpty && subjectProvider.subjects.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _autoMarkPlannedLeaves(_plannedLeaves, subjectProvider.subjects, attendanceProvider);
+        }
+      });
     }
 
     final startDate = semesterProvider.semester!.startDate;
@@ -60,87 +158,99 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _selectedMonth = endMonth;
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Attendance Calendar'),
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          // Month/Year Selector
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: _isSameMonthYear(_selectedMonth, startDate)
-                      ? null
-                      : () => _goToPreviousMonth(startDate),
-                ),
-                Text(
-                  '${_getMonthName(_selectedMonth.month)} ${_selectedMonth.year}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: _isSameMonthYear(_selectedMonth, endDate)
-                      ? null
-                      : () => _goToNextMonth(endDate),
-                ),
-              ],
+    final rs = context.rs;
+
+    final now = DateTime.now();
+    final isCurrentMonth = _isSameMonthYear(_selectedMonth, now);
+
+    return TutorialOverlay(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Attendance Calendar',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          elevation: 0,
+          centerTitle: false,
+          actions: [
+            if (!isCurrentMonth)
+              IconButton(
+                icon: const Icon(Icons.today_rounded),
+                tooltip: 'Go to Today',
+                onPressed: () => _goToToday(startDate, endDate),
+              ),
+          ],
+        ),
+        body: Column(
+          children: [
+            // Modern Month/Year Header Card with Today Shortcut
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: rs.width(16),
+                vertical: rs.height(8),
+              ),
+              child: KeyedSubtree(
+                key: _calendarHeaderKey,
+                child: _buildHeaderCard(context, startDate, endDate),
+              ),
             ),
-          ),
-          // Legend
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: _buildLegend(),
-          ),
-          const SizedBox(height: 8),
-          // Calendar Grid
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                final monthPages = _getMonthPages(startDate, endDate);
-                final selectedIndex = monthPages.indexWhere(
-                  (month) => _isSameMonthYear(month, _selectedMonth),
-                );
-                final safeSelectedIndex = selectedIndex < 0 ? 0 : selectedIndex;
-                _monthPages = monthPages;
+            // Horizontal Chip Legend
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: rs.width(16)),
+              child: KeyedSubtree(
+                key: _calendarLegendKey,
+                child: _buildLegend(),
+              ),
+            ),
+            SizedBox(height: rs.height(12)),
+            // Calendar Grid PageView
+            Expanded(
+              child: KeyedSubtree(
+                key: _calendarGridKey,
+                child: Builder(
+                  builder: (context) {
+                    final monthPages = _getMonthPages(startDate, endDate);
+                    final selectedIndex = monthPages.indexWhere(
+                      (month) => _isSameMonthYear(month, _selectedMonth),
+                    );
+                    final safeSelectedIndex = selectedIndex < 0 ? 0 : selectedIndex;
+                    _monthPages = monthPages;
 
-                _monthPageController ??= PageController(
-                  initialPage: safeSelectedIndex,
-                );
+                    _monthPageController ??= PageController(
+                      initialPage: safeSelectedIndex,
+                    );
 
-                return PageView.builder(
-                  controller: _monthPageController,
-                  itemCount: monthPages.length,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _selectedMonth = monthPages[index];
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    final month = monthPages[index];
-                    return SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _buildCalendarGrid(
-                          month,
-                          startDate,
-                          endDate,
-                          subjectProvider.subjects,
-                          attendanceProvider.attendanceRecords,
-                        ),
-                      ),
+                    return PageView.builder(
+                      controller: _monthPageController,
+                      itemCount: monthPages.length,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _selectedMonth = monthPages[index];
+                        });
+                      },
+                      itemBuilder: (context, index) {
+                        final month = monthPages[index];
+                        return SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Padding(
+                            padding: EdgeInsets.all(rs.scale(16)),
+                            child: _buildCalendarGrid(
+                              month,
+                              startDate,
+                              endDate,
+                              subjectProvider.subjects,
+                              attendanceProvider.attendanceRecords,
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -191,6 +301,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
+  void _goToToday(DateTime startDate, DateTime endDate) {
+    final now = DateTime.now();
+    final todayMonth = DateTime(now.year, now.month, 1);
+    final startMonth = DateTime(startDate.year, startDate.month, 1);
+    final endMonth = DateTime(endDate.year, endDate.month, 1);
+
+    DateTime targetMonth = todayMonth;
+    if (targetMonth.isBefore(startMonth)) targetMonth = startMonth;
+    if (targetMonth.isAfter(endMonth)) targetMonth = endMonth;
+
+    if (_monthPageController != null && _monthPages.isNotEmpty) {
+      final targetIndex = _monthPages.indexWhere(
+        (month) => _isSameMonthYear(month, targetMonth),
+      );
+      if (targetIndex >= 0) {
+        _monthPageController!.animateToPage(
+          targetIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    }
+  }
+
   List<DateTime> _getMonthPages(DateTime startDate, DateTime endDate) {
     final months = <DateTime>[];
     var current = DateTime(startDate.year, startDate.month, 1);
@@ -204,74 +338,232 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return months;
   }
 
+  Widget _buildHeaderCard(
+    BuildContext context,
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: rs.width(12),
+        vertical: rs.height(8),
+      ),
+      decoration: BoxDecoration(
+        color: isDark
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(rs.scale(16)),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: rs.scale(8),
+            offset: Offset(0, rs.scale(2)),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded),
+            iconSize: rs.scale(26),
+            onPressed: _isSameMonthYear(_selectedMonth, startDate)
+                ? null
+                : () => _goToPreviousMonth(startDate),
+          ),
+          Expanded(
+            child: Text(
+              '${_getMonthName(_selectedMonth.month)} ${_selectedMonth.year}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: rs.font(18),
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded),
+            iconSize: rs.scale(26),
+            onPressed: _isSameMonthYear(_selectedMonth, endDate)
+                ? null
+                : () => _goToNextMonth(endDate),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLegend() {
     final rs = context.rs;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Legend:', style: TextStyle(fontWeight: FontWeight.bold)),
-        SizedBox(height: rs.height(8)),
-        Wrap(
-          spacing: rs.width(12),
-          runSpacing: rs.height(8),
-          children: [
-            _buildLegendItem(
-              DayState.attendedFullDay,
-              'Attended Full Day',
-            ),
-            _buildLegendItem(
-              DayState.bunkedFullDay,
-              'Bunked Full Day',
-            ),
-            _buildLegendItem(
-              DayState.classesNotMarked,
-              'Not Marked',
-            ),
-            _buildLegendItem(
-              DayState.classesMarked,
-              'Mixed',
-            ),
-            _buildLegendItem(
-              DayState.holiday,
-              'Holiday',
-            ),
-            _buildLegendItem(
-              DayState.futureClasses,
-              'Upcoming',
-            ),
-            _buildLegendItem(
-              DayState.noClasses,
-              'No Classes',
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final legendItems = [
+      (DayState.attendedFullDay, 'Attended'),
+      (DayState.bunkedFullDay, 'Bunked'),
+      (DayState.plannedLeave, 'Planned Leave'),
+      (DayState.classesNotMarked, 'Not Marked'),
+      (DayState.classesMarked, 'Mixed'),
+      (DayState.holiday, 'Holiday'),
+      (DayState.futureClasses, 'Upcoming'),
+      (DayState.noClasses, 'No Classes'),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: rs.width(10),
+        vertical: rs.height(8),
+      ),
+      decoration: BoxDecoration(
+        color: isDark
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+            : theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(rs.scale(14)),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        children: [
+          Wrap(
+            spacing: rs.width(6),
+            runSpacing: rs.height(6),
+            alignment: WrapAlignment.center,
+            children: legendItems
+                .map((item) => _buildLegendItem(item.$1, item.$2))
+                .toList(),
+          ),
+          if (_selectedStateFilter != null) ...[
+            SizedBox(height: rs.height(6)),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedStateFilter = null;
+                });
+              },
+              borderRadius: BorderRadius.circular(rs.scale(10)),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: rs.width(6),
+                  vertical: rs.height(2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.clear_rounded,
+                      size: rs.scale(12),
+                      color: theme.colorScheme.primary,
+                    ),
+                    SizedBox(width: rs.width(2)),
+                    Text(
+                      'Clear Filter',
+                      style: TextStyle(
+                        fontSize: rs.font(11),
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildLegendItem(DayState state, String label) {
     final rs = context.rs;
+    final color = CalendarUtils.getStateColor(state);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final isSelected = _selectedStateFilter == state;
+    final isAnyFilterActive = _selectedStateFilter != null;
+
     return Tooltip(
-      message: CalendarUtils.getStateLabel(state),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: rs.scale(24),
-            height: rs.scale(24),
-            decoration: BoxDecoration(
-              color: CalendarUtils.getStateColor(state),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              CalendarUtils.getStateIcon(state),
-              size: rs.scale(14),
-              color: Colors.white,
-            ),
+      message: isSelected ? 'Tap to clear filter' : 'Filter by ${CalendarUtils.getStateLabel(state)}',
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            if (_selectedStateFilter == state) {
+              _selectedStateFilter = null;
+            } else {
+              _selectedStateFilter = state;
+            }
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.symmetric(
+            horizontal: rs.width(8),
+            vertical: rs.height(4),
           ),
-          SizedBox(width: rs.width(6)),
-          Text(label, style: TextStyle(fontSize: rs.font(12))),
-        ],
+          decoration: BoxDecoration(
+            color: isSelected
+                ? color
+                : isAnyFilterActive
+                    ? color.withValues(alpha: isDark ? 0.08 : 0.05)
+                    : color.withValues(alpha: isDark ? 0.2 : 0.12),
+            borderRadius: BorderRadius.circular(rs.scale(12)),
+            border: Border.all(
+              color: isSelected
+                  ? Colors.white
+                  : color.withValues(alpha: isAnyFilterActive ? 0.2 : 0.35),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: rs.scale(6),
+                      offset: Offset(0, rs.scale(2)),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: rs.scale(14),
+                height: rs.scale(14),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : color,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSelected ? Icons.check_rounded : CalendarUtils.getStateIcon(state),
+                  size: rs.scale(9),
+                  color: isSelected ? color : Colors.white,
+                ),
+              ),
+              SizedBox(width: rs.width(4)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: rs.font(11),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  color: isSelected
+                      ? Colors.white
+                      : isAnyFilterActive
+                          ? (isDark ? Colors.white38 : Colors.black38)
+                          : (isDark ? Colors.white.withValues(alpha: 0.85) : Colors.black87),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -284,11 +576,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     List<Attendance> attendanceRecords,
   ) {
     final rs = context.rs;
+    final theme = Theme.of(context);
     final firstDayOfMonth = DateTime(month.year, month.month, 1);
-    final lastDayOfMonth =
-        DateTime(month.year, month.month + 1, 0);
+    final lastDayOfMonth = DateTime(month.year, month.month + 1, 0);
 
-    // Adjust if before semester start or after semester end
     final displayStartDate = firstDayOfMonth.isBefore(startDate)
         ? startDate
         : firstDayOfMonth;
@@ -298,7 +589,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final int daysInMonth = displayEndDate.difference(displayStartDate).inDays + 1;
     final int firstWeekday = displayStartDate.weekday;
 
-    // Index attendance records by date to avoid O(R) scan for each of the 30 calendar day cells
     final Map<DateTime, List<Attendance>> indexedRecords = {};
     for (final record in attendanceRecords) {
       final normalizedDate = DateTime(record.date.year, record.date.month, record.date.day);
@@ -307,28 +597,40 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     return Column(
       children: [
-        // Day headers
+        // Styled Weekday Headers
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-              .map((day) => Expanded(
+              .map((day) {
+                final isWeekend = day == 'Sat' || day == 'Sun';
+                return Expanded(
+                  child: Container(
+                    padding: EdgeInsets.symmetric(vertical: rs.height(6)),
                     child: Text(
                       day,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: rs.font(12),
+                        color: isWeekend
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
                     ),
-                  ))
+                  ),
+                );
+              })
               .toList(),
         ),
-        SizedBox(height: rs.height(12)),
-        // Calendar grid
+        SizedBox(height: rs.height(8)),
+        // Calendar grid day cells
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 7,
-            mainAxisSpacing: rs.height(10),
-            crossAxisSpacing: rs.width(10),
+            mainAxisSpacing: rs.height(8),
+            crossAxisSpacing: rs.width(8),
             childAspectRatio: 1.0,
           ),
           itemCount: (firstWeekday - 1) + daysInMonth,
@@ -345,6 +647,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               subjects: subjects,
               attendanceRecords: attendanceRecords,
               indexedRecords: indexedRecords,
+              plannedLeaves: _plannedLeaves,
             );
 
             return _buildDayCell(context, dayInfo);
@@ -356,16 +659,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildDayCell(BuildContext context, CalendarDayInfo dayInfo) {
     final rs = context.rs;
-    final isPressed = _pressedDate != null && 
-        _pressedDate!.year == dayInfo.date.year &&
-        _pressedDate!.month == dayInfo.date.month &&
-        _pressedDate!.day == dayInfo.date.day;
-    
+    final now = DateTime.now();
+    final isToday = CalendarUtils.isSameDay(dayInfo.date, now);
+    final isPressed = _pressedDate != null && CalendarUtils.isSameDay(_pressedDate!, dayInfo.date);
+
+    final matchesFilter = _selectedStateFilter == null || dayInfo.state == _selectedStateFilter;
+
     final baseColor = CalendarUtils.getStateColor(dayInfo.state);
-    final displayColor = isPressed ? _darkenColor(baseColor) : baseColor;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final displayColor = isPressed
+        ? _darkenColor(baseColor)
+        : matchesFilter
+            ? baseColor
+            : (isDark
+                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
+                : Colors.grey[200]!);
+
+    final textColor = matchesFilter
+        ? Colors.white
+        : (isDark ? Colors.white24 : Colors.black26);
+
+    final iconColor = matchesFilter
+        ? Colors.white.withValues(alpha: 0.9)
+        : (isDark ? Colors.white12 : Colors.black12);
 
     return GestureDetector(
       onTapDown: (_) {
+        HapticFeedback.vibrate();
         setState(() {
           _pressedDate = dayInfo.date;
         });
@@ -381,28 +703,67 @@ class _CalendarScreenState extends State<CalendarScreen> {
           _pressedDate = null;
         });
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
           color: displayColor,
-          borderRadius: BorderRadius.circular(rs.scale(8)),
+          borderRadius: BorderRadius.circular(rs.scale(12)),
+          border: isToday
+              ? Border.all(
+                  color: matchesFilter ? Colors.white : theme.colorScheme.primary.withValues(alpha: 0.4),
+                  width: rs.scale(2.5),
+                )
+              : matchesFilter
+                  ? null
+                  : Border.all(
+                      color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                    ),
+          boxShadow: (isPressed || !matchesFilter)
+              ? []
+              : [
+                  BoxShadow(
+                    color: displayColor.withValues(alpha: 0.3),
+                    blurRadius: rs.scale(4),
+                    offset: Offset(0, rs.scale(2)),
+                  ),
+                ],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Text(
-              dayInfo.date.day.toString(),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: rs.font(12),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    dayInfo.date.day.toString(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                      fontSize: rs.font(13),
+                    ),
+                  ),
+                  SizedBox(height: rs.height(2)),
+                  Icon(
+                    CalendarUtils.getStateIcon(dayInfo.state),
+                    size: rs.scale(15),
+                    color: iconColor,
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: rs.height(2)),
-            Icon(
-              CalendarUtils.getStateIcon(dayInfo.state),
-              size: rs.scale(16),
-              color: Colors.white,
-            ),
+            if (isToday)
+              Positioned(
+                top: rs.scale(4),
+                right: rs.scale(4),
+                child: Container(
+                  width: rs.scale(6),
+                  height: rs.scale(6),
+                  decoration: BoxDecoration(
+                    color: matchesFilter ? Colors.white : theme.colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -433,6 +794,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      barrierColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.12)
+          : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(context.rs.scale(24)),
+        ),
+      ),
+      sheetAnimationStyle: AnimationStyle(
+        duration: const Duration(milliseconds: 300),
+        reverseDuration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
       builder: (context) => _buildDayDetailsModal(
         context,
         dayInfo,
@@ -531,6 +907,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     DateTime endDate,
   ) {
     final rs = context.rs;
+    final theme = Theme.of(context);
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
     final swipableDates = _getSwipableDayDates(
       currentDate: dayInfo.date,
@@ -549,127 +926,155 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return StatefulBuilder(
       builder: (context, setState) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.95,
+          height: MediaQuery.of(context).size.height * 0.9,
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
             left: rs.width(16),
             right: rs.width(16),
-            top: rs.height(16),
+            top: rs.height(12),
           ),
-          child: PageView.builder(
-            controller: dayPageController,
-            itemCount: swipableDates.length,
-            itemBuilder: (context, pageIndex) {
-              final pageDate = swipableDates[pageIndex];
-              final pageDayInfo = CalendarUtils.getDayState(
-                date: pageDate,
-                subjects: subjectProvider.subjects,
-                attendanceRecords: attendanceProvider.attendanceRecords,
-              );
-              final classesForDay = _expandSubjectsBySlotForDay(
-                pageDayInfo.subjectsWithClassesToday,
-                pageDate,
-              );
-              final dateFormatter = _formatDate(pageDate);
+          child: Column(
+            children: [
+              // Top Drag Handle
+              Container(
+                width: rs.width(36),
+                height: rs.height(4),
+                margin: EdgeInsets.only(bottom: rs.height(12)),
+                decoration: BoxDecoration(
+                  color: theme.dividerColor.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(rs.scale(2)),
+                ),
+              ),
+              Expanded(
+                child: PageView.builder(
+                  controller: dayPageController,
+                  itemCount: swipableDates.length,
+                  itemBuilder: (context, pageIndex) {
+                    final pageDate = swipableDates[pageIndex];
+                    final pageDayInfo = CalendarUtils.getDayState(
+                      date: pageDate,
+                      subjects: subjectProvider.subjects,
+                      attendanceRecords: attendanceProvider.attendanceRecords,
+                      plannedLeaves: _plannedLeaves,
+                    );
+                    final classesForDay = _expandSubjectsBySlotForDay(
+                      pageDayInfo.subjectsWithClassesToday,
+                      pageDate,
+                    );
+                    final dateFormatter = _formatDate(pageDate);
+                    final stateColor = CalendarUtils.getStateColor(pageDayInfo.state);
 
-              return Column(
-                mainAxisSize: MainAxisSize.max,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            dateFormatter,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          SizedBox(height: rs.height(4)),
-                          Text(
-                            CalendarUtils.getStateLabel(pageDayInfo.state),
-                            style: TextStyle(
-                              color: CalendarUtils.getStateColor(pageDayInfo.state),
-                              fontWeight: FontWeight.bold,
+                    final activeLeave = _plannedLeaves.cast<PlannedLeave?>().firstWhere(
+                      (l) => l != null &&
+                             !pageDate.isBefore(DateTime(l.startDate.year, l.startDate.month, l.startDate.day)) &&
+                             !pageDate.isAfter(DateTime(l.endDate.year, l.endDate.month, l.endDate.day)),
+                      orElse: () => null,
+                    );
+
+                    return Column(
+                      mainAxisSize: MainAxisSize.max,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Modal Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dateFormatter,
+                                  style: TextStyle(
+                                    fontSize: rs.font(18),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: rs.height(4)),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: rs.width(8),
+                                    vertical: rs.height(3),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: stateColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(rs.scale(8)),
+                                    border: Border.all(
+                                      color: stateColor.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    CalendarUtils.getStateLabel(pageDayInfo.state),
+                                    style: TextStyle(
+                                      color: stateColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: rs.font(11),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: rs.height(12)),
+                        const Divider(),
+                        SizedBox(height: rs.height(8)),
+                        if (activeLeave != null) ...[
+                          Container(
+                            padding: rs.insetsAll(10),
+                            margin: EdgeInsets.only(bottom: rs.height(10)),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF7043).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(rs.scale(12)),
+                              border: Border.all(color: const Color(0xFFFF7043).withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.event_busy_rounded, color: const Color(0xFFFF7043), size: rs.scale(20)),
+                                SizedBox(width: rs.width(8)),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Planned Leave: ${activeLeave.name}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: rs.font(12),
+                                          color: const Color(0xFFFF7043),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        'Classes on this day are automatically marked as Absent.',
+                                        style: TextStyle(
+                                          fontSize: rs.font(11),
+                                          color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  if (pageDayInfo.classesCount > 0 &&
-                      pageDayInfo.state != DayState.futureClasses)
-                    Padding(
-                      padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final rowScale = (constraints.maxWidth / 360).clamp(0.72, 1.0);
-                          final compactMode = constraints.maxWidth < 370;
-                          final iconlessMode = constraints.maxWidth < 335;
-                          final buttonStyle = ElevatedButton.styleFrom(
-                            minimumSize: Size(0, rs.height(44)),
-                            padding: EdgeInsets.symmetric(
-                              vertical: rs.height(9),
-                              horizontal: rs.width(compactMode ? 4 : 6),
-                            ),
-                            visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
-                            backgroundColor: Theme.of(context).colorScheme.onSurface,
-                            foregroundColor: Theme.of(context).colorScheme.surface,
-                          );
-
-                          String adaptiveLabel(String label) {
-                            if (!compactMode) return label;
-                            if (label == 'Skip Day') return 'Skip';
-                            return label;
-                          }
-
-                          Widget actionButton({
-                            required IconData icon,
-                            required String label,
-                            required VoidCallback onPressed,
-                          }) {
-                            final buttonLabel = adaptiveLabel(label);
-                            final fontSize = (rs.font(12) * rowScale).clamp(11.0, 13.0);
-                            return SizedBox(
-                              width: (constraints.maxWidth - rs.width(12)) / 3,
-                              child: ElevatedButton(
-                                onPressed: onPressed,
-                                style: buttonStyle,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (!iconlessMode) ...[
-                                      Icon(icon, size: (rs.scale(16) * rowScale).clamp(13.0, 18.0)),
-                                      SizedBox(width: rs.width(4)),
-                                    ],
-                                    Flexible(
-                                      child: Text(
-                                        buttonLabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.fade,
-                                        softWrap: false,
-                                        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: actionButton(
-                                  icon: Icons.check_circle_outline,
+                        // Bulk Action Buttons Row
+                        if (pageDayInfo.classesCount > 0 &&
+                            pageDayInfo.state != DayState.futureClasses)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: rs.height(12)),
+                            child: Row(
+                              children: [
+                                _buildBulkActionButton(
+                                  context: context,
+                                  icon: Icons.check_circle_outline_rounded,
                                   label: 'Present',
+                                  color: const Color(0xFF4CAF50),
                                   onPressed: () async {
                                     final scaffoldMessenger = ScaffoldMessenger.of(context);
                                     final navigator = Navigator.of(context);
@@ -708,12 +1113,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     navigator.pop();
                                   },
                                 ),
-                              ),
-                              SizedBox(width: rs.width(6)),
-                              Expanded(
-                                child: actionButton(
-                                  icon: Icons.fast_forward_outlined,
+                                SizedBox(width: rs.width(8)),
+                                _buildBulkActionButton(
+                                  context: context,
+                                  icon: Icons.highlight_off_rounded,
                                   label: 'Skip Day',
+                                  color: const Color(0xFFEF5350),
                                   onPressed: () async {
                                     final scaffoldMessenger = ScaffoldMessenger.of(context);
                                     final navigator = Navigator.of(context);
@@ -752,12 +1157,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     navigator.pop();
                                   },
                                 ),
-                              ),
-                              SizedBox(width: rs.width(6)),
-                              Expanded(
-                                child: actionButton(
+                                SizedBox(width: rs.width(8)),
+                                _buildBulkActionButton(
+                                  context: context,
                                   icon: Icons.celebration_outlined,
                                   label: 'Holiday',
+                                  color: const Color(0xFFAB47BC),
                                   onPressed: () async {
                                     final scaffoldMessenger = ScaffoldMessenger.of(context);
                                     final navigator = Navigator.of(context);
@@ -796,79 +1201,162 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                     navigator.pop();
                                   },
                                 ),
+                              ],
+                            ),
+                          ),
+                        // Copy Timetable Button
+                        if (pageDayInfo.state != DayState.futureClasses)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: rs.height(12)),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: rs.height(12),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  await _copyTimetableIntoDate(
+                                    context: context,
+                                    targetDate: pageDate,
+                                    startDate: startDate,
+                                    endDate: endDate,
+                                    subjectProvider: subjectProvider,
+                                    refreshModal: () => setState(() {}),
+                                  );
+                                },
+                                icon: const Icon(Icons.copy_all_rounded, size: 18),
+                                label: const Text(
+                                  'Copy Timetable To This Day',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
                               ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  if (pageDayInfo.state != DayState.futureClasses)
-                    Padding(
-                      padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await _copyTimetableIntoDate(
-                              context: context,
-                              targetDate: pageDate,
-                              startDate: startDate,
-                              endDate: endDate,
-                              subjectProvider: subjectProvider,
-                              refreshModal: () => setState(() {}),
-                            );
-                          },
-                          icon: const Icon(Icons.copy_all_outlined),
-                          label: const Text('Copy Timetable To This Day'),
-                        ),
-                      ),
-                    ),
-                  SizedBox(height: rs.height(8)),
-                  if (pageDayInfo.classesCount == 0)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          pageDayInfo.state == DayState.holiday
-                              ? 'Marked as Holiday'
-                              : 'No classes scheduled',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: classesForDay.length,
-                        itemBuilder: (context, index) {
-                          final subject = classesForDay[index];
-                          final slotKey = subject.schedule.first.slotKey;
-                          final attendance = attendanceProvider.getAttendanceForSubjectOnDate(
-                            subject.id,
-                            pageDate,
-                            slotKey: slotKey,
-                          );
+                            ),
+                          ),
+                        // Subject list or Empty State
+                        if (pageDayInfo.classesCount == 0)
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    pageDayInfo.state == DayState.holiday
+                                        ? Icons.celebration_rounded
+                                        : Icons.event_available_rounded,
+                                    size: rs.scale(48),
+                                    color: theme.disabledColor,
+                                  ),
+                                  SizedBox(height: rs.height(8)),
+                                  Text(
+                                    pageDayInfo.state == DayState.holiday
+                                        ? 'Marked as Holiday'
+                                        : 'No classes scheduled',
+                                    style: TextStyle(
+                                      color: theme.textTheme.bodySmall?.color,
+                                      fontSize: rs.font(14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          Expanded(
+                            child: ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: classesForDay.length,
+                              itemBuilder: (context, index) {
+                                final subject = classesForDay[index];
+                                final slotKey = subject.schedule.first.slotKey;
+                                final attendance = attendanceProvider.getAttendanceForSubjectOnDate(
+                                  subject.id,
+                                  pageDate,
+                                  slotKey: slotKey,
+                                );
 
-                          return _buildSubjectAttendanceRow(
-                            context,
-                            subject,
-                            attendance,
-                            pageDate,
-                            pageDayInfo.state,
-                            attendanceProvider,
-                            setState,
-                            timeFormatProvider,
-                            slotKey,
-                          );
-                        },
-                      ),
-                    ),
-                  SizedBox(height: rs.height(16)),
-                ],
-              );
-            },
+                                return _buildSubjectAttendanceRow(
+                                  context,
+                                  subject,
+                                  attendance,
+                                  pageDate,
+                                  pageDayInfo.state,
+                                  attendanceProvider,
+                                  setState,
+                                  timeFormatProvider,
+                                  slotKey,
+                                );
+                              },
+                            ),
+                          ),
+                        SizedBox(height: rs.height(16)),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildBulkActionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    final rs = context.rs;
+    return Expanded(
+      child: Material(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(rs.scale(12)),
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.vibrate();
+            onPressed();
+          },
+          borderRadius: BorderRadius.circular(rs.scale(12)),
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              vertical: rs.height(10),
+              horizontal: rs.width(4),
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(rs.scale(12)),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: rs.scale(16), color: color),
+                SizedBox(width: rs.width(4)),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: rs.font(12),
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -883,8 +1371,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     var date = DateTime(startDate.year, startDate.month, startDate.day);
     final normalizedEndDate = DateTime(endDate.year, endDate.month, endDate.day);
 
-    // Fast check: avoid expensive day state building (including linear DB searches)
-    // for all 150+ days of the semester on details tap.
     while (!date.isAfter(normalizedEndDate)) {
       int classesCount = 0;
       for (final subject in subjects) {
@@ -962,6 +1448,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     String slotKey,
   ) {
     final rs = context.rs;
+    final theme = Theme.of(context);
     final status = attendance?.status;
     final isFutureClass = dayState == DayState.futureClasses;
     final isLockedByManualOverride = _isLockedByManualOverride(subject, date);
@@ -972,10 +1459,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
         : '';
 
     return Container(
-      margin: EdgeInsets.only(bottom: rs.height(8)),
+      margin: EdgeInsets.only(bottom: rs.height(10)),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(rs.scale(8)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(rs.scale(12)),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: rs.scale(6),
+            offset: Offset(0, rs.scale(2)),
+          ),
+        ],
       ),
       child: ListTile(
         dense: true,
@@ -993,41 +1490,59 @@ class _CalendarScreenState extends State<CalendarScreen> {
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 10,
+                fontSize: 11,
               ),
               textAlign: TextAlign.center,
             ),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(subject.name),
-            if (timeText.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(top: rs.height(4)),
-                child: Text(
-                  timeText,
-                  style: TextStyle(
-                    fontSize: rs.font(11),
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ),
-            if (isLockedByManualOverride && overrideDate != null)
-              Padding(
-                padding: EdgeInsets.only(top: rs.height(4)),
-                child: Text(
-                  'Locked before ${_formatShortDate(overrideDate)}',
-                  style: TextStyle(
-                    fontSize: rs.font(11),
-                    color: Colors.orange.shade800,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
+        title: Text(
+          subject.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
+        subtitle: (timeText.isNotEmpty || (isLockedByManualOverride && overrideDate != null))
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (timeText.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(top: rs.height(2)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: rs.scale(12),
+                            color: theme.textTheme.bodySmall?.color,
+                          ),
+                          SizedBox(width: rs.width(4)),
+                          Text(
+                            timeText,
+                            style: TextStyle(
+                              fontSize: rs.font(11),
+                              color: theme.textTheme.bodySmall?.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (isLockedByManualOverride && overrideDate != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: rs.height(2)),
+                      child: Text(
+                        'Locked before ${_formatShortDate(overrideDate)}',
+                        style: TextStyle(
+                          fontSize: rs.font(11),
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : null,
         trailing: isFutureClass
             ? Container(
                 padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
@@ -1038,7 +1553,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.schedule, size: rs.scale(16), color: Colors.white),
+                    Icon(Icons.schedule, size: rs.scale(14), color: Colors.white),
                     SizedBox(width: rs.width(4)),
                     Text(
                       'Pending',
@@ -1053,27 +1568,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
               )
             : isLockedByManualOverride
                 ? _buildLockedStatusButton()
-            : _buildAttendanceStatusButton(
-                status,
-                () async {
-                  final newStatus = _getNextStatus(status);
-                  if (newStatus == null) {
-                    await attendanceProvider.deleteRecordForSubjectOnDate(
-                      subject.id,
-                      date,
-                      slotKey: slotKey,
-                    );
-                  } else {
-                    await attendanceProvider.markAttendance(
-                      subject.id,
-                      date,
-                      newStatus,
-                      slotKey: slotKey,
-                    );
-                  }
-                  setState(() {});
-                },
-              ),
+                : _buildAttendanceStatusButton(
+                    status,
+                    () async {
+                      final newStatus = _getNextStatus(status);
+                      if (newStatus == null) {
+                        await attendanceProvider.deleteRecordForSubjectOnDate(
+                          subject.id,
+                          date,
+                          slotKey: slotKey,
+                        );
+                      } else {
+                        await attendanceProvider.markAttendance(
+                          subject.id,
+                          date,
+                          newStatus,
+                          slotKey: slotKey,
+                        );
+                      }
+                      setState(() {});
+                    },
+                  ),
       ),
     );
   }
@@ -1089,7 +1604,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock_outline, size: rs.scale(16), color: Colors.white),
+          Icon(Icons.lock_outline, size: rs.scale(14), color: Colors.white),
           SizedBox(width: rs.width(4)),
           Text(
             'Locked',
@@ -1111,35 +1626,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
     IconData icon;
 
     if (status == null) {
-      bgColor = Colors.orange[300]!;
+      bgColor = const Color(0xFFFFA726);
       label = 'Mark';
-      icon = Icons.help_outline;
+      icon = Icons.help_outline_rounded;
     } else if (status == AttendanceStatus.attended) {
-      bgColor = Colors.green[400]!;
+      bgColor = const Color(0xFF4CAF50);
       label = 'Present';
-      icon = Icons.done;
+      icon = Icons.check_circle_outline_rounded;
     } else if (status == AttendanceStatus.absent) {
-      bgColor = Colors.red[400]!;
+      bgColor = const Color(0xFFEF5350);
       label = 'Absent';
-      icon = Icons.close;
+      icon = Icons.highlight_off_rounded;
     } else {
-      bgColor = Colors.purple[300]!;
+      bgColor = const Color(0xFFAB47BC);
       label = 'Holiday';
-      icon = Icons.celebration;
+      icon = Icons.celebration_rounded;
     }
 
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
+      onTap: () {
+        HapticFeedback.vibrate();
+        onTap();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(rs.scale(20)),
+          boxShadow: [
+            BoxShadow(
+              color: bgColor.withValues(alpha: 0.3),
+              blurRadius: rs.scale(4),
+              offset: Offset(0, rs.scale(2)),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: rs.scale(16), color: Colors.white),
+            Icon(icon, size: rs.scale(14), color: Colors.white),
             SizedBox(width: rs.width(4)),
             Text(
               label,
@@ -1163,7 +1689,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } else if (currentStatus == AttendanceStatus.absent) {
       return AttendanceStatus.cancelled;
     } else {
-      return null; // Reset to not marked
+      return null;
     }
   }
 

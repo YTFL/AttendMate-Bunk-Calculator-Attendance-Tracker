@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+import 'backup_service.dart';
 import '../features/attendance/attendance_model.dart';
 import '../features/semester/semester_model.dart';
 import '../features/subject/subject_model.dart';
+import '../features/location/location_model.dart';
+import '../features/planner/planned_leave_model.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -25,10 +28,21 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 6,
+        version: 8,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
+
+      // Create app_logs table dynamically to allow event logging for diagnostic/debugging purposes.
+      await _database!.execute('''
+        CREATE TABLE IF NOT EXISTS app_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp TEXT NOT NULL,
+          tag TEXT NOT NULL,
+          message TEXT NOT NULL,
+          level TEXT NOT NULL
+        )
+      ''');
       
       _isInitialized = true;
     } catch (e) {
@@ -48,7 +62,10 @@ class DatabaseService {
           color INTEGER NOT NULL,
           schedule TEXT NOT NULL,
           targetAttendance INTEGER NOT NULL,
-          attendanceRecords TEXT NOT NULL
+          attendanceRecords TEXT NOT NULL,
+          locationId TEXT,
+          room TEXT,
+          block TEXT
         )
       ''');
 
@@ -98,6 +115,28 @@ class DatabaseService {
       await db.execute('''
         CREATE INDEX idx_system_calendar_events_lookup 
         ON system_calendar_events (subjectId, slotKey, date)
+      ''');
+
+      // Locations table
+      await db.execute('''
+        CREATE TABLE locations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          block TEXT,
+          latitude REAL,
+          longitude REAL
+        )
+      ''');
+
+      // Planned leaves table
+      await db.execute('''
+        CREATE TABLE planned_leaves (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          startDate TEXT NOT NULL,
+          endDate TEXT NOT NULL,
+          affectedSubjectIds TEXT NOT NULL
+        )
       ''');
     } catch (e) {
       debugPrint('DatabaseService onCreate error: $e');
@@ -161,6 +200,40 @@ class DatabaseService {
           ON system_calendar_events (subjectId, slotKey, date)
         ''');
       }
+      if (oldVersion < 7) {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS locations (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            block TEXT,
+            latitude REAL,
+            longitude REAL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS planned_leaves (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            startDate TEXT NOT NULL,
+            endDate TEXT NOT NULL,
+            affectedSubjectIds TEXT NOT NULL
+          )
+        ''');
+      }
+      if (oldVersion < 8) {
+        // Add subject-level location columns
+        final cols = await db.rawQuery('PRAGMA table_info(subjects)');
+        final existing = cols.map((c) => c['name'] as String).toSet();
+        if (!existing.contains('locationId')) {
+          await db.execute('ALTER TABLE subjects ADD COLUMN locationId TEXT');
+        }
+        if (!existing.contains('room')) {
+          await db.execute('ALTER TABLE subjects ADD COLUMN room TEXT');
+        }
+        if (!existing.contains('block')) {
+          await db.execute('ALTER TABLE subjects ADD COLUMN block TEXT');
+        }
+      }
     } catch (e) {
       debugPrint('DatabaseService onUpgrade error: $e');
       rethrow;
@@ -172,6 +245,14 @@ class DatabaseService {
       throw Exception('DatabaseService not initialized. Call init() first.');
     }
     return _database!;
+  }
+
+  /// Expose raw database instance for BackupService transactions
+  Future<Database> getRawDatabase() async {
+    if (_database == null || !_isInitialized) {
+      await init();
+    }
+    return _getDb();
   }
 
   // ==================== SUBJECTS ====================
@@ -194,10 +275,14 @@ class DatabaseService {
           'schedule': jsonEncode(subject.schedule.map((s) => s.toJson()).toList()),
           'targetAttendance': subject.targetAttendance,
           'attendanceRecords': jsonEncode(subject.attendanceRecords.map((a) => a.toJson()).toList()),
+          'locationId': subject.locationId,
+          'room': subject.room,
+          'block': subject.block,
         });
       }
 
       await batch.commit(noResult: true);
+      await BackupService().notifyDataChanged();
     } catch (e) {
       rethrow;
     }
@@ -221,6 +306,9 @@ class DatabaseService {
           attendanceRecords: (jsonDecode(map['attendanceRecords'] as String) as List)
               .map((a) => Attendance.fromJson(a as Map<String, dynamic>))
               .toList(),
+          locationId: map['locationId'] as String?,
+          room: map['room'] as String?,
+          block: map['block'] as String?,
         );
       }).toList();
       return subjects;
@@ -250,6 +338,7 @@ class DatabaseService {
       }
 
       await batch.commit(noResult: true);
+      await BackupService().notifyDataChanged();
     } catch (e) {
       rethrow;
     }
@@ -292,6 +381,7 @@ class DatabaseService {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      await BackupService().notifyDataChanged();
     } catch (e) {
       rethrow;
     }
@@ -345,6 +435,7 @@ class DatabaseService {
       batch.delete('attendance');
       
       await batch.commit(noResult: true);
+      await BackupService().notifyDataChanged();
     } catch (e) {
       rethrow;
     }
@@ -562,6 +653,7 @@ class DatabaseService {
       batch.delete('attendance');
       batch.delete('system_calendar_events');
       await batch.commit(noResult: true);
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService clearSemesterAndAllData error: $e');
       rethrow;
@@ -584,6 +676,7 @@ class DatabaseService {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService saveSingleAttendance error: $e');
       rethrow;
@@ -603,6 +696,7 @@ class DatabaseService {
         where: 'subjectId = ? AND date = ? AND slotKey = ?',
         whereArgs: [subjectId, date.toIso8601String(), slotKey ?? ''],
       );
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService deleteSingleAttendance error: $e');
       rethrow;
@@ -618,6 +712,7 @@ class DatabaseService {
         where: 'subjectId = ?',
         whereArgs: [subjectId],
       );
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService deleteAttendanceForSubject error: $e');
       rethrow;
@@ -633,6 +728,7 @@ class DatabaseService {
         where: 'date = ?',
         whereArgs: [date.toIso8601String()],
       );
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService deleteAttendanceForDate error: $e');
       rethrow;
@@ -657,9 +753,136 @@ class DatabaseService {
         );
       }
       await batch.commit(noResult: true);
+      await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService saveMultipleAttendanceIncremental error: $e');
       rethrow;
+    }
+  }
+
+  // ==================== LOCATIONS ====================
+
+  Future<void> saveLocation(LocationConfig location) async {
+    try {
+      final db = _getDb();
+      await db.insert(
+        'locations',
+        location.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await BackupService().notifyDataChanged();
+    } catch (e) {
+      debugPrint('DatabaseService saveLocation error: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<LocationConfig>> loadLocations() async {
+    try {
+      final db = _getDb();
+      final List<Map<String, dynamic>> maps = await db.query('locations');
+      return maps.map((map) => LocationConfig.fromMap(map)).toList();
+    } catch (e) {
+      debugPrint('DatabaseService loadLocations error: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteLocation(String id) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'locations',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await BackupService().notifyDataChanged();
+    } catch (e) {
+      debugPrint('DatabaseService deleteLocation error: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== PLANNED LEAVES ====================
+
+  Future<void> savePlannedLeave(PlannedLeave leave) async {
+    try {
+      final db = _getDb();
+      await db.insert(
+        'planned_leaves',
+        leave.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await BackupService().notifyDataChanged();
+    } catch (e) {
+      debugPrint('DatabaseService savePlannedLeave error: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<PlannedLeave>> loadPlannedLeaves() async {
+    try {
+      final db = _getDb();
+      final List<Map<String, dynamic>> maps = await db.query('planned_leaves');
+      return maps.map((map) => PlannedLeave.fromMap(map)).toList();
+    } catch (e) {
+      debugPrint('DatabaseService loadPlannedLeaves error: $e');
+      return [];
+    }
+  }
+
+  Future<void> deletePlannedLeave(String id) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'planned_leaves',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await BackupService().notifyDataChanged();
+    } catch (e) {
+      debugPrint('DatabaseService deletePlannedLeave error: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== APP LOGS (DIAGNOSTICS) ====================
+
+  Future<void> logAppEvent({
+    required String tag,
+    required String message,
+    String level = 'INFO',
+  }) async {
+    try {
+      final db = _getDb();
+      await db.insert('app_logs', {
+        'timestamp': DateTime.now().toIso8601String(),
+        'tag': tag,
+        'message': message,
+        'level': level,
+      });
+      debugPrint('[$level][$tag] $message');
+    } catch (e) {
+      debugPrint('Error logging app event: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> loadAppLogs() async {
+    try {
+      final db = _getDb();
+      return await db.query('app_logs', orderBy: 'timestamp DESC', limit: 200);
+    } catch (e) {
+      debugPrint('DatabaseService loadAppLogs error: $e');
+      return [];
+    }
+  }
+
+  Future<void> clearAppLogs() async {
+    try {
+      final db = _getDb();
+      await db.delete('app_logs');
+    } catch (e) {
+      debugPrint('DatabaseService clearAppLogs error: $e');
     }
   }
 }

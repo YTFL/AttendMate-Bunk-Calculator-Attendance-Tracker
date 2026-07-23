@@ -5,11 +5,15 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
+import '../../utils/error_utils.dart';
+import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/timetable_export_utils.dart';
 import '../../utils/timetable_import_utils.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
+import '../tutorial/tutorial_controller.dart';
+import '../tutorial/tutorial_overlay.dart';
 
 class ImportTimetableScreen extends StatefulWidget {
   const ImportTimetableScreen({super.key});
@@ -22,6 +26,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   static const MethodChannel _fileImportChannel = MethodChannel('com.attendmate.app/file_import');
 
   final _inputTextController = TextEditingController();
+  final GlobalKey _importInputKey = GlobalKey();
+  final GlobalKey _exportMenuKey = GlobalKey();
   String? _errorMessage;
   List<Subject>? _importedSubjects;
   List<_MidSemesterChangePreview> _midSemesterChanges = [];
@@ -33,10 +39,29 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     super.initState();
     final now = DateTime.now();
     _effectiveFromDate = DateTime(now.year, now.month, now.day);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final tutorialController = Provider.of<TutorialController>(context, listen: false);
+        tutorialController.addListener(_onTutorialStepChanged);
+      }
+    });
+  }
+
+  void _onTutorialStepChanged() {
+    if (!mounted) return;
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    if (tutorialController.isActive && (tutorialController.currentStepIndex < 11 || tutorialController.currentStepIndex >= 13)) {
+      Navigator.of(context).maybePop();
+    }
   }
 
   @override
   void dispose() {
+    try {
+      final tutorialController = Provider.of<TutorialController>(context, listen: false);
+      tutorialController.removeListener(_onTutorialStepChanged);
+    } catch (_) {}
     _inputTextController.dispose();
     super.dispose();
   }
@@ -410,10 +435,13 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       if (!mounted) {
         return;
       }
+      if (isUserCancellation(e)) {
+        return;
+      }
 
       ScaffoldMessenger.of(context).showReplacingSnackBar(
         SnackBar(
-          content: Text('Failed to upload file: $e'),
+          content: Text(formatUserFriendlyErrorMessage(e, defaultPrefix: 'Failed to upload file')),
           backgroundColor: Colors.red,
         ),
       );
@@ -541,458 +569,957 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Import Timetable'),
-          actions: [
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) {
-                if (value == 'json') {
-                  _exportAsJson();
-                } else if (value == 'csv') {
-                  _exportAsCSV();
-                } else if (value == 'pdf') {
-                  _exportAsPDF();
-                }
-              },
-              itemBuilder: (BuildContext context) => [
-                const PopupMenuItem<String>(
-                  value: 'json',
-                  child: Row(
-                    children: [
-                      Icon(Icons.data_object, size: 18),
-                      SizedBox(width: 12),
-                      Text('Export as JSON'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'csv',
-                  child: Row(
-                    children: [
-                      Icon(Icons.table_chart, size: 18),
-                      SizedBox(width: 12),
-                      Text('Export as CSV'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'pdf',
-                  child: Row(
-                    children: [
-                      Icon(Icons.picture_as_pdf, size: 18),
-                      SizedBox(width: 12),
-                      Text('Export as PDF'),
-                    ],
-                  ),
-                ),
-              ],
+    final rs = context.rs;
+    final theme = Theme.of(context);
+
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    tutorialController.registerKey('key_export_menu', _exportMenuKey);
+    tutorialController.registerKey('key_import_input', _importInputKey);
+
+    return TutorialOverlay(
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(
+              'Import & Export Timetable',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: rs.font(18),
+              ),
             ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Instructions
-                Card(
-                  color: Colors.blue.withAlpha(25),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text(
-                              'Import Instructions',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Paste valid JSON or CSV data, or use the import icon inside the text box to load a file. '
-                          'Use "Update Mid-Semester" to apply a new timetable from a selected date '
-                          'while keeping all classes before that date unchanged.',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _copyJsonTemplate,
-                                icon: const Icon(Icons.content_copy, size: 18),
-                                label: const Text('Copy JSON Reference'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _copyCsvTemplate,
-                                icon: const Icon(Icons.table_chart, size: 18),
-                                label: const Text('Copy CSV Reference'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal,
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment<bool>(
-                      value: true,
-                      label: Text('Update Mid-Semester'),
-                      icon: Icon(Icons.update),
-                    ),
-                    ButtonSegment<bool>(
-                      value: false,
-                      label: Text('Add As New Subjects'),
-                      icon: Icon(Icons.playlist_add),
-                    ),
-                  ],
-                  selected: <bool>{_isMidSemesterUpdate},
-                  onSelectionChanged: (selection) {
-                    if (selection.isEmpty) {
-                      return;
+            elevation: 0,
+            actions: [
+              KeyedSubtree(
+                key: _exportMenuKey,
+                child: PopupMenuButton<String>(
+                  icon: Icon(Icons.ios_share_rounded, size: rs.scale(22)),
+                  tooltip: 'Export Options',
+                  onSelected: (value) {
+                    if (value == 'json') {
+                      _exportAsJson();
+                    } else if (value == 'csv') {
+                      _exportAsCSV();
+                    } else if (value == 'pdf') {
+                      _exportAsPDF();
                     }
-                    setState(() {
-                      _isMidSemesterUpdate = selection.first;
-                      if (_isMidSemesterUpdate && _importedSubjects != null) {
-                        _midSemesterChanges =
-                            _buildMidSemesterChangePreview(_importedSubjects!);
-                      } else {
-                        _midSemesterChanges = [];
-                      }
-                    });
                   },
-                ),
-                const SizedBox(height: 12),
-
-                if (_isMidSemesterUpdate)
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.event_available),
-                      title: const Text('Apply Updated Timetable From'),
-                      subtitle: Text(
-                        '${_formatDate(_effectiveFromDate)}\n'
-                        'Classes before this date remain locked to the old timetable.',
-                      ),
-                      isThreeLine: true,
-                      trailing: const Icon(Icons.edit_calendar),
-                      onTap: _pickEffectiveFromDate,
-                    ),
-                  ),
-                if (_isMidSemesterUpdate) const SizedBox(height: 12),
-
-                // JSON/CSV Input
-                TextFormField(
-                  controller: _inputTextController,
-                  minLines: 12,
-                  maxLines: 20,
-                  decoration: InputDecoration(
-                    labelText: 'JSON or CSV Data',
-                    hintText: 'Paste your JSON or CSV data here...',
-                    suffixIcon: IconButton(
-                      tooltip: 'Import .json/.csv file',
-                      onPressed: _pickAndLoadImportFile,
-                      icon: const Icon(Icons.upload_file),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  ),
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
-                const SizedBox(height: 12),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _parseAndValidateInput,
-                        icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Parse & Preview'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _clearInput,
-                      icon: const Icon(Icons.clear, size: 18),
-                      label: const Text('Clear'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Error Message
-                if (_errorMessage != null)
-                  Card(
-                    color: Colors.red.withAlpha(25),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
+                  itemBuilder: (BuildContext context) => [
+                    PopupMenuItem<String>(
+                      value: 'json',
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.red),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Error',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
+                          Icon(Icons.data_object_rounded, size: rs.scale(18), color: theme.colorScheme.primary),
+                          SizedBox(width: rs.width(12)),
+                          Text('Export as JSON', style: TextStyle(fontSize: rs.font(13.5))),
                         ],
                       ),
                     ),
-                  ),
-
-                // Preview
-                if (_importedSubjects != null && _importedSubjects!.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      Text(
-                        _isMidSemesterUpdate
-                            ? 'Changed Slots Preview'
-                            : 'Preview',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                    PopupMenuItem<String>(
+                      value: 'csv',
+                      child: Row(
+                        children: [
+                          Icon(Icons.table_chart_rounded, size: rs.scale(18), color: Colors.teal),
+                          SizedBox(width: rs.width(12)),
+                          Text('Export as CSV', style: TextStyle(fontSize: rs.font(13.5))),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      if (_isMidSemesterUpdate && _midSemesterChanges.isEmpty)
-                        Card(
-                          color: Colors.blue.withAlpha(20),
-                          child: const Padding(
-                            padding: EdgeInsets.all(12.0),
-                            child: Text(
-                              'No slot changes detected from the selected date.\n'
-                              'Only changed slots are shown in this mode.',
-                            ),
-                          ),
-                        ),
-                      if (_isMidSemesterUpdate)
-                        ..._midSemesterChanges.map((change) {
-                          final kindLabel = switch (change.kind) {
-                            _MidSemesterChangeKind.added => 'Added',
-                            _MidSemesterChangeKind.updated => 'Updated',
-                            _MidSemesterChangeKind.retired => 'Retired',
-                          };
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          change.heading,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                      Chip(
-                                        label: Text(kindLabel),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  const Text(
-                                    'Before',
-                                    style: TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildSlotWrap(change.beforeSlots),
-                                  const SizedBox(height: 10),
-                                  const Text(
-                                    'After',
-                                    style: TextStyle(fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildSlotWrap(change.afterSlots),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      if (!_isMidSemesterUpdate)
-                        ..._importedSubjects!.map((subject) {
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 16,
-                                        height: 16,
-                                        decoration: BoxDecoration(
-                                          color: subject.color,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          subject.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                    children: subject.schedule.map((slot) {
-                                      return Chip(
-                                        label: Text(
-                                          '${slot.day.name.substring(0, 3).toUpperCase()}: ${slot.startTime.format(context)} - ${slot.endTime.format(context)}',
-                                          style: const TextStyle(fontSize: 11),
-                                        ),
-                                        backgroundColor: subject.color.withAlpha(50),
-                                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                                        visualDensity: VisualDensity.compact,
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _importSubjects(),
-                          icon: const Icon(Icons.download, size: 18),
-                          label: Text(
-                            _isMidSemesterUpdate
-                                ? 'Update From ${_formatDate(_effectiveFromDate)}'
-                                : 'Import ${_importedSubjects!.length} Subject(s)',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                // Format Help
-                const SizedBox(height: 24),
-                ExpansionTile(
-                  title: const Text('JSON Format Reference'),
-                  children: [
-                    Container(
-                        color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.grey.withValues(alpha: 0.1),
-                      padding: const EdgeInsets.all(12),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          _getJsonFormatReference(),
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                          ),
-                        ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'pdf',
+                      child: Row(
+                        children: [
+                          Icon(Icons.picture_as_pdf_rounded, size: rs.scale(18), color: Colors.redAccent),
+                          SizedBox(width: rs.width(12)),
+                          Text('Export as PDF', style: TextStyle(fontSize: rs.font(13.5))),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                ExpansionTile(
-                  title: const Text('CSV Format Reference'),
-                  children: [
-                    Container(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.grey.withValues(alpha: 0.1),
-                      padding: const EdgeInsets.all(12),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          _getCsvFormatReference(),
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                          ),
+              ),
+              SizedBox(width: rs.width(4)),
+            ],
+          ),
+          body: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.all(rs.scale(16)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Modern Hero Instructions Card
+                _buildInstructionsCard(context, rs),
+
+                SizedBox(height: rs.height(16)),
+
+                // Mode Selector Section
+                _buildModeSelectorCard(context, rs),
+
+                SizedBox(height: rs.height(16)),
+
+                // Effective Date Picker (Mid-Semester Mode)
+                if (_isMidSemesterUpdate) ...[
+                  _buildEffectiveDatePickerCard(context, rs),
+                  SizedBox(height: rs.height(16)),
+                ],
+
+                // Data Input Section
+                _buildDataInputSection(context, rs),
+
+                SizedBox(height: rs.height(16)),
+
+                // Parse & Clear Actions
+                _buildParseActionsRow(context, rs),
+
+                // Error Message Card
+                if (_errorMessage != null) ...[
+                  SizedBox(height: rs.height(14)),
+                  _buildErrorMessageCard(context, rs),
+                ],
+
+                // Preview Section
+                if (_importedSubjects != null && _importedSubjects!.isNotEmpty) ...[
+                  SizedBox(height: rs.height(20)),
+                  _buildPreviewSection(context, rs),
+                ],
+
+                // Format Reference Accordions
+                SizedBox(height: rs.height(24)),
+                _buildFormatReferencesSection(context, rs),
+
+                SizedBox(height: rs.height(16)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInstructionsCard(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.all(rs.scale(18)),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+            : theme.colorScheme.primaryContainer.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(rs.scale(18)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(rs.scale(8)),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  color: theme.colorScheme.primary,
+                  size: rs.scale(20),
+                ),
+              ),
+              SizedBox(width: rs.width(12)),
+              Text(
+                'Import Instructions',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: rs.font(15),
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: rs.height(10)),
+          Text(
+            'Paste JSON or CSV data into the text box below, or tap the file upload icon to select a file from your device. '
+            'Use "Update Mid-Semester" to apply schedule changes from a target date while preserving previous attendance history.',
+            style: TextStyle(
+              fontSize: rs.font(12.5),
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+              height: 1.4,
+            ),
+          ),
+          SizedBox(height: rs.height(14)),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _copyJsonTemplate,
+                  icon: Icon(Icons.code_rounded, size: rs.scale(16)),
+                  label: Text('Copy JSON Template', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: rs.height(9)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(rs.scale(10)),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: rs.width(8)),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _copyCsvTemplate,
+                  icon: Icon(Icons.table_chart_rounded, size: rs.scale(16)),
+                  label: Text('Copy CSV Template', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: rs.height(9)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(rs.scale(10)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeSelectorCard(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: EdgeInsets.all(rs.scale(14)),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(rs.scale(16)),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: rs.width(4), bottom: rs.height(10)),
+            child: Text(
+              'Import Mode',
+              style: TextStyle(
+                fontSize: rs.font(13),
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<bool>(
+              segments: [
+                ButtonSegment<bool>(
+                  value: true,
+                  label: Text('Update Mid-Semester', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
+                  icon: Icon(Icons.update_rounded, size: rs.scale(18)),
+                ),
+                ButtonSegment<bool>(
+                  value: false,
+                  label: Text('Add As New Subjects', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
+                  icon: Icon(Icons.playlist_add_rounded, size: rs.scale(18)),
+                ),
+              ],
+              selected: <bool>{_isMidSemesterUpdate},
+              style: ButtonStyle(
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                  ),
+                ),
+              ),
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) return;
+                setState(() {
+                  _isMidSemesterUpdate = selection.first;
+                  if (_isMidSemesterUpdate && _importedSubjects != null) {
+                    _midSemesterChanges = _buildMidSemesterChangePreview(_importedSubjects!);
+                  } else {
+                    _midSemesterChanges = [];
+                  }
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEffectiveDatePickerCard(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(rs.scale(16)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1.2,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(rs.scale(16)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(rs.scale(16)),
+          onTap: _pickEffectiveFromDate,
+          child: Padding(
+            padding: EdgeInsets.all(rs.scale(14)),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(rs.scale(10)),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                  ),
+                  child: Icon(
+                    Icons.event_available_rounded,
+                    color: theme.colorScheme.primary,
+                    size: rs.scale(22),
+                  ),
+                ),
+                SizedBox(width: rs.width(12)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Apply Updated Timetable From',
+                        style: TextStyle(
+                          fontSize: rs.font(13.5),
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
                         ),
                       ),
+                      SizedBox(height: rs.height(3)),
+                      Text(
+                        'Classes prior to ${_formatDate(_effectiveFromDate)} remain locked to old schedule',
+                        style: TextStyle(
+                          fontSize: rs.font(11),
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(width: rs.width(8)),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: rs.width(10),
+                    vertical: rs.height(5),
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(rs.scale(10)),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatDate(_effectiveFromDate),
+                        style: TextStyle(
+                          fontSize: rs.font(11.5),
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      SizedBox(width: rs.width(4)),
+                      Icon(
+                        Icons.edit_calendar_rounded,
+                        size: rs.scale(14),
+                        color: theme.colorScheme.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDataInputSection(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Timetable Data (JSON / CSV)',
+              style: TextStyle(
+                fontSize: rs.font(13.5),
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _pickAndLoadImportFile,
+              icon: Icon(Icons.upload_file_rounded, size: rs.scale(16)),
+              label: Text(
+                'Upload File',
+                style: TextStyle(
+                  fontSize: rs.font(12),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(
+                  horizontal: rs.width(8),
+                  vertical: rs.height(4),
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: rs.height(6)),
+        KeyedSubtree(
+          key: _importInputKey,
+          child: TextFormField(
+            controller: _inputTextController,
+            minLines: 8,
+            maxLines: 16,
+            decoration: InputDecoration(
+              hintText: 'Paste your JSON or CSV text data here...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(rs.scale(14)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.15),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(rs.scale(14)),
+                borderSide: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.15),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(rs.scale(14)),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
+              filled: true,
+              fillColor: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.grey.withValues(alpha: 0.06),
+              contentPadding: EdgeInsets.all(rs.scale(14)),
+            ),
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: rs.font(12),
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildParseActionsRow(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _parseAndValidateInput,
+            icon: Icon(Icons.auto_fix_high_rounded, size: rs.scale(18)),
+            label: Text(
+              'Parse & Preview',
+              style: TextStyle(
+                fontSize: rs.font(13.5),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: rs.height(13)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(rs.scale(12)),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: rs.width(10)),
+        OutlinedButton.icon(
+          onPressed: _clearInput,
+          icon: Icon(Icons.clear_all_rounded, size: rs.scale(18)),
+          label: Text(
+            'Clear',
+            style: TextStyle(
+              fontSize: rs.font(13),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: theme.colorScheme.error,
+            side: BorderSide(
+              color: theme.colorScheme.error.withValues(alpha: 0.4),
+            ),
+            padding: EdgeInsets.symmetric(
+              horizontal: rs.width(14),
+              vertical: rs.height(13),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(rs.scale(12)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorMessageCard(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: EdgeInsets.all(rs.scale(14)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.error.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(rs.scale(14)),
+        border: Border.all(
+          color: theme.colorScheme.error.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.error_outline_rounded,
+            color: theme.colorScheme.error,
+            size: rs.scale(20),
+          ),
+          SizedBox(width: rs.width(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Parsing Error',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: rs.font(13.5),
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                SizedBox(height: rs.height(3)),
+                Text(
+                  _errorMessage!,
+                  style: TextStyle(
+                    fontSize: rs.font(12),
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewSection(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              _isMidSemesterUpdate ? 'Changed Slots Preview' : 'Import Preview',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: rs.font(16),
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            SizedBox(width: rs.width(8)),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: rs.width(8),
+                vertical: rs.height(2),
+              ),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(rs.scale(10)),
+              ),
+              child: Text(
+                _isMidSemesterUpdate
+                    ? '${_midSemesterChanges.length} changes'
+                    : '${_importedSubjects!.length} subjects',
+                style: TextStyle(
+                  fontSize: rs.font(11),
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: rs.height(12)),
+        if (_isMidSemesterUpdate && _midSemesterChanges.isEmpty)
+          Container(
+            padding: EdgeInsets.all(rs.scale(14)),
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(rs.scale(14)),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: Colors.blue, size: rs.scale(20)),
+                SizedBox(width: rs.width(10)),
+                Expanded(
+                  child: Text(
+                    'No slot changes detected from ${_formatDate(_effectiveFromDate)}.\n'
+                    'Only modified or new slots are shown in this mode.',
+                    style: TextStyle(fontSize: rs.font(12), color: Colors.blue.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (_isMidSemesterUpdate)
+          ..._midSemesterChanges.map((change) {
+            final (kindLabel, kindColor) = switch (change.kind) {
+              _MidSemesterChangeKind.added => ('Added', const Color(0xFF2E7D32)),
+              _MidSemesterChangeKind.updated => ('Updated', const Color(0xFFED6C02)),
+              _MidSemesterChangeKind.retired => ('Retired', const Color(0xFFD32F2F)),
+            };
+
+            return Container(
+              margin: EdgeInsets.only(bottom: rs.height(10)),
+              padding: EdgeInsets.all(rs.scale(14)),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                    : theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(rs.scale(16)),
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.12),
+                  width: 1.2,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          change.heading,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: rs.font(14.5),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: rs.width(8),
+                          vertical: rs.height(3),
+                        ),
+                        decoration: BoxDecoration(
+                          color: kindColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(rs.scale(8)),
+                          border: Border.all(color: kindColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          kindLabel,
+                          style: TextStyle(
+                            fontSize: rs.font(11),
+                            fontWeight: FontWeight.bold,
+                            color: kindColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: rs.height(8)),
+                  Text(
+                    'Previous Slots:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: rs.font(11.5),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  SizedBox(height: rs.height(4)),
+                  _buildSlotWrap(change.beforeSlots, rs, context),
+                  SizedBox(height: rs.height(8)),
+                  Text(
+                    'Updated Slots:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: rs.font(11.5),
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  SizedBox(height: rs.height(4)),
+                  _buildSlotWrap(change.afterSlots, rs, context),
+                ],
+              ),
+            );
+          }),
+        if (!_isMidSemesterUpdate)
+          ..._importedSubjects!.map((subject) {
+            return Container(
+              margin: EdgeInsets.only(bottom: rs.height(10)),
+              padding: EdgeInsets.all(rs.scale(14)),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+                    : theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(rs.scale(16)),
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.12),
+                  width: 1.2,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: rs.scale(14),
+                        height: rs.scale(14),
+                        decoration: BoxDecoration(
+                          color: subject.color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: rs.width(8)),
+                      Expanded(
+                        child: Text(
+                          subject.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: rs.font(14.5),
+                          ),
+                        ),
+                      ),
+                      if (subject.acronym != null && subject.acronym!.isNotEmpty)
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: rs.width(6),
+                            vertical: rs.height(2),
+                          ),
+                          decoration: BoxDecoration(
+                            color: subject.color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(rs.scale(6)),
+                          ),
+                          child: Text(
+                            subject.acronym!,
+                            style: TextStyle(
+                              fontSize: rs.font(10.5),
+                              fontWeight: FontWeight.bold,
+                              color: subject.color,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: rs.height(8)),
+                  Wrap(
+                    spacing: rs.width(4),
+                    runSpacing: rs.height(4),
+                    children: subject.schedule.map((slot) {
+                      return Chip(
+                        label: Text(
+                          '${slot.day.name.substring(0, 3).toUpperCase()}: ${slot.startTime.format(context)} - ${slot.endTime.format(context)}',
+                          style: TextStyle(fontSize: rs.font(10.5)),
+                        ),
+                        backgroundColor: subject.color.withValues(alpha: 0.15),
+                        padding: EdgeInsets.symmetric(horizontal: rs.width(4)),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            );
+          }),
+        SizedBox(height: rs.height(14)),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => _importSubjects(),
+            icon: Icon(Icons.check_circle_outline_rounded, size: rs.scale(20)),
+            label: Text(
+              _isMidSemesterUpdate
+                  ? 'Apply Update From ${_formatDate(_effectiveFromDate)}'
+                  : 'Import ${_importedSubjects!.length} Subject(s)',
+              style: TextStyle(
+                fontSize: rs.font(14),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: rs.height(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(rs.scale(12)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormatReferencesSection(BuildContext context, ResponsiveScale rs) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Format References',
+          style: TextStyle(
+            fontSize: rs.font(13.5),
+            fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        SizedBox(height: rs.height(8)),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.12),
+              width: 1.2,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+            child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: Icon(
+                Icons.data_object_rounded,
+                color: theme.colorScheme.primary,
+                size: rs.scale(20),
+              ),
+              title: Text(
+                'JSON Format Reference',
+                style: TextStyle(
+                  fontSize: rs.font(14),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              children: [
+                Container(
+                  width: double.infinity,
+                  color: isDarkMode
+                      ? Colors.black.withValues(alpha: 0.25)
+                      : Colors.grey.withValues(alpha: 0.08),
+                  padding: EdgeInsets.all(rs.scale(12)),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Text(
+                      _getJsonFormatReference(),
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: rs.font(11),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: rs.height(10)),
+        Container(
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+                : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.12),
+              width: 1.2,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+            child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: Icon(
+                Icons.table_chart_rounded,
+                color: Colors.teal,
+                size: rs.scale(20),
+              ),
+              title: Text(
+                'CSV Format Reference',
+                style: TextStyle(
+                  fontSize: rs.font(14),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              children: [
+                Container(
+                  width: double.infinity,
+                  color: isDarkMode
+                      ? Colors.black.withValues(alpha: 0.25)
+                      : Colors.grey.withValues(alpha: 0.08),
+                  padding: EdgeInsets.all(rs.scale(12)),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Text(
+                      _getCsvFormatReference(),
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: rs.font(11),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1034,24 +1561,30 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     return TimetableImportUtils.generateTemplateCsv();
   }
 
-  Widget _buildSlotWrap(List<TimeSlot> slots) {
+  Widget _buildSlotWrap(List<TimeSlot> slots, ResponsiveScale rs, BuildContext context) {
     if (slots.isEmpty) {
-      return const Text(
-        'No slots',
-        style: TextStyle(color: Colors.grey),
+      return Text(
+        'No slots scheduled',
+        style: TextStyle(
+          color: Colors.grey,
+          fontSize: rs.font(11.5),
+          fontStyle: FontStyle.italic,
+        ),
       );
     }
 
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: rs.width(4),
+      runSpacing: rs.height(4),
       children: slots.map((slot) {
         return Chip(
           label: Text(
             '${slot.day.name.substring(0, 3).toUpperCase()}: ${slot.startTime.format(context)} - ${slot.endTime.format(context)}',
-            style: const TextStyle(fontSize: 11),
+            style: TextStyle(fontSize: rs.font(10.5)),
           ),
+          padding: EdgeInsets.symmetric(horizontal: rs.width(4)),
           visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         );
       }).toList(),
     );

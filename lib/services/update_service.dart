@@ -121,7 +121,7 @@ class UpdateService {
           return 'No release notes available';
         }
 
-        final sanitizedBody = _sanitizeReleaseNotesForInAppUpdate(body);
+        final sanitizedBody = sanitizeReleaseNotes(body);
         return sanitizedBody.isNotEmpty ? sanitizedBody : 'No release notes available';
       }
       return 'Release notes not found';
@@ -131,19 +131,21 @@ class UpdateService {
     }
   }
 
-  String _sanitizeReleaseNotesForInAppUpdate(String markdown) {
+  /// Sanitize markdown release notes for clean in-app display.
+  static String sanitizeReleaseNotes(String markdown) {
     final normalized = markdown.replaceAll('\r\n', '\n').trim();
     if (normalized.isEmpty) return normalized;
 
     var lines = normalized.split('\n');
     lines = _removeTopMetadataBlock(lines);
     lines = _removeInstallationSection(lines);
+    lines = _removeTrailingDividersAndFooters(lines);
 
     final sanitized = lines.join('\n').trim();
     return sanitized;
   }
 
-  List<String> _removeTopMetadataBlock(List<String> lines) {
+  static List<String> _removeTopMetadataBlock(List<String> lines) {
     if (lines.isEmpty) return lines;
 
     final firstNonEmptyIndex = lines.indexWhere((line) => line.trim().isNotEmpty);
@@ -166,7 +168,7 @@ class UpdateService {
     return lines.sublist(separatorIndex + 1);
   }
 
-  List<String> _removeInstallationSection(List<String> lines) {
+  static List<String> _removeInstallationSection(List<String> lines) {
     if (lines.isEmpty) return lines;
 
     final installationHeaderRegex = RegExp(r'^##\s+.*installation', caseSensitive: false);
@@ -192,6 +194,63 @@ class UpdateService {
       ...lines.sublist(0, startIndex),
       ...lines.sublist(endIndex),
     ];
+  }
+
+  static List<String> _removeTrailingDividersAndFooters(List<String> lines) {
+    final copy = List<String>.from(lines);
+    while (copy.isNotEmpty) {
+      final trimmed = copy.last.trim();
+      final lower = trimmed.toLowerCase();
+      if (trimmed.isEmpty ||
+          trimmed == '---' ||
+          trimmed == '***' ||
+          trimmed == '___' ||
+          lower.startsWith('for full history') ||
+          lower.startsWith('see [changelog.md]') ||
+          lower.startsWith('for full details')) {
+        copy.removeLast();
+      } else {
+        break;
+      }
+    }
+    return copy;
+  }
+
+  /// Fetch latest release from GitHub for simulation in Developer Options
+  Future<AppUpdate> fetchLatestReleaseForSimulation() async {
+    try {
+      const latestReleaseUrl =
+          'https://api.github.com/repos/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/releases/latest';
+
+      final response = await http.get(Uri.parse(latestReleaseUrl)).timeout(
+        const Duration(seconds: 10),
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final tagName = json['tag_name'] as String? ?? 'v2.0.0';
+        final cleanVersion = tagName.replaceFirst(RegExp(r'^v'), '');
+        final body = json['body'] as String? ?? '';
+        final sanitizedNotes = sanitizeReleaseNotes(body);
+
+        return AppUpdate(
+          version: cleanVersion.isNotEmpty ? cleanVersion : '2.0.0',
+          buildNumber: 99,
+          changelog: sanitizedNotes.isNotEmpty
+              ? sanitizedNotes
+              : '## ✨ Simulated Release Notes\n\n- Improved download progress bar with percentage indicator\n- Clean release notes presentation without trailing dividers',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error fetching latest release for simulation: $e');
+    }
+
+    // Fallback simulated update
+    return AppUpdate(
+      version: '2.0.0',
+      buildNumber: 99,
+      changelog: '## ✨ Simulated Release Notes (v2.0.0)\n\n### Added\n- Full animated white download progress bar with percentage indicator.\n- Developer option simulation for testing update UI.\n\n### Changed\n- Cleaned up trailing lines and dividers from release notes display.',
+    );
   }
 
   /// Fetch the published date of the latest GitHub release
@@ -222,20 +281,40 @@ class UpdateService {
 
   /// Download APK file from GitHub releases
   /// URL pattern: https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/releases/download/v{version}/AttendMate-v{version}.apk
-  Future<File?> downloadAPK(String remoteVersion) async {
+  Future<File?> downloadAPK(
+    String remoteVersion, {
+    void Function(double progress)? onProgress,
+  }) async {
     try {
       final apkUrl =
           'https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/releases/download/v$remoteVersion/AttendMate-v$remoteVersion.apk';
 
-      final response = await http.get(Uri.parse(apkUrl)).timeout(
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(apkUrl));
+      final response = await client.send(request).timeout(
         const Duration(seconds: 60),
       );
 
       if (response.statusCode == 200) {
+        final contentLength = response.contentLength ?? 0;
+        final List<int> bytes = [];
+        int downloaded = 0;
+
+        await for (final chunk in response.stream) {
+          bytes.addAll(chunk);
+          downloaded += chunk.length;
+          if (contentLength > 0 && onProgress != null) {
+            onProgress(downloaded / contentLength);
+          }
+        }
+
         final directory = await getApplicationDocumentsDirectory();
         final apkPath = '${directory.path}/attendmate-update.apk';
         final file = File(apkPath);
-        await file.writeAsBytes(response.bodyBytes);
+        await file.writeAsBytes(bytes);
+        if (onProgress != null) {
+          onProgress(1.0);
+        }
         return file;
       }
       return null;

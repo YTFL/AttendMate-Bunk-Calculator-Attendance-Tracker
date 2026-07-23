@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../attendance/attendance_model.dart';
+import '../planner/planned_leave_model.dart';
 import '../subject/subject_model.dart';
 
 /// Enum to represent the state of each day in the calendar
@@ -11,6 +12,7 @@ enum DayState {
   attendedFullDay,
   bunkedFullDay,
   futureClasses,
+  plannedLeave,
 }
 
 /// Class to represent the state and information of a calendar day
@@ -40,6 +42,7 @@ class CalendarUtils {
     required List<Subject> subjects,
     required List<Attendance> attendanceRecords,
     Map<DateTime, List<Attendance>>? indexedRecords,
+    List<PlannedLeave> plannedLeaves = const [],
   }) {
     // Check if the date is in the future
     final today = DateTime.now();
@@ -67,23 +70,55 @@ class CalendarUtils {
           : timeSlotA.startTime.hour.compareTo(timeSlotB.startTime.hour);
     });
 
-    // If it's a future date with classes, mark as futureClasses
-    if (isFuture && subjectsWithClassesToday.isNotEmpty) {
+    // If no classes scheduled for this day
+    if (subjectsWithClassesToday.isEmpty) {
       return CalendarDayInfo(
         date: date,
-        state: DayState.futureClasses,
-        classesCount: totalClassesCount,
+        state: DayState.noClasses,
+        classesCount: 0,
         markedClasses: 0,
-        subjectsWithClassesToday: subjectsWithClassesToday,
+        subjectsWithClassesToday: [],
         attendanceRecordsToday: [],
       );
     }
 
     // Get all attendance records for this day
     final normalizedDate = DateTime(date.year, date.month, date.day);
-    final attendanceRecordsToday = indexedRecords != null
+    final rawAttendanceToday = indexedRecords != null
         ? (indexedRecords[normalizedDate] ?? [])
         : attendanceRecords.where((record) => isSameDay(record.date, date)).toList();
+
+    final attendanceRecordsToday = List<Attendance>.from(rawAttendanceToday);
+    bool hasLeaveAutoMark = false;
+
+    // Check for planned leave auto-marking for unrecorded slots
+    for (final subject in subjectsWithClassesToday) {
+      for (final slot in subject.schedule.where((s) => s.occursOnDate(date))) {
+        final slotStart = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
+        final slotEnd = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
+
+        final isCoveredByLeave = plannedLeaves.any((leave) =>
+            (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) &&
+            slotStart.isBefore(leave.endDate) &&
+            slotEnd.isAfter(leave.startDate));
+
+        if (isCoveredByLeave) {
+          final hasExplicitRecord = attendanceRecordsToday.any((r) =>
+              r.subjectId == subject.id &&
+              (r.slotKey == null || r.slotKey == slot.slotKey || r.slotKey!.isEmpty));
+
+          if (!hasExplicitRecord) {
+            hasLeaveAutoMark = true;
+            attendanceRecordsToday.add(Attendance(
+              subjectId: subject.id,
+              date: date,
+              status: AttendanceStatus.absent,
+              slotKey: slot.slotKey,
+            ));
+          }
+        }
+      }
+    }
 
     final markedRecordsToday = attendanceRecordsToday.where((record) {
       final subject = subjectsWithClassesToday
@@ -120,14 +155,19 @@ class CalendarUtils {
       );
     }
 
-    // If no classes scheduled for this day
-    if (subjectsWithClassesToday.isEmpty) {
+    // Check if all classes today are marked/covered as absent via planned leave
+    final isEntireDayPlannedLeave = totalClassesCount > 0 &&
+        markedCount == totalClassesCount &&
+        hasLeaveAutoMark &&
+        markedRecordsToday.every((record) => record.status == AttendanceStatus.absent);
+
+    if (isEntireDayPlannedLeave) {
       return CalendarDayInfo(
         date: date,
-        state: DayState.noClasses,
-        classesCount: 0,
-        markedClasses: 0,
-        subjectsWithClassesToday: [],
+        state: DayState.plannedLeave,
+        classesCount: totalClassesCount,
+        markedClasses: markedCount,
+        subjectsWithClassesToday: subjectsWithClassesToday,
         attendanceRecordsToday: attendanceRecordsToday,
       );
     }
@@ -144,6 +184,18 @@ class CalendarUtils {
     final allMarked = markedCount == totalClassesCount;
 
     if (!allMarked) {
+      // If future date without all classes auto-marked by leave
+      if (isFuture) {
+        return CalendarDayInfo(
+          date: date,
+          state: DayState.futureClasses,
+          classesCount: totalClassesCount,
+          markedClasses: markedCount,
+          subjectsWithClassesToday: subjectsWithClassesToday,
+          attendanceRecordsToday: attendanceRecordsToday,
+        );
+      }
+
       return CalendarDayInfo(
         date: date,
         state: DayState.classesNotMarked,
@@ -169,7 +221,7 @@ class CalendarUtils {
     if (absentCount == totalClassesCount) {
       return CalendarDayInfo(
         date: date,
-        state: DayState.bunkedFullDay,
+        state: isEntireDayPlannedLeave ? DayState.plannedLeave : DayState.bunkedFullDay,
         classesCount: totalClassesCount,
         markedClasses: markedCount,
         subjectsWithClassesToday: subjectsWithClassesToday,
@@ -203,19 +255,21 @@ class CalendarUtils {
   static Color getStateColor(DayState state) {
     switch (state) {
       case DayState.noClasses:
-        return Colors.grey[400]!;
+        return const Color(0xFF9E9E9E);
       case DayState.classesNotMarked:
-        return Colors.orange[300]!;
+        return const Color(0xFFFFA726);
       case DayState.classesMarked:
-        return Colors.blue[300]!;
+        return const Color(0xFF42A5F5);
       case DayState.holiday:
-        return Colors.purple[300]!;
+        return const Color(0xFFAB47BC);
       case DayState.attendedFullDay:
-        return Colors.green[400]!;
+        return const Color(0xFF4CAF50);
       case DayState.bunkedFullDay:
-        return Colors.red[400]!;
+        return const Color(0xFFEF5350);
       case DayState.futureClasses:
-        return Colors.indigo[300]!;
+        return const Color(0xFF7E57C2);
+      case DayState.plannedLeave:
+        return const Color(0xFFFF7043);
     }
   }
 
@@ -236,6 +290,8 @@ class CalendarUtils {
         return Icons.close;
       case DayState.futureClasses:
         return Icons.schedule;
+      case DayState.plannedLeave:
+        return Icons.event_busy_rounded;
     }
   }
 
@@ -256,6 +312,8 @@ class CalendarUtils {
         return 'Bunked';
       case DayState.futureClasses:
         return 'Upcoming';
+      case DayState.plannedLeave:
+        return 'Planned Leave';
     }
   }
 

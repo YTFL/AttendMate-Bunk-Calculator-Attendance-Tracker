@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import 'attendance_model.dart';
 import '../subject/subject_model.dart';
@@ -59,6 +60,7 @@ class AttendanceProvider with ChangeNotifier {
       _attendanceRecords.add(newRecord);
 
       await _databaseService.saveSingleAttendance(newRecord);
+      await BackupService().notifyDataChanged();
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -78,6 +80,7 @@ class AttendanceProvider with ChangeNotifier {
         _attendanceRecords.add(record);
       }
       await _databaseService.saveMultipleAttendanceIncremental(records);
+      await BackupService().notifyDataChanged();
       notifyListeners();
     } catch (e) {
       rethrow;
@@ -146,6 +149,7 @@ class AttendanceProvider with ChangeNotifier {
       date: date,
       slotKey: slotKey,
     );
+    await BackupService().notifyDataChanged();
     notifyListeners();
   }
 

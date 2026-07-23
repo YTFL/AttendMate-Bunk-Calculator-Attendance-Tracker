@@ -320,7 +320,9 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
                   children: [
                     Icon(
                       Icons.arrow_forward_outlined,
-                      color: Colors.green.shade700,
+                      color: rightAction == SwipeAction.present
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
                       size: rs.scale(20),
                     ),
                     SizedBox(width: rs.width(12)),
@@ -354,7 +356,9 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
                   children: [
                     Icon(
                       Icons.arrow_back_outlined,
-                      color: Colors.red.shade700,
+                      color: leftAction == SwipeAction.present
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
                       size: rs.scale(20),
                     ),
                     SizedBox(width: rs.width(12)),

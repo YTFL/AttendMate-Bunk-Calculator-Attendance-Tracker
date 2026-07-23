@@ -9,6 +9,11 @@ import '../subject/subject_provider.dart';
 import '../semester/semester_model.dart';
 import '../semester/semester_provider.dart';
 import '../../utils/string_extension.dart';
+import '../../services/database_service.dart';
+import '../planner/planned_leave_model.dart';
+import '../planner/leave_planner_screen.dart';
+import '../tutorial/tutorial_controller.dart';
+import 'what_if_calculator_sheet.dart';
 
 class BunkMeterScreen extends StatefulWidget {
   const BunkMeterScreen({super.key});
@@ -19,8 +24,55 @@ class BunkMeterScreen extends StatefulWidget {
 
 class _BunkMeterScreenState extends State<BunkMeterScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey _bunkCalculatorKey = GlobalKey();
+  final GlobalKey _leavePlannerKey = GlobalKey();
   String _searchQuery = '';
   final Set<String> _expandedSubjectIds = <String>{};
+  List<PlannedLeave> _plannedLeaves = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlannedLeaves();
+  }
+
+  Future<void> _loadPlannedLeaves() async {
+    final leaves = await DatabaseService().loadPlannedLeaves();
+    if (mounted) {
+      setState(() {
+        _plannedLeaves = leaves;
+      });
+    }
+  }
+
+  int _calculatePlannedLeaveMissedClasses(Subject subject, List<PlannedLeave> leaves) {
+    final now = DateTime.now();
+    int count = 0;
+    for (final leave in leaves) {
+      if (!leave.affectedSubjectIds.contains(subject.id)) continue;
+      if (now.isAfter(leave.endDate)) continue;
+
+      final startDay = DateTime(leave.startDate.year, leave.startDate.month, leave.startDate.day);
+      final endDay = DateTime(leave.endDate.year, leave.endDate.month, leave.endDate.day);
+
+      DateTime cur = startDay;
+      while (!cur.isAfter(endDay)) {
+        for (final slot in subject.schedule) {
+          if (slot.occursOnDate(cur)) {
+            final slotStart = DateTime(cur.year, cur.month, cur.day, slot.startTime.hour, slot.startTime.minute);
+            final slotEnd = DateTime(cur.year, cur.month, cur.day, slot.endTime.hour, slot.endTime.minute);
+            if (slotStart.isAfter(now) || (slotStart.year == now.year && slotStart.month == now.month && slotStart.day == now.day)) {
+              if (slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate)) {
+                count++;
+              }
+            }
+          }
+        }
+        cur = cur.add(const Duration(days: 1));
+      }
+    }
+    return count;
+  }
 
   @override
   void dispose() {
@@ -31,6 +83,10 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
   @override
   Widget build(BuildContext context) {
     final rs = context.rs;
+    final tutorialController = Provider.of<TutorialController>(context, listen: false);
+    tutorialController.registerKey('appbar_bunk_calculator', _bunkCalculatorKey);
+    tutorialController.registerKey('appbar_leave_planner', _leavePlannerKey);
+
     // By using Provider.of, this widget will rebuild when SubjectProvider notifies its listeners
     final subjectProvider = Provider.of<SubjectProvider>(context);
     final semesterProvider = Provider.of<SemesterProvider>(context);
@@ -78,7 +134,6 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       return const Center(child: Text('No subjects added yet.'));
     }
 
-    final targetPercentage = semester.targetPercentage / 100;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day); // Normalize to midnight
     final endDate = today.isAfter(semester.endDate) ? semester.endDate : today;
@@ -168,6 +223,81 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
               ),
               contentPadding: rs.insetsSymmetric(vertical: 12),
             ),
+          ),
+        ),
+        // Action toolbar: What-If Calculator & Trip Planner
+        Padding(
+          padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: KeyedSubtree(
+                  key: _bunkCalculatorKey,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: rs.insetsSymmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(10)),
+                      ),
+                    ),
+                    icon: Icon(Icons.calculate_outlined, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 18),
+                    label: Text('Bunk Calculator', style: TextStyle(fontSize: 12, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)),
+                    onPressed: () {
+                      if (tutorialController.isActive && tutorialController.currentStepIndex == 20) {
+                        tutorialController.nextStep();
+                      }
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        barrierColor: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : null,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                        sheetAnimationStyle: AnimationStyle(
+                          duration: const Duration(milliseconds: 300),
+                          reverseDuration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic,
+                        ),
+                        builder: (ctx) => WhatIfCalculatorSheet(
+                          subjects: subjects,
+                          recordsBySubject: recordsBySubject,
+                          semester: semester,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(width: rs.width(8)),
+              Expanded(
+                child: KeyedSubtree(
+                  key: _leavePlannerKey,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: rs.insetsSymmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(10)),
+                      ),
+                    ),
+                    icon: Icon(Icons.event_available_outlined, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 18),
+                    label: Text('Leave Planner', style: TextStyle(fontSize: 12, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)),
+                    onPressed: () async {
+                      if (tutorialController.isActive && tutorialController.currentStepIndex == 22) {
+                        tutorialController.nextStep();
+                      }
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const LeavePlannerScreen()),
+                      );
+                      _loadPlannedLeaves();
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         // Show count of filtered results
@@ -269,6 +399,8 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                           child: Text(
                             subject.name,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Icon(
@@ -304,6 +436,8 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
         final currentRatio = (markedClasses == 0)
             ? 1.0
             : (attendedClasses / markedClasses);
+
+        final double targetPercentage = subject.targetAttendance / 100.0;
 
         int futureScheduled = snapshot.totalClassesInWindow - snapshot.scheduledSoFarInWindow;
         if (futureScheduled < 0) {
@@ -369,6 +503,12 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
         final isExpanded = _expandedSubjectIds.contains(subject.id);
 
+        final int plannedMissed = _calculatePlannedLeaveMissedClasses(subject, _plannedLeaves);
+        final double projectedRatio = (markedClasses + plannedMissed) == 0
+            ? 100.0
+            : (attendedClasses / (markedClasses + plannedMissed)) * 100;
+        final bool projectedBelowTarget = projectedRatio < targetPercentage * 100;
+
         return Card(
           elevation: 3.0,
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -422,9 +562,24 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          subject.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              subject.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              'Target: ${subject.targetAttendance}%',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Icon(
@@ -438,6 +593,43 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                     isExpanded ? message : compactStatus,
                     style: TextStyle(fontSize: 14, color: messageColor, fontWeight: FontWeight.w600),
                   ),
+                  if (plannedMissed > 0) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: projectedBelowTarget
+                            ? Colors.red.withValues(alpha: 0.1)
+                            : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: projectedBelowTarget
+                              ? Colors.red.shade300
+                              : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.event_available_outlined,
+                            size: 14,
+                            color: projectedBelowTarget ? Colors.red : (isDarkMode ? Colors.white70 : Colors.black87),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Projected (After Leave): ${projectedRatio.toStringAsFixed(1)}% ($plannedMissed class${plannedMissed > 1 ? "es" : ""} missed)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: projectedBelowTarget ? Colors.red.shade700 : (isDarkMode ? Colors.white70 : Colors.black87),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (isExpanded) ...[
                     const SizedBox(height: 10),
                     const Divider(height: 1),
@@ -507,11 +699,9 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     Map<String, _SubjectAttendanceSnapshot> snapshots,
     Semester semester,
   ) {
-    final targetPercentageValue = semester.targetPercentage / 100;
-    
     return List<Subject>.from(subjects)..sort((a, b) {
-      final aNeeds = _needsAttendance(a, snapshots, targetPercentageValue);
-      final bNeeds = _needsAttendance(b, snapshots, targetPercentageValue);
+      final aNeeds = _needsAttendance(a, snapshots);
+      final bNeeds = _needsAttendance(b, snapshots);
 
       // Classes that need attendance come first
       if (aNeeds != bNeeds) {
@@ -527,7 +717,6 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
   bool _needsAttendance(
     Subject subject,
     Map<String, _SubjectAttendanceSnapshot> snapshots,
-    double targetPercentage,
   ) {
     final snapshot = snapshots[subject.id];
     if (snapshot == null) return false;
@@ -541,6 +730,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     }
 
     final currentRatio = attendedClasses / markedClasses;
+    final targetPercentage = subject.targetAttendance / 100.0;
     return currentRatio < targetPercentage;
   }
 
@@ -611,22 +801,28 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     required int currentAttended,
     required DateTime effectiveFrom,
   }) async {
-    final manualInput = await Navigator.of(context).push<_ManualCountInput>(
-      MaterialPageRoute(
-        builder: (context) => _ManualCountUpdatePage(
-          subjectName: subject.name,
-          effectiveFrom: effectiveFrom,
-          initialHeld: currentHeld,
-          initialAttended: currentAttended,
-        ),
+    final manualInput = await showModalBottomSheet<_ManualCountInput>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      sheetAnimationStyle: AnimationStyle(
+        duration: const Duration(milliseconds: 300),
+        reverseDuration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
+      builder: (context) => _ManualCountUpdateSheet(
+        subjectName: subject.name,
+        effectiveFrom: effectiveFrom,
+        initialHeld: currentHeld,
+        initialAttended: currentAttended,
       ),
     );
 
     if (manualInput == null || !mounted) {
-      return;
-    }
-
-    if (!mounted) {
       return;
     }
 
@@ -671,13 +867,13 @@ class _ManualCountInput {
   });
 }
 
-class _ManualCountUpdatePage extends StatefulWidget {
+class _ManualCountUpdateSheet extends StatefulWidget {
   final String subjectName;
   final DateTime effectiveFrom;
   final int initialHeld;
   final int initialAttended;
 
-  const _ManualCountUpdatePage({
+  const _ManualCountUpdateSheet({
     required this.subjectName,
     required this.effectiveFrom,
     required this.initialHeld,
@@ -685,10 +881,10 @@ class _ManualCountUpdatePage extends StatefulWidget {
   });
 
   @override
-  State<_ManualCountUpdatePage> createState() => _ManualCountUpdatePageState();
+  State<_ManualCountUpdateSheet> createState() => _ManualCountUpdateSheetState();
 }
 
-class _ManualCountUpdatePageState extends State<_ManualCountUpdatePage> {
+class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
   late final TextEditingController _heldController;
   late final TextEditingController _attendedController;
   String? _validationError;
@@ -721,67 +917,290 @@ class _ManualCountUpdatePageState extends State<_ManualCountUpdatePage> {
     Navigator.pop(context, _ManualCountInput(held: held, attended: attended));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Update ${widget.subjectName} Counts'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Warning: Updating class counts manually will ignore all attendance and timetable history before ${widget.effectiveFrom.day}/${widget.effectiveFrom.month}/${widget.effectiveFrom.year} for this subject in Bunk Meter.',
-              style: TextStyle(
-                color: Colors.orange.shade800,
-                fontWeight: FontWeight.w600,
+  void _incrementHeld() {
+    final current = int.tryParse(_heldController.text.trim()) ?? 0;
+    _heldController.text = (current + 1).toString();
+    _clearError();
+  }
+
+  void _decrementHeld() {
+    final current = int.tryParse(_heldController.text.trim()) ?? 0;
+    if (current > 0) {
+      _heldController.text = (current - 1).toString();
+      _clearError();
+    }
+  }
+
+  void _incrementAttended() {
+    final current = int.tryParse(_attendedController.text.trim()) ?? 0;
+    _attendedController.text = (current + 1).toString();
+    _clearError();
+  }
+
+  void _decrementAttended() {
+    final current = int.tryParse(_attendedController.text.trim()) ?? 0;
+    if (current > 0) {
+      _attendedController.text = (current - 1).toString();
+      _clearError();
+    }
+  }
+
+  void _clearError() {
+    if (_validationError != null) {
+      setState(() {
+        _validationError = null;
+      });
+    }
+  }
+
+  Widget _buildCountStepper({
+    required BuildContext context,
+    required ResponsiveScale rs,
+    required String label,
+    required TextEditingController controller,
+    required VoidCallback onDecrement,
+    required VoidCallback onIncrement,
+    required Color color,
+  }) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: rs.font(12.5),
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        SizedBox(height: rs.height(6)),
+        Container(
+          height: rs.height(48),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                : theme.colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(rs.scale(14)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: onDecrement,
+                icon: Icon(Icons.remove_rounded, size: rs.scale(18)),
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(
+                  minWidth: rs.width(36),
+                  minHeight: rs.height(48),
+                ),
+                color: theme.colorScheme.onSurface,
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Set your baseline counts. From that day onward, future classes will be added normally.',
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _heldController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Classes Held',
-                border: OutlineInputBorder(),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: rs.font(16),
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => _clearError(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _attendedController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Classes Attended',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_validationError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _validationError!,
-                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              IconButton(
+                onPressed: onIncrement,
+                icon: Icon(Icons.add_rounded, size: rs.scale(18)),
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(
+                  minWidth: rs.width(36),
+                  minHeight: rs.height(48),
+                ),
+                color: theme.colorScheme.onSurface,
               ),
             ],
-            const Spacer(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + rs.height(16),
+        left: rs.width(20),
+        right: rs.width(20),
+        top: rs.height(12),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: rs.width(36),
+                height: rs.height(4),
+                margin: EdgeInsets.only(bottom: rs.height(12)),
+                decoration: BoxDecoration(
+                  color: theme.dividerColor.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(rs.scale(2)),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Update ${widget.subjectName} Counts',
+                    style: TextStyle(
+                      fontSize: rs.font(16.5),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            SizedBox(height: rs.height(8)),
+            Container(
+              padding: EdgeInsets.all(rs.scale(12)),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(rs.scale(12)),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange.shade800,
+                    size: rs.scale(20),
+                  ),
+                  SizedBox(width: rs.width(10)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Manual Override Notice',
+                          style: TextStyle(
+                            fontSize: rs.font(12.5),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        SizedBox(height: rs.height(2)),
+                        Text(
+                          'Updating counts manually ignores attendance history before ${widget.effectiveFrom.day}/${widget.effectiveFrom.month}/${widget.effectiveFrom.year} for this subject in Bunk Meter.',
+                          style: TextStyle(
+                            fontSize: rs.font(11.5),
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: rs.height(16)),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCountStepper(
+                    context: context,
+                    rs: rs,
+                    label: 'Classes Held',
+                    controller: _heldController,
+                    onDecrement: _decrementHeld,
+                    onIncrement: _incrementHeld,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(width: rs.width(12)),
+                Expanded(
+                  child: _buildCountStepper(
+                    context: context,
+                    rs: rs,
+                    label: 'Classes Attended',
+                    controller: _attendedController,
+                    onDecrement: _decrementAttended,
+                    onIncrement: _incrementAttended,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            if (_validationError != null) ...[
+              SizedBox(height: rs.height(10)),
+              Text(
+                _validationError!,
+                style: TextStyle(
+                  color: theme.colorScheme.error,
+                  fontSize: rs.font(12),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            SizedBox(height: rs.height(20)),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(12)),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(fontSize: rs.font(13.5)),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: rs.width(12)),
                 Expanded(
-                  child: ElevatedButton(
+                  child: FilledButton(
                     onPressed: _save,
-                    child: const Text('Save'),
+                    style: FilledButton.styleFrom(
+                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(12)),
+                      ),
+                    ),
+                    child: Text(
+                      'Save',
+                      style: TextStyle(
+                        fontSize: rs.font(13.5),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
