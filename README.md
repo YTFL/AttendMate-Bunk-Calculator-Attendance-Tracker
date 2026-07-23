@@ -12,8 +12,6 @@
 
 AttendMate gives you a clear picture of where you stand in every subject — how many classes you can still bunk, how many you need to attend to recover, and how future leaves will impact your target. All data stays on your device with no accounts required.
 
-![App Home Screen showing Today's Schedule with bottom navigation](./screenshots/home_screen.png)
-
 ---
 
 ## ✨ Key Features
