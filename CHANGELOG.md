@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-07-22
+
+### Added
+- **Geofenced Auto-Attendance & Interactive Google Maps**: Added Location Manager with interactive Google Maps location picker (`google_maps_flutter`), 25m radius geofence visualizer, GPS location capture, clipboard link parsing, and 5-minute post-class low-power background location checking.
+- **"What-If" Bunk Calculator**: Added interactive simulator sheet on the Bunk Meter screen to simulate bunking $N$ or attending $M$ future classes with live percentage projections.
+- **Leave Planner & External Calendar Sync**: Multi-day/single-day leave planning with automatic deletion of scheduled lectures on Google Calendar & Device System Calendars during leave periods, and automatic restoration on cancellation/present marking.
+- **Global Time Picker Preference**: Added global setting under More tab to choose between Material Dialog and Scroll Wheel clock styles across all screens.
+- **Rolling Semester Backup System**: Automated 3-backup rolling snapshot redundancy (`backup_latest.json`, `backup_previous.json`, `backup_oldest.json`) and manual JSON export/restore.
+- **Interactive Calendar Filtering**: Added status filtering chips to full-semester attendance calendar grid with a quick "Today" return shortcut.
+- **Interactive Guided App Tour**: Added game-style spotlight onboarding walkthrough with form interaction pass-through.
+- **Setup Guide Expansion**: Added Chapters 11 (Locations), 12 (Bunk Calculator), and 13 (Leave Planner) with direct in-app routing links.
+- **Haptic Feedback for Attendance Marking**: Integrated tactile haptic vibration responses when marking or unmarking class attendance states on Today's schedule.
+- **Per-Subject Attendance Targets**: Custom attendance target percentage configuration per subject with optional fallback to semester default target.
+
+### Changed & Modernized
+- **Attendance Calendar UI Overhaul**: Redesigned calendar UI style and day tile aesthetics for a modernized full-semester overview.
+- **Haptic Attendance Target % Slider**: Replaced target percentage text inputs with an interactive slider featuring tactile haptic feedback responses for semester and per-subject targets.
+- **Semester Screen Overhaul**: Unified Top Hero Card with date spans, large attendance gauge (`85.4%`), progress bar, collapsible parameters bar, and 2x4 metrics grid.
+- **Timetable Import Screen UI Overhaul**: Redesigned import timetable interface for improved visual clarity and easier navigation.
+- **Update Class Counts UI Overhaul**: Redesigned class count adjustment screen with modern input fields and clean metric displays.
+- **Single-Line Subject Name Truncation**: Restricted subject titles on Today's Schedule and Calendar day cards to 1 line with trailing ellipses (`TextOverflow.ellipsis`) for a uniform, clutter-free UI.
+- **Subject Screen Empty State**: Redesigned top-aligned empty state hero card with direct *"Add Your First Subject"* primary button and compact AI suggestion card.
+- **Bunkable Calculation Metric**: Switched bunkable count from future projection to a pure current-state formula (`bunkable = floor(totalAttended - targetRatio * totalMarked)`), showing exact current class surplus (+) or short deficit (-).
+
+### Fixed
+- **Dark Mode Popup Barrier Fix (App-Wide)**: Fixed invisible dialog/bottom-sheet backdrops across 19 dialogs and 6 bottom sheets in dark mode by applying a clear semi-transparent barrier tint.
+- **Notification Action Buttons & Confirmation**: Registered missing `ActionBroadcastReceiver` in `AndroidManifest.xml` so notification buttons respond reliably, updated notification body to show exact subject names, and removed auto-dismiss.
+- **Swipe Action & Card Animation Fixes**: Dynamic arrow icon colors matching active `SwipeAction` status on Option B settings and smooth initial offset calculation to eliminate card jumping when swiping mid-animation.
+- **Dynamic Gradle `.env` Injection**: Android Gradle automatically injects `MAPS_API_KEY` from `.env` file at build time.
+
+---
+
 ## [1.6.2] - 2026-07-17
 
 ### Added
@@ -14,8 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Smooth Liquid-like Easing**: Attendance swipe-back transition now uses a refined `Curves.easeOutQuint` easing over `450ms` for a fluid, organic, and premium feel.
-- **Action Retention**: The color and icon of the action performed remain visible during the slide-back animation, rather than prematurely switching to the "undo" state.
-- **Global ABI Filter**: Constrained compiles to 64-bit ARM (`arm64-v8a`) architecture globally for both debug and release builds, reducing the final compiled app size.
 - **Dependency Cleanup**: Stripped unused dependencies (`fl_chart`, `pie_chart`, `flutter_colorpicker`, `markdown`) from the configuration.
 
 ### Fixed
@@ -622,6 +652,9 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **2.0.0** (2026-07-22) - Major release with Geofenced Auto-Attendance & Interactive Google Maps, "What-If" Bunk Calculator, Leave Planner, Rolling Semester Backup System, Interactive Calendar Filtering, Guided Spotlight Tour, and UI modernizations
+- **1.6.2** (2026-07-17) - Preserved swipe card state, smooth liquid-like easing, dependency cleanup, Setup Guide duplicate fix
+- **1.6.1** (2026-07-11) - Google Calendar sign-in fix for updated package name
 - **1.6.0** (2026-07-08) - Automated background calendar sync, smart lab color grouping, linear probing color mapping, sign-in warning removal
 - **1.5.5** (2026-07-07) - In-app data protection disclosures for Google OAuth verification
 - **1.5.4** (2026-06-28) - In-app privacy links, dynamic status card dark theme styling fix
@@ -645,7 +678,18 @@ This is the first public release of AttendMate, a comprehensive attendance track
 - **1.2.0** (2026-02-14) - Holiday management, enhanced attendance control, bunk meter search, auto end-of-day attendance, major size optimizations
 - **1.1.0** (2026-02-12) - Automatic update detection, app name fix
 - **1.0.1** (2026-02-08) - JSON import acronym fix, analyzer warnings resolved
-- **1.0.0** (2026-02-07) - Initial public release
+- **1.0.0** (2026-02-07) - Initial public release
+
+---
+
+## Future Considerations
+
+While this is the initial release with a complete feature set, potential future enhancements could include:
+- Statistics and analytics dashboard
+- Export attendance data
+- Backup and restore functionality
+- Widget support for home screen
+- Additional customization options
 
 ---
 

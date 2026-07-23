@@ -128,7 +128,7 @@
         
         <header>
             <h1>Terms of Service</h1>
-            <p class="update-date">Last updated: June 27, 2026</p>
+            <p class="update-date">Last updated: July 22, 2026</p>
         </header>
 
         <section class="card">
@@ -136,28 +136,36 @@
         </section>
 
         <h2>1. Description of Service</h2>
-        <p>AttendMate is a client-side helper application designed to track class attendance and synchronize timetables with Google Calendar. The App runs entirely on the user's device and uses Google's public APIs to facilitate calendar event generation.</p>
+        <p>AttendMate is a local-first helper application designed to track class attendance, calculate bunk allowances, monitor classroom geofences for attendance verification, and synchronize timetables with Google Calendar and Device Calendars.</p>
 
-        <h2>2. Use of Third-Party Services (Google Calendar)</h2>
-        <p>By using the Google Calendar Sync feature, you authorize the App to interact with your Google Account on your behalf. You acknowledge that:</p>
+        <h2>2. Location Services & Geofencing</h2>
+        <p>The App offers optional location-based features (such as geofence attendance verification and proximity reminders):</p>
         <ul>
-            <li>Your use of Google Calendar is subject to Google's own Terms of Service and Privacy Policy.</li>
-            <li>You are responsible for maintaining the security of your Google Account.</li>
-            <li>The App only writes to the calendar configurations you permit. We are not responsible for any accidental changes, deletions, or data losses that may occur on your Google Calendar as a result of using this sync.</li>
+            <li><strong>User Authorization:</strong> Location features function only when you grant appropriate device location permissions.</li>
+            <li><strong>Accuracy Disclaimer:</strong> Geofencing accuracy depends on your device hardware, GPS signal, network conditions, and operating system energy optimizations. We do not guarantee uninterrupted or error-free location tracking.</li>
+            <li><strong>Local Processing:</strong> All location data is processed locally on your device and is not transmitted to external servers.</li>
         </ul>
 
-        <h2>3. Local Data Storage & User Responsibility</h2>
-        <p>Because AttendMate is a local-first application:</p>
+        <h2>3. Use of Third-Party Services (Google Calendar & Device Calendar)</h2>
+        <p>By using calendar synchronization features, you authorize the App to interact with your selected calendar account on your behalf. You acknowledge that:</p>
         <ul>
-            <li>All attendance records and schedules are saved directly to your device's SQLite database.</li>
-            <li>If you uninstall the App or clear its cache, your local attendance records will be permanently deleted. We do not maintain backups of your local data.</li>
+            <li>Your use of Google Calendar is subject to Google's Terms of Service and Privacy Policy.</li>
+            <li>You are responsible for maintaining the security of your Google Account and device.</li>
+            <li>The App only creates or modifies calendar events based on your configured timetable and settings. We are not responsible for any accidental changes, schedule conflicts, or data losses on your external calendars.</li>
         </ul>
 
-        <h2>4. Disclaimer of Warranty</h2>
-        <p>The App is provided "as is" and "as available," without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the developers be liable for any claim, damages, or other liability arising from your use of the App.</p>
+        <h2>4. Local Data Storage & User Responsibility</h2>
+        <p>Because AttendMate operates on a local-first architecture:</p>
+        <ul>
+            <li>All attendance records, timetable schedules, semester settings, and location coordinates are stored directly in your device's local database.</li>
+            <li>Clearing app data or uninstalling the App will permanently erase your local attendance history and configurations. We do not maintain cloud backups of your data.</li>
+        </ul>
 
-        <h2>5. Changes to These Terms</h2>
-        <p>We reserve the right to modify these Terms at any time. Changes will be posted directly within this page. Your continued use of the App following any changes indicates your acceptance of the updated Terms.</p>
+        <h2>5. Disclaimer of Warranty & Limitation of Liability</h2>
+        <p>The App is provided "as is" and "as available," without warranties of any kind, express or implied. In no event shall the developers be liable for any claims, attendance discrepancies, academic consequences, lost data, or damages arising from your use or inability to use the App.</p>
+
+        <h2>6. Changes to These Terms</h2>
+        <p>We reserve the right to modify these Terms at any time. Updated Terms will be published within the App. Your continued use of the App following any updates indicates your acceptance of the revised Terms.</p>
 
         <div class="contact-info">
             <p><strong>Contact Us</strong></p>

@@ -128,56 +128,67 @@
         
         <header>
             <h1>Privacy Policy</h1>
-            <p class="update-date">Last updated: July 7, 2026</p>
+            <p class="update-date">Last updated: July 22, 2026</p>
         </header>
 
         <section class="card">
-            <p><strong>AttendMate</strong> ("we," "our," or "the App") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and protect your information when you use our mobile application, specifically regarding the Google Calendar Sync feature.</p>
+            <p><strong>AttendMate</strong> ("we," "our," or "the App") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and protect your information when you use our mobile application, including attendance tracking, location & geofencing services, and calendar synchronization features.</p>
         </section>
 
-        <h2>1. Information We Collect</h2>
-        <p>AttendMate operates as a client-side only utility. All data is stored locally on your device in a secure private database. We collect:</p>
+        <h2>1. Information We Process</h2>
+        <p>AttendMate operates on a <strong>local-first architecture</strong>. All your personal data, schedule information, and app preferences remain stored strictly on your device in a secure private database. We process:</p>
         <ul>
-            <li><strong>Timetable Schedules:</strong> Subject names, acronyms, and slot times created or imported by you.</li>
-            <li><strong>Google Account Information:</strong> Your Google profile email address, used strictly to authenticate and link the correct Google Calendar account.</li>
+            <li><strong>Timetable & Attendance Schedules:</strong> Subject names, acronyms, slot times, instructor names, and attendance records created or imported by you.</li>
+            <li><strong>Location & Geofencing Data:</strong> Optional classroom/campus geographic coordinates (latitude, longitude, geofence radius, and location names) configured by you for automated attendance reminders and proximity verification.</li>
+            <li><strong>Google Account Credentials:</strong> Your Google profile email address and OAuth tokens, used strictly to authenticate and sync events directly with your Google Calendar.</li>
         </ul>
 
-        <h2>2. How We Use Your Google Calendar Data</h2>
-        <p>To enable the synchronization of your timetable with Google Calendar, the App requests permissions for the following OAuth scope:</p>
+        <h2>2. Location & Geofencing Privacy</h2>
+        <p>If you enable location features and grant location permissions:</p>
         <ul>
-            <li><code>https://www.googleapis.com/auth/calendar</code> (read, write, and delete events on your Google Calendar).</li>
+            <li><strong>On-Device Processing:</strong> Location coordinates and geofences are evaluated solely on your physical device to trigger localized attendance verification and reminders when entering or leaving designated classroom areas.</li>
+            <li><strong>Zero Remote Storage or Tracking:</strong> Your location data is <strong>never</strong> transmitted to remote servers, uploaded to cloud databases, shared with third parties, or used for location tracking or advertising.</li>
+            <li><strong>Permission Control:</strong> Location permissions (including precise location and optional background location for auto-detection) are completely optional. You can grant or revoke these permissions at any time via your device settings or disable geofencing inside the App.</li>
         </ul>
-        <p>We use this access exclusively for the following purposes:</p>
+
+        <h2>3. How We Use Your Google Calendar & Device Calendar Data</h2>
+        <p>To enable the synchronization of your timetable with Google Calendar, the App requests permission for the following OAuth scope:</p>
         <ul>
-            <li>Creating events for your classes, timetables, and special lectures inside your selected Google Calendar.</li>
-            <li>Automatically modifying, rescheduling, or deleting events in your Google Calendar to match modifications you make to your schedule inside the App.</li>
+            <li><code>https://www.googleapis.com/auth/calendar.events</code> (view and edit events on your calendars).</li>
+        </ul>
+        <p>We use calendar access exclusively for:</p>
+        <ul>
+            <li>Creating calendar events for your classes, timetables, and special lectures inside your selected Google Calendar or Device Calendar.</li>
+            <li>Automatically updating, rescheduling, or deleting events in your calendar to match changes you make inside the App.</li>
             <li>Excluding specific holiday dates and cancellations using iCalendar recurrence exclusion rules (<code>EXDATE</code>).</li>
         </ul>
 
-        <h2>3. Data Sharing & Third-Party Access</h2>
-        <p><strong>Your data is private.</strong> We do not share, sell, or rent your personal information, calendar events, or email address with any third parties.</p>
+        <h2>4. Data Sharing & Third-Party Access</h2>
+        <p><strong>Your data is private.</strong> We do not share, sell, rent, or transmit your personal information, location data, calendar events, or email address with any third parties or remote analytics services.</p>
         <ul>
-            <li><strong>Local-First Architecture:</strong> The App does not have a backend server. Authentication credentials (OAuth tokens) are stored locally in secure local storage and are transmitted directly to Google's API endpoints.</li>
-            <li>No data is uploaded to our servers or stored on any third-party infrastructure besides your own Google Calendar account.</li>
+            <li><strong>No Remote Servers:</strong> The App does not operate a backend server.</li>
+            <li><strong>Direct API Communication:</strong> Google OAuth authentication tokens are transmitted directly to Google's official API endpoints and nowhere else.</li>
         </ul>
 
-        <h2>4. Data Protection Mechanisms</h2>
-        <p>We implement industry-standard security measures to safeguard your Google user data and prevent unauthorized access, alteration, or disclosure:</p>
+        <h2>5. Security & Data Protection Mechanisms</h2>
+        <p>We implement industry-standard security measures to protect your data on-device and in transit:</p>
         <ul>
-            <li><strong>Encryption in Transit:</strong> All data transmitted between the App and Google API servers (such as OAuth access tokens and calendar details) is fully encrypted in transit using secure HTTPS (SSL/TLS 1.2 or TLS 1.3) protocols.</li>
-            <li><strong>On-Device Encryption:</strong> Google OAuth credentials and authentication tokens are stored securely in Android's EncryptedSharedPreferences (backed by the hardware-level Android Keystore system), ensuring other apps on the device cannot access them.</li>
-            <li><strong>Application Sandboxing:</strong> The local SQLite database holding your timetables and sync preferences is kept in the App's isolated sandbox storage, protected by system-level Linux user ID separation on Android.</li>
-            <li><strong>No Server-Side Retention:</strong> The App does not utilize any remote server or database to store or transfer your credentials. Your Google user data remains local to your device and is only shared directly with Google's API endpoints.</li>
+            <li><strong>Encryption in Transit:</strong> All network communication with Google APIs occurs over secure HTTPS (SSL/TLS 1.2 or TLS 1.3).</li>
+            <li><strong>On-Device Encryption:</strong> Google OAuth credentials and sensitive preferences are stored securely using Android's EncryptedSharedPreferences (backed by the hardware-level Android Keystore system).</li>
+            <li><strong>Application Sandboxing:</strong> Your local SQLite database containing timetables, attendance history, and geofence locations is protected by system-level Android application sandboxing and Linux user isolation.</li>
+            <li><strong>No Remote Server Retention:</strong> Because there are no backend servers, your data cannot be exposed in remote database breaches.</li>
         </ul>
 
-        <h2>5. Access Revocation and Data Deletion</h2>
-        <p>You have full control over the App's access to your Google Account:</p>
+        <h2>6. Access Revocation and Data Deletion</h2>
+        <p>You retain complete control over your data:</p>
         <ul>
-            <li>You can log out/disconnect from Google Calendar at any time directly through the Settings screen in the App. This immediately purges all OAuth access and refresh tokens from your device.</li>
-            <li>You can revoke the App's permissions at any time through your Google Account security dashboard under "Apps with access to your account."</li>
+            <li><strong>Google Account Disconnect:</strong> You can disconnect your Google Account at any time in the App settings, which immediately purges all stored OAuth tokens from your device.</li>
+            <li><strong>Revoking Google Permissions:</strong> You can revoke the App's access anytime via <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google Account Security</a>.</li>
+            <li><strong>Location Permission Revocation:</strong> You can revoke location access at any time through Android system settings.</li>
+            <li><strong>Local Data Erasure:</strong> Uninstalling the App or selecting "Clear App Data" in app settings permanently deletes all local attendance, timetable, and location data from your device.</li>
         </ul>
 
-        <h2>6. Compliance with Google API Services User Data Policy</h2>
+        <h2>7. Compliance with Google API Services User Data Policy</h2>
         <p>AttendMate's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
         <div class="contact-info">
