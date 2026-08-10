@@ -82,37 +82,26 @@ class GitHubIssueHelper {
     final firstLine = message.replaceAll('\r\n', '\n').split('\n').first.trim();
     final titleMsg = firstLine.length > 50
         ? '${firstLine.substring(0, 47)}...'
-        : (firstLine.isEmpty ? 'App Error Report' : firstLine);
-    final issueTitle = '[Bug Report] [$tag] $titleMsg';
+        : (firstLine.isEmpty ? 'App Diagnostic Log Report' : firstLine);
+    final issueTitle = '[DIAGNOSTICS] [$tag] $titleMsg';
 
-    // Construct body (keep concise so it fits browser URL parameters easily)
-    final truncatedLog = message.length > 500
-        ? '${message.substring(0, 500)}\n... [Log truncated, full log copied to clipboard]'
+    // Construct logs text for URL parameter (truncate if too long to fit browser URL limits)
+    final truncatedLog = message.length > 600
+        ? '${message.substring(0, 600)}\n... [Log truncated for URL length. Full log copied to clipboard!]'
         : message;
 
-    final bodyBuffer = StringBuffer()
-      ..writeln('**Describe the bug**')
-      ..writeln('Please provide any additional context on how this error occurred.')
-      ..writeln()
-      ..writeln('**App & Device Information:**')
-      ..writeln('- App Version: $versionStr')
-      ..writeln('- Platform: $platformStr')
-      ..writeln('- Log Tag: `$tag` ($level)')
-      ..writeln('- Timestamp: $timeStr')
-      ..writeln()
-      ..writeln('**Error Log Details:**')
-      ..writeln('```')
-      ..writeln(truncatedLog)
-      ..writeln('```')
-      ..writeln()
-      ..writeln('*(Full diagnostic log has been automatically copied to your clipboard.)*');
-
-    final issueBody = bodyBuffer.toString();
+    final String logsFieldContent = (errorStackTrace != null && errorStackTrace.isNotEmpty)
+        ? '$truncatedLog\n\n--- Stack Trace ---\n$errorStackTrace'
+        : truncatedLog;
 
     final Uri issueUri = Uri.parse(repoIssuesUrl).replace(
       queryParameters: {
+        'template': 'diagnostics_report.yml',
         'title': issueTitle,
-        'body': issueBody,
+        'app-version': versionStr,
+        'platform-device': platformStr,
+        'log-tag': '$tag ($level)',
+        'diagnostic-logs': logsFieldContent,
       },
     );
 
