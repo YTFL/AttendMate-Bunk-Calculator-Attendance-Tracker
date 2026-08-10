@@ -1,0 +1,154 @@
+name: "🐛 Bug Report"
+description: "Report a bug or unexpected behavior in AttendMate to help us reproduce and fix it."
+title: "[BUG]: "
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report an issue! 
+        Please provide as much detailed information as possible so the maintainers can reproduce and fix the bug quickly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Summary
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the issue you encountered in AttendMate...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App Version
+      description: "What version of AttendMate are you using? (Check in More tab -> Version)"
+      placeholder: "e.g. v2.0.0 (Build 15)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: android-version
+    attributes:
+      label: Android OS Version
+      description: Select your device's Android version.
+      options:
+        - "Android 15 (API 35)"
+        - "Android 14 (API 34)"
+        - "Android 13 (API 33)"
+        - "Android 12 / 12L (API 31/32)"
+        - "Android 11 (API 30)"
+        - "Android 10 (API 29)"
+        - "Android 9 Pie (API 28)"
+        - "Android 8.0/8.1 Oreo (API 26/27)"
+        - "Android 7.0/7.1 Nougat (API 24/25)"
+        - "Other / Custom ROM"
+    validations:
+      required: true
+
+  - type: input
+    id: device-model
+    attributes:
+      label: Device Model & Brand
+      description: Manufacturer and exact model of your Android device.
+      placeholder: "e.g. Samsung Galaxy S23, Google Pixel 7a, Xiaomi Redmi Note 12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: theme-setting
+    attributes:
+      label: App Theme Configuration
+      description: Which theme mode is currently selected in app settings?
+      options:
+        - "System Default"
+        - "Dark Mode (AMOLED Black)"
+        - "Light Mode"
+        - "Not Sure"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: time-format
+    attributes:
+      label: Time Format Setting
+      description: Which time format is enabled in app settings?
+      options:
+        - "12-hour (AM/PM)"
+        - "24-hour"
+        - "Not Sure"
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed step-by-step guide to reproduce the issue.
+      placeholder: |
+        1. Open AttendMate and go to '...'
+        2. Tap on '...'
+        3. Change setting to '...'
+        4. See error or unexpected crash
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: "e.g. The subject attendance target should update to 75% without error."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: "e.g. The app froze / showed an error dialog / calculated incorrect percentage."
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Crash Logs / Stack Trace
+      description: Paste any relevant app logs, crash reports, or `adb logcat` output here if available.
+      render: shell
+      placeholder: "Paste exception or logcat stack trace here..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Screen Recordings
+      description: Drag and drop screenshots or screen recording videos showing the issue.
+      placeholder: Attach image links or drag & drop images here...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the issue (e.g. active geofencing, notification permissions state, exact alarm permission).
+      placeholder: "e.g. Notification permission was disabled when this occurred."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please check all that apply before submitting your bug report.
+      options:
+        - label: I have checked existing open and closed issues to ensure this is not a duplicate.
+          required: true
+        - label: I am using the latest released version of AttendMate (or latest build).
+          required: true
+        - label: I have provided clear steps to reproduce the bug.
+          required: true
