@@ -1,0 +1,68 @@
+name: "🩺 Diagnostics Log Report"
+description: "Report an issue generated directly from AttendMate Diagnostics Log screen."
+title: "[DIAGNOSTICS]: "
+labels: ["bug", "diagnostics"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue report was generated directly from the AttendMate Diagnostics Log screen.
+        Please review the pre-populated diagnostic details and add any relevant context below.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: "App Version"
+      description: "App version and build number from platform."
+      placeholder: "e.g. v2.0.0 (Build 15)"
+    validations:
+      required: true
+
+  - type: input
+    id: platform-device
+    attributes:
+      label: "Platform & Device"
+      description: "Operating system and device model."
+      placeholder: "e.g. Android (Samsung Galaxy S22)"
+    validations:
+      required: true
+
+  - type: input
+    id: log-tag
+    attributes:
+      label: "Log Tag & Severity Level"
+      description: "Diagnostic tag (e.g. Database, NotificationService, GeofenceService) and severity level."
+      placeholder: "e.g. NotificationService (ERROR)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-context
+    attributes:
+      label: "User Context / Steps to Reproduce"
+      description: "What were you doing in the app when this error or diagnostic log was generated?"
+      placeholder: "Describe what you were trying to do when this occurred..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostic-logs
+    attributes:
+      label: "Diagnostic Logs / Stack Trace"
+      description: "Diagnostic log entries and stack trace extracted from the app."
+      render: shell
+      placeholder: "Paste or verify log output here..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Pre-submission Checklist"
+      description: "Please verify before submitting:"
+      options:
+        - label: "Diagnostic log details are included in the section above."
+          required: true
+        - label: "Sensitive personal info (if any) has been removed from the log trace."
+          required: true
