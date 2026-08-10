@@ -507,7 +507,11 @@ class NotificationService {
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-    await androidPlugin?.requestNotificationsPermission();
+    try {
+      await androidPlugin?.requestNotificationsPermission();
+    } catch (e) {
+      debugPrint('NotificationService: Permission request skipped in background isolate ($e)');
+    }
     try {
       await androidPlugin?.requestExactAlarmsPermission();
     } catch (e) {
@@ -641,26 +645,35 @@ class NotificationService {
     }
   }
 
-  /// Displays a system notification when a backup is generated
+  /// Displays a system notification when a backup is generated.
+  /// Uses a standalone plugin instance with minimal init so it works
+  /// from background WorkManager isolates (no Activity context available).
   Future<void> showBackupNotification({
     required String title,
     required String body,
   }) async {
-    await init();
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'semester_backups',
-        'Semester Backups',
-        channelDescription: 'Notifications for automatic and manual semester backups',
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
-        icon: 'icon_noti',
-        autoCancel: true,
-      ),
-    );
-
     try {
-      await _plugin.show(
+      // Create a dedicated plugin instance for background-safe notification.
+      // We intentionally skip _requestAndroidPermission() because that
+      // requires an Activity context which doesn't exist in WorkManager tasks.
+      final bgPlugin = FlutterLocalNotificationsPlugin();
+      const androidSettings = AndroidInitializationSettings('icon_noti');
+      const initSettings = InitializationSettings(android: androidSettings);
+      await bgPlugin.initialize(settings: initSettings);
+
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'semester_backups',
+          'Semester Backups',
+          channelDescription: 'Notifications for automatic and manual semester backups',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          icon: 'icon_noti',
+          autoCancel: true,
+        ),
+      );
+
+      await bgPlugin.show(
         id: 99999,
         title: title,
         body: body,

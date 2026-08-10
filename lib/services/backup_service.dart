@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -78,17 +79,42 @@ class BackupService {
     await prefs.setBool(_prefHasUnbackedChangesKey, false);
   }
 
+  /// Convert SAF tree URI (content://...) into a standard Android filesystem path if possible
+  String _convertSafUriToPath(String uriStr) {
+    if (!uriStr.startsWith('content://')) return uriStr;
+    try {
+      final decoded = Uri.decodeFull(uriStr);
+      final treeIndex = decoded.indexOf('/tree/');
+      if (treeIndex != -1) {
+        final treePart = decoded.substring(treeIndex + 6);
+        final split = treePart.split(':');
+        if (split.length >= 2) {
+          final typePart = split[0];
+          final type = typePart.contains('/') ? typePart.split('/').last : typePart;
+          final relativePath = split.sublist(1).join(':');
+          if (type.toLowerCase() == 'primary') {
+            return relativePath.isEmpty ? '/storage/emulated/0' : '/storage/emulated/0/$relativePath';
+          } else {
+            return relativePath.isEmpty ? '/storage/$type' : '/storage/$type/$relativePath';
+          }
+        }
+      }
+    } catch (_) {}
+    return uriStr;
+  }
+
   /// Get the current backup directory path. Returns null if not specified by user.
   Future<String?> getBackupDirectoryPath() async {
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_prefBackupDirPathKey);
     if (customPath != null && customPath.trim().isNotEmpty) {
-      final customDir = Directory(customPath.trim());
+      final rawPath = customPath.trim();
+      final converted = _convertSafUriToPath(rawPath);
+      final customDir = Directory(converted);
       if (await customDir.exists()) {
         return customDir.path;
       }
-      // Return the string path directly if it's a SAF Uri or path
-      return customPath.trim();
+      return converted;
     }
     return null;
   }
@@ -149,6 +175,15 @@ class BackupService {
     };
   }
 
+  Future<Directory> _getFallbackBackupDirectory() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final backupDir = Directory('${docsDir.path}${Platform.pathSeparator}backups');
+    if (!await backupDir.exists()) {
+      await backupDir.create(recursive: true);
+    }
+    return backupDir;
+  }
+
   /// Create a backup file in the designated folder and enforce the 3 rolling backups limit
   Future<File?> createBackup({
     bool showNotification = false,
@@ -180,11 +215,39 @@ class BackupService {
       final filename = 'attendmate_backup_$timestamp.json';
       final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
 
-      final bool success = await _fileChannel.invokeMethod('writeBackupFile', {
-        'dirUri': dirPath,
-        'fileName': filename,
-        'content': jsonString,
-      }) ?? false;
+      bool success = false;
+      if (dirPath.startsWith('content://')) {
+        try {
+          success = await _fileChannel.invokeMethod('writeBackupFile', {
+            'dirUri': dirPath,
+            'fileName': filename,
+            'content': jsonString,
+          }) ?? false;
+        } catch (e) {
+          debugPrint('BackupService: Platform channel writeBackupFile failed ($e). Writing to fallback app storage...');
+          final fallbackDir = await _getFallbackBackupDirectory();
+          final file = File('${fallbackDir.path}${Platform.pathSeparator}$filename');
+          await file.writeAsString(jsonString);
+          success = true;
+        }
+      } else {
+        try {
+          final dir = Directory(dirPath);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          final sep = Platform.pathSeparator;
+          final file = File('${dir.path}$sep$filename');
+          await file.writeAsString(jsonString);
+          success = true;
+        } on FileSystemException catch (fse) {
+          debugPrint('BackupService: Direct path $dirPath restricted by OS ($fse). Writing to fallback app storage...');
+          final fallbackDir = await _getFallbackBackupDirectory();
+          final file = File('${fallbackDir.path}${Platform.pathSeparator}$filename');
+          await file.writeAsString(jsonString);
+          success = true;
+        }
+      }
 
       if (!success) {
         debugPrint('BackupService: Native writeBackupFile returned false');
@@ -203,10 +266,14 @@ class BackupService {
       );
 
       if (showNotification) {
-        await NotificationService().showBackupNotification(
-          title: 'Semester Backup Created',
-          body: 'Your attendance data & settings have been backed up.',
-        );
+        try {
+          await NotificationService().showBackupNotification(
+            title: 'Semester Backup Created',
+            body: 'Your attendance data & settings have been backed up.',
+          );
+        } catch (e) {
+          debugPrint('BackupService: Suppressed notification error in background: $e');
+        }
       }
 
       return File(filename);
@@ -221,19 +288,83 @@ class BackupService {
     }
   }
 
+  /// Helper to fetch raw list of backup file maps from either SAF tree URI or direct directory path
+  Future<List<Map<String, dynamic>>> _fetchBackupFilesRaw(String dirPath) async {
+    final List<Map<String, dynamic>> items = [];
+
+    if (dirPath.startsWith('content://')) {
+      try {
+        final List<dynamic>? rawList = await _fileChannel.invokeMethod('getBackupFiles', {
+          'dirUri': dirPath,
+        });
+        if (rawList != null) {
+          items.addAll(rawList.map((e) => Map<String, dynamic>.from(e as Map)));
+        }
+      } catch (_) {}
+    } else {
+      try {
+        final dir = Directory(dirPath);
+        if (await dir.exists()) {
+          final List<FileSystemEntity> entities = dir.listSync();
+          for (final entity in entities) {
+            if (entity is File) {
+              final fileName = entity.path.split(RegExp(r'[/\\]')).last;
+              if (fileName.startsWith('attendmate_backup_') && fileName.endsWith('.json')) {
+                try {
+                  final stat = await entity.stat();
+                  final content = await entity.readAsString();
+                  items.add({
+                    'fileName': fileName,
+                    'fileSizeBytes': stat.size,
+                    'lastModified': stat.modified.millisecondsSinceEpoch,
+                    'content': content,
+                  });
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Always combine with items from fallback app storage if present
+    try {
+      final fallbackDir = await _getFallbackBackupDirectory();
+      if (fallbackDir.path != dirPath && await fallbackDir.exists()) {
+        final List<FileSystemEntity> entities = fallbackDir.listSync();
+        for (final entity in entities) {
+          if (entity is File) {
+            final fileName = entity.path.split(RegExp(r'[/\\]')).last;
+            if (fileName.startsWith('attendmate_backup_') && fileName.endsWith('.json')) {
+              if (!items.any((element) => element['fileName'] == fileName)) {
+                try {
+                  final stat = await entity.stat();
+                  final content = await entity.readAsString();
+                  items.add({
+                    'fileName': fileName,
+                    'fileSizeBytes': stat.size,
+                    'lastModified': stat.modified.millisecondsSinceEpoch,
+                    'content': content,
+                  });
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return items;
+  }
+
   /// Enforces that at any given time, at most [maxRollingBackups] (3) exist in the directory
   Future<void> enforceRollingLimit() async {
     try {
       final dirPath = await getBackupDirectoryPath();
       if (dirPath == null || dirPath.trim().isEmpty) return;
 
-      final List<dynamic>? rawList = await _fileChannel.invokeMethod('getBackupFiles', {
-        'dirUri': dirPath,
-      });
-
-      if (rawList == null || rawList.length <= maxRollingBackups) return;
-
-      final List<Map<String, dynamic>> items = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final items = await _fetchBackupFilesRaw(dirPath);
+      if (items.length <= maxRollingBackups) return;
 
       items.sort((a, b) {
         final aMod = (a['lastModified'] as num?)?.toInt() ?? 0;
@@ -245,10 +376,7 @@ class BackupService {
       for (final item in itemsToDelete) {
         final fileName = item['fileName'] as String;
         try {
-          await _fileChannel.invokeMethod('deleteBackupFile', {
-            'dirUri': dirPath,
-            'fileName': fileName,
-          });
+          await deleteBackupFile(fileName);
           debugPrint('Pruned old rolling backup: $fileName');
         } catch (e) {
           debugPrint('Failed to delete old backup file: $e');
@@ -265,13 +393,8 @@ class BackupService {
       final dirPath = await getBackupDirectoryPath();
       if (dirPath == null || dirPath.trim().isEmpty) return [];
 
-      final List<dynamic>? rawList = await _fileChannel.invokeMethod('getBackupFiles', {
-        'dirUri': dirPath,
-      });
-
-      if (rawList == null || rawList.isEmpty) return [];
-
-      final List<Map<String, dynamic>> items = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final items = await _fetchBackupFilesRaw(dirPath);
+      if (items.isEmpty) return [];
 
       items.sort((a, b) {
         final aMod = (a['lastModified'] as num?)?.toInt() ?? 0;
@@ -471,10 +594,18 @@ class BackupService {
     try {
       final dirPath = await getBackupDirectoryPath();
       if (dirPath == null) return;
-      await _fileChannel.invokeMethod('deleteBackupFile', {
-        'dirUri': dirPath,
-        'fileName': fileName,
-      });
+      if (dirPath.startsWith('content://')) {
+        await _fileChannel.invokeMethod('deleteBackupFile', {
+          'dirUri': dirPath,
+          'fileName': fileName,
+        });
+      } else {
+        final sep = Platform.pathSeparator;
+        final file = File('$dirPath$sep$fileName');
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
     } catch (e) {
       debugPrint('Error deleting backup file: $e');
     }

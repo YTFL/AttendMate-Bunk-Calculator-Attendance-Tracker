@@ -15,6 +15,10 @@ bool isUserCancellation(Object e) {
 
 /// Format technical exceptions into clean, human-readable error messages for UI presentation
 String formatUserFriendlyErrorMessage(Object e, {String defaultPrefix = 'Operation failed'}) {
+  if (e is MissingPluginException || e.toString().contains('MissingPluginException')) {
+    return 'Native plugin method missing. Please fully close and rebuild/restart the app (Hot Reload cannot load new native Android/Kotlin changes).';
+  }
+
   if (e is PlatformException) {
     final code = e.code.toUpperCase();
     final message = e.message ?? '';
