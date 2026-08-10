@@ -21,7 +21,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - Automatic status detection — tracks whether your semester is upcoming, active, or ended
 - Edit semester details anytime
 
-![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_details.png)
+![Semester Setup Screen with dates and target percentage configuration](./screenshots/semester_details.jpg)
 
 ### 📚 Subject Management
 - Add unlimited subjects with custom names, acronyms, colors, and per-subject attendance targets
@@ -30,7 +30,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - **Collapsible subject cards** — collapse to just the name and acronym, expand for full schedule details
 - Edit or delete subjects anytime
 
-![Subject List showing color-coded subjects](./screenshots/subjects.png)
+![Subject List showing color-coded subjects](./screenshots/subjects.jpg)
 
 ### 📥 Timetable Import
 - Bulk import all your subjects and schedules at once using a simple JSON format
@@ -38,7 +38,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - Automatic color assignment during import
 - Built-in format reference with copy-to-clipboard support
 
-![Import Timetable Screen with JSON input interface](./screenshots/import_export.png)
+![Import Timetable Screen with JSON input interface](./screenshots/import_export.jpg)
 
 ### 📆 Today's Schedule
 - View all classes for today, sorted by time
@@ -49,7 +49,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - When a day is a holiday, classes are still visible with individual **Holiday** actions per class
 - Auto end-of-day: at 10 PM, any still-unmarked class is automatically marked Present
 
-![Today's Schedule with Present/Absent action buttons](./screenshots/todays.png)
+![Today's Schedule with Present/Absent action buttons](./screenshots/todays.jpg)
 
 ### 📊 Bunk Meter
 - Per-subject predictions: how many classes you can safely bunk, or how many you must attend
@@ -58,7 +58,7 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 - **Collapsible bunk meter cards** — collapse for a quick status summary, expand for full detail
 - **Search** — filter subjects by name in real time
 
-![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter.png)
+![Bunk Meter showing predictions and statistics for all subjects](./screenshots/bunk_meter.jpg)
 
 ### 📅 Attendance Calendar
 - Full-semester month view with colour-coded dates for each attendance state
@@ -100,11 +100,11 @@ AttendMate gives you a clear picture of where you stand in every subject — how
 
 - 📊 **Redesigned Attendance Calendar UI & Filtering**: Updated calendar UI style with modern day tiles, status filtering (`Present`, `Absent`, `Cancelled`, `Holiday`, `Planned Leave`), and a quick "Today" return shortcut.
 
-![Attendance Calendar showing month overview and status filters](./screenshots/calendar.png)
+![Attendance Calendar showing month overview and status filters](./screenshots/calendar.jpg)
 
 - 🧮 **Bunk Calculator**: Simulate bunking $N$ or attending $M$ future classes for any subject to project your exact attendance percentage before making a decision.
 
-![Bunk Calculator Sheet showing What-If simulation](./screenshots/bunk_calculator.png)
+![Bunk Calculator Sheet showing What-If simulation](./screenshots/bunk_calculator.jpg)
 
 - 📅 **Leave Planner & Calendar Sync**: Plan future trips or medical leaves and automatically sync lecture cancellations/restorations with Google Calendar and Device System Calendars.
 
