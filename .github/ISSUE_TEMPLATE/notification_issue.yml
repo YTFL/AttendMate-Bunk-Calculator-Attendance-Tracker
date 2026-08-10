@@ -1,0 +1,85 @@
+name: "🔔 Notification & Alarm Issue"
+description: "Report an issue with class-end notifications, missing action buttons, or exact alarm scheduling."
+title: "[NOTIFICATION]: "
+labels: ["bug", "notifications"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Experiencing issues with class-end attendance notifications, alarm delays, or action buttons not responding?
+        Please detail your notification permissions and device settings below.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: "App Version"
+      description: "What version of AttendMate are you using?"
+      placeholder: "e.g. v2.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: device-info
+    attributes:
+      label: "Device Model & Android Version"
+      description: "Manufacturer and Android version (e.g. Xiaomi MIUI / Samsung Galaxy)."
+      placeholder: "e.g. Redmi Note 11 (Android 12 / MIUI 13)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: notification-permission
+    attributes:
+      label: "Notification Permission Status"
+      description: "Are notifications enabled for AttendMate in system settings?"
+      options:
+        - "Enabled (All Notifications Allowed)"
+        - "Disabled / Blocked"
+        - "Not Sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: exact-alarm-permission
+    attributes:
+      label: "Alarms & Reminders (Exact Alarm) Permission"
+      description: "For Android 12+ (API 31+): Is 'Alarms & Reminders' permission enabled in device Special App Access?"
+      options:
+        - "Allowed / Enabled"
+        - "Not Allowed / Disabled"
+        - "Not Applicable (Android 11 or below)"
+        - "Not Sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: "Description of the Notification Issue"
+      description: "Describe what went wrong with the notification or action buttons."
+      placeholder: "e.g. Notification did not pop up when class ended at 11:00 AM, or tapping 'Mark Present' on notification didn't update attendance."
+    validations:
+      required: true
+
+  - type: textarea
+    id: class-schedule-context
+    attributes:
+      label: "Class Schedule & Time Context"
+      description: "What class end time was scheduled, and when did you check for the notification?"
+      placeholder: "e.g. Class ended at 10:30 AM, notification arrived 25 minutes late."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Pre-submission Checklist"
+      description: "Please check before submitting:"
+      options:
+        - label: "App notifications are turned ON in Android Settings."
+          required: true
+        - label: "Alarms & Reminders permission is enabled (for Android 12+)."
+          required: true
+        - label: "Do Not Disturb (DND) mode was not blocking notification alerts."
+          required: true
