@@ -1,0 +1,87 @@
+name: "📍 Geofencing & Location Issue"
+description: "Report an issue with campus location setup, geofence auto-attendance triggers, or location permissions."
+title: "[GEOFENCE]: "
+labels: ["bug", "geofencing"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Having trouble with campus geofencing or automatic attendance logging when arriving at/leaving campus?
+        Please fill in your device location permissions and settings so we can diagnose the issue.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: "App Version"
+      description: "What version of AttendMate are you using?"
+      placeholder: "e.g. v2.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: device-info
+    attributes:
+      label: "Device Model & Android OS"
+      description: "Device brand, model, and Android OS version."
+      placeholder: "e.g. Samsung Galaxy S22 (Android 13 / OneUI 5.1)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: location-permission
+    attributes:
+      label: "Location Permission Granted"
+      description: "What location permission level is granted to AttendMate in Android Settings?"
+      options:
+        - "Allow all the time (Background Location)"
+        - "Allow only while using the app"
+        - "Ask every time"
+        - "Denied"
+        - "Not Sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: battery-optimization
+    attributes:
+      label: "Battery Optimization / Saver Status"
+      description: "Is battery optimization or background restriction disabled for AttendMate?"
+      options:
+        - "Unrestricted (Optimization Disabled for AttendMate)"
+        - "Optimized (Standard Android Saver)"
+        - "Restricted / Strict OEM Saver (MIUI / OneUI / OxygenOS)"
+        - "Not Sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: geofence-coords
+    attributes:
+      label: "Configured Geofence Coordinates & Radius"
+      description: "What campus latitude, longitude, and radius (in meters) are configured in app settings?"
+      placeholder: "e.g. Lat: 12.9716, Long: 77.5946, Radius: 200m"
+    validations:
+      required: false
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: "Description of the Location Issue"
+      description: "What happens when you enter or leave your campus geofence boundary?"
+      placeholder: "e.g. Arrived on campus at 9 AM, but auto-attendance was not logged even though location permission is set to Allow all the time."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "Pre-submission Checklist"
+      description: "Please check before submitting:"
+      options:
+        - label: "Device Location / GPS is toggled ON in device settings."
+          required: true
+        - label: "Background location permission is set to 'Allow all the time'."
+          required: true
+        - label: "AttendMate is exempted from OS aggressive battery saver / background killing."
+          required: true
