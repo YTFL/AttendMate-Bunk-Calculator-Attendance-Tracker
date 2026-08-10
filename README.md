@@ -2,7 +2,7 @@
 
 **AttendMate 2.0** is an open-source attendance tracking app for students — track classes, calculate bunking capacity, auto-log attendance via geofencing, plan future leaves, and stay on top of your attendance target throughout the semester.
 
-![App Version](https://img.shields.io/badge/version-2.0.0-blue)
+![App Version](https://img.shields.io/badge/version-2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Android-green)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-orange)
 
