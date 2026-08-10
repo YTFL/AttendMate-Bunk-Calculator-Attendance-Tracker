@@ -24,6 +24,8 @@ import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/update_service.dart';
 import 'services/backup_service.dart';
+import 'utils/github_issue_helper.dart';
+import 'features/settings/diagnostics_log_screen.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 
@@ -453,6 +455,102 @@ Future<void> main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     debugPrint('Flutter Error: ${details.exception}');
     debugPrintStack(stackTrace: details.stack);
+    DatabaseService().logAppEvent(
+      tag: 'FlutterError',
+      message: '${details.exception}\n${details.stack}',
+      level: 'ERROR',
+    );
+  };
+
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('Uncaught Error: $error');
+    debugPrintStack(stackTrace: stack);
+    DatabaseService().logAppEvent(
+      tag: 'UncaughtError',
+      message: '$error\n$stack',
+      level: 'ERROR',
+    );
+    return true;
+  };
+
+  // Custom ErrorWidget builder for UI error recovery
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.black,
+      child: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          alignment: Alignment.center,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.red,
+                  size: 56,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'An unexpected error occurred',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  details.exceptionAsString(),
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    final context = navigatorKey.currentContext;
+                    GitHubIssueHelper.createIssueFromLog(
+                      context: context,
+                      tag: 'UI Crash',
+                      message: details.exceptionAsString(),
+                      errorStackTrace: details.stack?.toString(),
+                    );
+                  },
+                  icon: const Icon(Icons.bug_report_outlined),
+                  label: const Text('Create Issue on GitHub'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    final context = navigatorKey.currentContext;
+                    if (context != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DiagnosticsLogScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.terminal_outlined),
+                  label: const Text('View Diagnostics Log'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   };
   
   // Initialize SQLite database with error handling

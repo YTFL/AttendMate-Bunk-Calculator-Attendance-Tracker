@@ -85,9 +85,62 @@ class NotificationService {
     
     // Load all attendance records to check what's already marked
     final existingAttendance = await DatabaseService().loadAttendance();
+    final locations = await DatabaseService().loadLocations();
+    final locationMap = {for (final l in locations) l.id: l};
 
     for (final subject in subjects) {
       for (final slot in subject.schedule) {
+        // --- 1. Schedule Pre-Class Notification (5 minutes before class starts) ---
+        final preClassTime = _nextPreClassInstanceOfSlot(slot, minutesBefore: 5);
+        if (preClassTime != null) {
+          final preClassNotificationId = _preClassNotificationId(subject.id, slot);
+          if (!_scheduledNotifications.contains(preClassNotificationId)) {
+            final scheduleDateOnly = DateTime(preClassTime.year, preClassTime.month, preClassTime.day);
+            final isAlreadyMarked = existingAttendance.any((record) =>
+                record.subjectId == subject.id &&
+                DateTime(record.date.year, record.date.month, record.date.day) == scheduleDateOnly &&
+                (record.slotKey ?? '') == slot.slotKey
+            );
+
+            if (!isAlreadyMarked) {
+              final displayName = subject.acronym ?? subject.name;
+              final locId = subject.getEffectiveLocationId(slot);
+              final locConfig = locId != null ? locationMap[locId] : null;
+              final roomName = subject.getEffectiveRoom(slot) ?? locConfig?.name;
+              final blockName = subject.getEffectiveBlock(slot) ?? locConfig?.block;
+              final preClassTitle = _formatPreClassTitle(
+                subjectName: displayName,
+                room: roomName,
+                block: blockName,
+              );
+
+              final preClassPayload = jsonEncode({
+                'type': 'pre_class',
+                'subjectId': subject.id,
+                'date': scheduleDateOnly.toIso8601String(),
+                'slotKey': slot.slotKey,
+              });
+
+              try {
+                await _plugin.zonedSchedule(
+                  id: preClassNotificationId,
+                  title: preClassTitle,
+                  body: null,
+                  scheduledDate: preClassTime,
+                  notificationDetails: _preClassNotificationDetails(),
+                  androidScheduleMode: scheduleMode,
+                  payload: preClassPayload,
+                );
+                _scheduledNotifications.add(preClassNotificationId);
+                _payloadMap[preClassNotificationId] = preClassPayload;
+              } catch (e) {
+                // Silently fail - notification scheduling error
+              }
+            }
+          }
+        }
+
+        // --- 2. Schedule End-Of-Class Notification (at class end) ---
         final scheduleTime = _nextInstanceOfSlot(slot);
         if (scheduleTime == null) {
           continue;
@@ -132,8 +185,9 @@ class NotificationService {
           _scheduledNotifications.add(notificationId);
           _payloadMap[notificationId] = payload; // Store payload for action handling
 
-          // Queue background geofence check if the subject has a location configured
-          if (subject.locationId != null) {
+          // Queue background geofence check if an effective location is configured (class-wise or subject-wise)
+          final effectiveLocationId = subject.getEffectiveLocationId(slot);
+          if (effectiveLocationId != null) {
             final now = DateTime.now();
             final startDateTime = DateTime(
               scheduleDateOnly.year,
@@ -161,7 +215,7 @@ class NotificationService {
               try {
                 await DatabaseService().logAppEvent(
                   tag: 'NotificationService',
-                  message: 'Registering geofenceCheckTask for "${subject.name}" ($taskKey) with delay: $delay',
+                  message: 'Registering geofenceCheckTask for "${subject.name}" ($taskKey) with locationId: $effectiveLocationId, delay: $delay',
                 );
                 await Workmanager().registerOneOffTask(
                   taskKey,
@@ -169,7 +223,7 @@ class NotificationService {
                   initialDelay: delay,
                   inputData: {
                     'subjectId': subject.id,
-                    'locationId': subject.locationId,
+                    'locationId': effectiveLocationId,
                     'date': scheduleDateOnly.toIso8601String(),
                     'slotKey': slot.slotKey,
                     'subjectName': subject.name,
@@ -292,6 +346,130 @@ class NotificationService {
     }
 
     return null;
+  }
+
+  NotificationDetails _preClassNotificationDetails() {
+    const androidDetails = AndroidNotificationDetails(
+      'pre_class_reminders',
+      'Upcoming Class Reminders',
+      channelDescription: 'Reminders 5 minutes before class displaying classroom block and room number in title',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: 'icon_noti',
+      enableVibration: true,
+      enableLights: true,
+      playSound: true,
+    );
+
+    return const NotificationDetails(android: androidDetails);
+  }
+
+  tz.TZDateTime? _nextPreClassInstanceOfSlot(TimeSlot slot, {int minutesBefore = 5}) {
+    final now = tz.TZDateTime.now(tz.local);
+    final today = DateTime(now.year, now.month, now.day);
+
+    if (slot.specificDate != null) {
+      final scheduledDate = normalizeDate(slot.specificDate)!;
+      if (scheduledDate.isBefore(today)) {
+        return null;
+      }
+
+      final classStart = tz.TZDateTime(
+        tz.local,
+        scheduledDate.year,
+        scheduledDate.month,
+        scheduledDate.day,
+        slot.startTime.hour,
+        slot.startTime.minute,
+      );
+
+      final preClassTime = classStart.subtract(Duration(minutes: minutesBefore));
+
+      if (now.isAfter(preClassTime)) {
+        return null;
+      }
+
+      return preClassTime;
+    }
+
+    for (int dayOffset = 0; dayOffset <= 370; dayOffset++) {
+      final candidateDateTime = now.add(Duration(days: dayOffset));
+      final candidateDate = DateTime(
+        candidateDateTime.year,
+        candidateDateTime.month,
+        candidateDateTime.day,
+      );
+
+      if (!slot.occursOnDate(candidateDate)) {
+        continue;
+      }
+
+      final classStart = tz.TZDateTime(
+        tz.local,
+        candidateDate.year,
+        candidateDate.month,
+        candidateDate.day,
+        slot.startTime.hour,
+        slot.startTime.minute,
+      );
+
+      final preClassTime = classStart.subtract(Duration(minutes: minutesBefore));
+
+      if (preClassTime.isBefore(now)) {
+        continue;
+      }
+
+      return preClassTime;
+    }
+
+    return null;
+  }
+
+  int _preClassNotificationId(String subjectId, TimeSlot slot) {
+    final key =
+        'pre-$subjectId-${slot.day.index}-${slot.startTime.hour}-${slot.startTime.minute}-${slot.endTime.hour}-${slot.endTime.minute}';
+    return _stableId(key);
+  }
+
+  String _formatPreClassTitle({
+    required String subjectName,
+    required String? room,
+    required String? block,
+  }) {
+    final cleanRoom = room?.trim();
+    final cleanBlock = block?.trim();
+
+    String locationPart = '';
+
+    String formattedRoom = '';
+    if (cleanRoom != null && cleanRoom.isNotEmpty) {
+      if (RegExp(r'\b(room|lab|hall|auditorium)\b', caseSensitive: false).hasMatch(cleanRoom)) {
+        formattedRoom = cleanRoom;
+      } else {
+        formattedRoom = 'Room $cleanRoom';
+      }
+    }
+
+    String formattedBlock = '';
+    if (cleanBlock != null && cleanBlock.isNotEmpty) {
+      if (RegExp(r'\b(block|building|wing)\b', caseSensitive: false).hasMatch(cleanBlock)) {
+        formattedBlock = cleanBlock;
+      } else {
+        formattedBlock = 'Block $cleanBlock';
+      }
+    }
+
+    if (formattedBlock.isNotEmpty && formattedRoom.isNotEmpty) {
+      locationPart = ' in $formattedBlock, $formattedRoom';
+    } else if (formattedBlock.isNotEmpty) {
+      locationPart = ' in $formattedBlock';
+    } else if (formattedRoom.isNotEmpty) {
+      locationPart = ' in $formattedRoom';
+    } else {
+      locationPart = ' in 5 mins';
+    }
+
+    return 'Next Class: $subjectName$locationPart';
   }
 
   int _notificationId(String subjectId, TimeSlot slot) {
@@ -580,6 +758,92 @@ class NotificationService {
     );
 
     return displayName;
+  }
+
+  /// Finds the next upcoming class of today, and schedules a 5-minute pre-class notification
+  /// to fire in 15 seconds.
+  /// Returns the formatted pre-class notification title if scheduled, or null if no classes exist.
+  Future<String?> triggerTestPreClassNotificationAfter15Seconds(List<Subject> subjects) async {
+    await init();
+    final now = tz.TZDateTime.now(tz.local);
+    final today = DateTime(now.year, now.month, now.day);
+    final locations = await DatabaseService().loadLocations();
+    final locationMap = {for (final l in locations) l.id: l};
+    final existingAttendance = await DatabaseService().loadAttendance();
+    final List<Map<String, dynamic>> todaySlots = [];
+
+    for (final subject in subjects) {
+      for (final slot in subject.schedule) {
+        if (!slot.occursOnDate(today)) {
+          continue;
+        }
+
+        final isAlreadyMarked = existingAttendance.any((record) =>
+            record.subjectId == subject.id &&
+            DateTime(record.date.year, record.date.month, record.date.day) == today &&
+            (record.slotKey ?? '') == slot.slotKey
+        );
+
+        if (!isAlreadyMarked) {
+          todaySlots.add({
+            'subject': subject,
+            'slot': slot,
+          });
+        }
+      }
+    }
+
+    if (todaySlots.isEmpty) {
+      return null;
+    }
+
+    DateTime getSlotStart(TimeSlot slot) {
+      return DateTime(today.year, today.month, today.day, slot.startTime.hour, slot.startTime.minute);
+    }
+
+    todaySlots.sort((a, b) {
+      final slotA = a['slot'] as TimeSlot;
+      final slotB = b['slot'] as TimeSlot;
+      return getSlotStart(slotA).compareTo(getSlotStart(slotB));
+    });
+
+    final selected = todaySlots.first;
+    final triggerTime = now.add(const Duration(seconds: 15));
+    final subject = selected['subject'] as Subject;
+    final slot = selected['slot'] as TimeSlot;
+    final preClassNotificationId = _preClassNotificationId(subject.id, slot);
+    final displayName = subject.acronym ?? subject.name;
+
+    final locId = subject.getEffectiveLocationId(slot);
+    final locConfig = locId != null ? locationMap[locId] : null;
+    final roomName = subject.getEffectiveRoom(slot) ?? locConfig?.name;
+    final blockName = subject.getEffectiveBlock(slot) ?? locConfig?.block;
+    final preClassTitle = _formatPreClassTitle(
+      subjectName: displayName,
+      room: roomName,
+      block: blockName,
+    );
+
+    final payload = jsonEncode({
+      'type': 'pre_class',
+      'subjectId': subject.id,
+      'date': today.toIso8601String(),
+      'slotKey': slot.slotKey,
+    });
+
+    final scheduleMode = await _androidScheduleMode();
+
+    await _plugin.zonedSchedule(
+      id: preClassNotificationId,
+      title: preClassTitle,
+      body: null,
+      scheduledDate: triggerTime,
+      notificationDetails: _preClassNotificationDetails(),
+      androidScheduleMode: scheduleMode,
+      payload: payload,
+    );
+
+    return preClassTitle;
   }
 }
 

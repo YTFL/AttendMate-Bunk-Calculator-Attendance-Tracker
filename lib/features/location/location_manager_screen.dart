@@ -193,14 +193,17 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(location == null ? 'Add Location' : 'Edit Location'),
-          content: SizedBox(
-            width: 320,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nameController,
+          content: GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: SizedBox(
+              width: 320,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameController,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
                       labelText: 'Room / Location Name',
@@ -354,6 +357,7 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                 ],
               ),
             ),
+          ),
           ),
           actions: [
             TextButton(

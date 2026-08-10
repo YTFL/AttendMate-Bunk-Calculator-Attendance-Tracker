@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-08-10
+
+### Added
+- **Class-Wise Location Selection**: Added option to select/set classroom location per class slot instead of having only one location per subject.
+- **Classroom Details in Notifications**: Pre-class notifications (sent 5 minutes before class) now show the classroom block and room number.
+- **Diagnostics Log & GitHub Issue Reporting**: Moved Diagnostics Log under System settings and enabled it for release builds. When an error occurs, users can now directly create a GitHub issue pre-filled with the error log for streamlined bug reporting.
+
+### Fixed
+- **Timetable JSON Import Default**: When no subjects are present, importing JSON by default sets up the complete semester timetable instead of updating from a specific date.
+- **Text Field Keyboard Focus & Auto-Dismiss**: Removed overly aggressive keyboard auto-dismissal across text fields in the app, properly enabling standard focus and unfocus behaviors.
+- **Add/Edit Subject Keyboard Focus**: Fixed aggressive keyboard auto-dismissal on the add/edit subject pages.
+- **Location Selector Keyboard Focus**: Fixed aggressive keyboard auto-dismissal when setting locations.
+- **Pre-Semester Calendar Access**: Fixed an issue preventing opening or viewing the attendance calendar before the semester start date.
+
+---
+
 ## [2.0.0] - 2026-07-22
 
 ### Added

@@ -107,6 +107,49 @@ class Subject {
     }
     return total;
   }
+
+  /// Returns the effective location ID for a given class time slot.
+  /// Evaluation rules:
+  /// 1. Subject location & class location both not set -> returns null
+  /// 2. Subject location set & class location not set -> returns subject location
+  /// 3. Subject location not set & class location set -> returns class location
+  /// 4. Subject location set & class location set -> returns class location (overrides subject location)
+  String? getEffectiveLocationId(TimeSlot slot) {
+    if (slot.locationId != null && slot.locationId!.isNotEmpty) {
+      return slot.locationId;
+    }
+    if (locationId != null && locationId!.isNotEmpty) {
+      return locationId;
+    }
+    return null;
+  }
+
+  /// Returns the effective room name for a given class time slot.
+  String? getEffectiveRoom(TimeSlot slot) {
+    if (slot.locationId != null && slot.locationId!.isNotEmpty) {
+      return slot.room;
+    }
+    if (locationId != null && locationId!.isNotEmpty) {
+      return room;
+    }
+    return slot.room ?? room;
+  }
+
+  /// Returns the effective block name for a given class time slot.
+  String? getEffectiveBlock(TimeSlot slot) {
+    if (slot.locationId != null && slot.locationId!.isNotEmpty) {
+      return slot.block;
+    }
+    if (locationId != null && locationId!.isNotEmpty) {
+      return block;
+    }
+    return slot.block ?? block;
+  }
+
+  /// Returns true if an effective location is set for this class time slot.
+  bool hasEffectiveLocation(TimeSlot slot) {
+    return getEffectiveLocationId(slot) != null;
+  }
 }
 
 class ManualAttendanceOverride {

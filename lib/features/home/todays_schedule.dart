@@ -492,7 +492,12 @@ class TodaySchedule extends StatelessWidget {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(timeSlot.formatTimeRange(timeFormatProvider.timeFormat)),
+                          Text(
+                            timeSlot.formatTimeRange(timeFormatProvider.timeFormat) +
+                                (subject.getEffectiveRoom(timeSlot) != null
+                                    ? ' • ${subject.getEffectiveRoom(timeSlot)}${subject.getEffectiveBlock(timeSlot) != null && subject.getEffectiveBlock(timeSlot)!.isNotEmpty ? " (${subject.getEffectiveBlock(timeSlot)})" : ""}'
+                                    : ''),
+                          ),
                           SizedBox(height: rs.height(4)),
                           Row(
                             children: [

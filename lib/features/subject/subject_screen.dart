@@ -216,9 +216,11 @@ class _SubjectScreenState extends State<SubjectScreen> {
                                     final dayLabel = timeSlot.specificDate == null
                                         ? timeSlot.day.name.capitalize().substring(0, 3)
                                         : '${timeSlot.day.name.capitalize().substring(0, 3)} ${timeSlot.specificDate!.day}/${timeSlot.specificDate!.month}';
+                                    final room = subject.getEffectiveRoom(timeSlot);
+                                    final roomText = room != null ? ' • $room' : '';
                                     return Chip(
                                       label: Text(
-                                        '$dayLabel: ${timeSlot.formatTimeRange(timeFormatProvider.timeFormat)}',
+                                        '$dayLabel: ${timeSlot.formatTimeRange(timeFormatProvider.timeFormat)}$roomText',
                                         style: TextStyle(fontSize: rs.font(10)),
                                       ),
                                       backgroundColor: subject.color.withAlpha(50),

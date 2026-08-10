@@ -49,8 +49,6 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
   void initState() {
     super.initState();
     _selectedColor = _pickRandomAvailableColor();
-    _nameController.addListener(() => setState(() {}));
-    _acronymController.addListener(() => setState(() {}));
     _loadLocations();
 
     final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
@@ -210,6 +208,19 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     final Set<DayOfWeek> selectedDays = existing != null
         ? {existing.day}
         : {};
+
+    LocationConfig? slotLocation;
+    if (existing != null && existing.locationId != null) {
+      try {
+        slotLocation = _locations.firstWhere((l) => l.id == existing.locationId);
+      } catch (_) {
+        slotLocation = LocationConfig(
+          id: existing.locationId!,
+          name: existing.room ?? 'Unknown Room',
+          block: existing.block,
+        );
+      }
+    }
 
     bool timeError = _toMinutes(endTime) <= _toMinutes(startTime);
 
@@ -490,6 +501,50 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                       ),
                   ],
 
+                  // Class specific location
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<LocationConfig?>(
+                    initialValue: slotLocation,
+                    decoration: InputDecoration(
+                      labelText: 'Class Location (Optional)',
+                      hintText: 'Use Subject Default Location',
+                      prefixIcon: Icon(Icons.pin_drop_outlined, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerLowest,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: _selectedColor, width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    ),
+                    items: [
+                      DropdownMenuItem<LocationConfig?>(
+                        value: null,
+                        child: Text(
+                          _selectedLocation != null
+                              ? 'Default (${_selectedLocation!.name})'
+                              : 'Default (Use Subject Location)',
+                          style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.8)),
+                        ),
+                      ),
+                      ..._locations.map((loc) => DropdownMenuItem<LocationConfig?>(
+                            value: loc,
+                            child: Text('${loc.name}${loc.block != null && loc.block!.isNotEmpty ? " (${loc.block})" : ""}'),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      setSheetState(() => slotLocation = val);
+                    },
+                  ),
+
                   const SizedBox(height: 32),
 
                   // Save button
@@ -528,6 +583,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                           startTime: startTime,
                                           endTime: endTime,
                                           specificDate: date,
+                                          locationId: slotLocation?.id,
+                                          room: slotLocation?.name,
+                                          block: slotLocation?.block,
                                         );
                                       } else {
                                         _schedule.add(TimeSlot(
@@ -536,6 +594,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                           startTime: startTime,
                                           endTime: endTime,
                                           specificDate: date,
+                                          locationId: slotLocation?.id,
+                                          room: slotLocation?.name,
+                                          block: slotLocation?.block,
                                         ));
                                       }
                                       _sortSchedule();
@@ -553,6 +614,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                       startTime: startTime,
                                       endTime: endTime,
                                       specificDate: date,
+                                      locationId: slotLocation?.id,
+                                      room: slotLocation?.name,
+                                      block: slotLocation?.block,
                                     );
                                   } else {
                                     _schedule.add(TimeSlot(
@@ -561,6 +625,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                       startTime: startTime,
                                       endTime: endTime,
                                       specificDate: date,
+                                      locationId: slotLocation?.id,
+                                      room: slotLocation?.name,
+                                      block: slotLocation?.block,
                                     ));
                                   }
                                   _sortSchedule();
@@ -575,6 +642,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                       day: day,
                                       startTime: startTime,
                                       endTime: endTime,
+                                      locationId: slotLocation?.id,
+                                      room: slotLocation?.name,
+                                      block: slotLocation?.block,
                                     ));
                                   }
                                   _sortSchedule();
@@ -876,13 +946,13 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
           ],
         ),
         body: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
           behavior: HitTestBehavior.opaque,
           child: Form(
             key: _formKey,
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
               children: [
                 // ── Subject Name & Acronym fields ───────────────────────────
                 KeyedSubtree(
@@ -955,7 +1025,6 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                           prefixIcon: Icon(Icons.label_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                         ),
-                        onFieldSubmitted: (_) => FocusScope.of(context).unfocus(),
                       ),
                       const SizedBox(height: 16),
                       // ── Target Attendance Percentage ───────────────────────
@@ -1043,7 +1112,8 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                         child: DropdownButtonFormField<LocationConfig?>(
                           initialValue: _loadingLocations ? null : _selectedLocation,
                           decoration: InputDecoration(
-                            labelText: 'Class Location (Optional)',
+                            labelText: 'Default Subject Location (Optional)',
+                            helperText: 'Applies to all classes unless overridden per class slot.',
                             hintText: _loadingLocations ? 'Loading...' : 'Select a room / location',
                             hintStyle: TextStyle(color: Colors.grey.shade500),
                             prefixIcon: Icon(Icons.pin_drop_outlined, color: colorScheme.onSurface.withValues(alpha: 0.4)),
@@ -1370,7 +1440,10 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      slot.formatTimeRange(timeFormat) + (slot.room != null ? ' • ${slot.room}${slot.block != null ? " (${slot.block})" : ""}' : ''),
+                      slot.formatTimeRange(timeFormat) +
+                          (slot.room != null
+                              ? ' • ${slot.room}${slot.block != null && slot.block!.isNotEmpty ? " (${slot.block})" : ""}'
+                              : (_selectedLocation != null ? ' • Default (${_selectedLocation!.name})' : '')),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

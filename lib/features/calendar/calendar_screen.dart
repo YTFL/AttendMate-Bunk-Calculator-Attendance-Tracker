@@ -161,7 +161,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final rs = context.rs;
 
     final now = DateTime.now();
-    final isCurrentMonth = _isSameMonthYear(_selectedMonth, now);
+    final todayMonth = DateTime(now.year, now.month, 1);
+    final targetTodayMonth = todayMonth.isBefore(startMonth)
+        ? startMonth
+        : (todayMonth.isAfter(endMonth) ? endMonth : todayMonth);
+    final isShowingTodayMonth = _isSameMonthYear(_selectedMonth, targetTodayMonth);
 
     return TutorialOverlay(
       child: Scaffold(
@@ -173,7 +177,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           elevation: 0,
           centerTitle: false,
           actions: [
-            if (!isCurrentMonth)
+            if (!isShowingTodayMonth)
               IconButton(
                 icon: const Icon(Icons.today_rounded),
                 tooltip: 'Go to Today',
@@ -1454,8 +1458,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final isLockedByManualOverride = _isLockedByManualOverride(subject, date);
     final overrideDate = subject.manualAttendanceOverride?.effectiveFrom;
     final timeSlot = CalendarUtils.getTimeSlotForDate(subject, date);
+    final effectiveRoom = timeSlot != null ? subject.getEffectiveRoom(timeSlot) : null;
+    final effectiveBlock = timeSlot != null ? subject.getEffectiveBlock(timeSlot) : null;
+    final locSuffix = effectiveRoom != null
+        ? ' • $effectiveRoom${effectiveBlock != null && effectiveBlock.isNotEmpty ? " ($effectiveBlock)" : ""}'
+        : '';
     final timeText = timeSlot != null
-        ? '${timeSlot.startTime.hour.toString().padLeft(2, '0')}:${timeSlot.startTime.minute.toString().padLeft(2, '0')} - ${timeSlot.endTime.hour.toString().padLeft(2, '0')}:${timeSlot.endTime.minute.toString().padLeft(2, '0')}'
+        ? '${timeSlot.formatTimeRange(timeFormatProvider.timeFormat)}$locSuffix'
         : '';
 
     return Container(

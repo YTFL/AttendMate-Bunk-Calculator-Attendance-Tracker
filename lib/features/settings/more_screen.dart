@@ -260,6 +260,43 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
+  Future<void> _triggerTestPreClassNotification() async {
+    try {
+      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+      final subjects = subjectProvider.subjects;
+      
+      final notificationService = NotificationService();
+      final title = await notificationService
+          .triggerTestPreClassNotificationAfter15Seconds(subjects);
+
+      if (!mounted) return;
+
+      if (title != null) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          SnackBar(
+            content: Text('Scheduled pre-class reminder ("$title") in 15 seconds.'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('No unmarked classes scheduled for today.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        SnackBar(
+          content: Text('Failed to trigger test pre-class notification: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _triggerTestNotification() async {
     try {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
@@ -986,22 +1023,22 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
+        ListTile(
+          leading: const Icon(Icons.terminal_outlined),
+          title: const Text('Diagnostics Log'),
+          subtitle: const Text('View app events, logs, and report issues on GitHub'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const DiagnosticsLogScreen()),
+            );
+          },
+        ),
 
         if (kDebugMode) ...[
           const Divider(),
           _buildSectionHeader('Developer Options', colorScheme),
-          ListTile(
-            leading: const Icon(Icons.terminal_outlined, color: Colors.red),
-            title: const Text('Diagnostics Log'),
-            subtitle: const Text('View and copy app events/errors for debugging'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DiagnosticsLogScreen()),
-              );
-            },
-          ),
           ListTile(
             leading: const Icon(Icons.system_update_outlined, color: Colors.red),
             title: const Text('Simulate Update Screen'),
@@ -1018,6 +1055,12 @@ class _MoreScreenState extends State<MoreScreen> {
               activeThumbColor: Colors.red,
             ),
             onTap: () => _toggleDevModeCalendarSync(!_devModeCalendarSyncEnabled),
+          ),
+          ListTile(
+            leading: const Icon(Icons.meeting_room_outlined, color: Colors.red),
+            title: const Text('Trigger Test Pre-Class Notification (15s)'),
+            subtitle: const Text('Schedules a 5-min location reminder for today\'s next class in 15 seconds'),
+            onTap: _triggerTestPreClassNotification,
           ),
           ListTile(
             leading: const Icon(Icons.notification_important_outlined, color: Colors.red),

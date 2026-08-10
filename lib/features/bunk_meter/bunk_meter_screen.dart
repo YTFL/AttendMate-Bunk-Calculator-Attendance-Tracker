@@ -12,6 +12,7 @@ import '../../utils/string_extension.dart';
 import '../../services/database_service.dart';
 import '../planner/planned_leave_model.dart';
 import '../planner/leave_planner_screen.dart';
+import '../calendar/calendar_screen.dart';
 import '../tutorial/tutorial_controller.dart';
 import 'what_if_calculator_sheet.dart';
 
@@ -120,6 +121,17 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                 'Your semester will start on $formattedDate. The bunk meter will be available from that date.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: rs.font(16)),
+              ),
+              SizedBox(height: rs.height(24)),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.calendar_month),
+                label: const Text('View Attendance Calendar'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CalendarScreen()),
+                  );
+                },
               ),
             ],
           ),

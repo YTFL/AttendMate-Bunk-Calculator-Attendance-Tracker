@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../services/database_service.dart';
+import '../../utils/github_issue_helper.dart';
 
 class DiagnosticsLogScreen extends StatefulWidget {
   const DiagnosticsLogScreen({super.key});
@@ -128,6 +129,11 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
       appBar: AppBar(
         title: const Text('Diagnostics Log'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report_outlined),
+            tooltip: 'Report issue on GitHub',
+            onPressed: () => GitHubIssueHelper.createIssueFromLogsList(context, filtered),
+          ),
           IconButton(
             icon: const Icon(Icons.copy_rounded),
             tooltip: 'Copy all to clipboard',
@@ -258,6 +264,19 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: colorScheme.onSurface.withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      InkWell(
+                                        onTap: () => GitHubIssueHelper.createIssueFromLogMap(context, log),
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4.0),
+                                          child: Icon(
+                                            Icons.bug_report_outlined,
+                                            size: 16,
+                                            color: level == 'ERROR' ? colorScheme.error : colorScheme.onSurface.withValues(alpha: 0.6),
+                                          ),
                                         ),
                                       ),
                                     ],

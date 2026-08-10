@@ -40,6 +40,11 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     final now = DateTime.now();
     _effectiveFromDate = DateTime(now.year, now.month, now.day);
 
+    final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+    if (subjectProvider.subjects.isEmpty) {
+      _isMidSemesterUpdate = false;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final tutorialController = Provider.of<TutorialController>(context, listen: false);

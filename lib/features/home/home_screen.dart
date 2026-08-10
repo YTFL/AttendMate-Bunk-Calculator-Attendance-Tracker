@@ -400,14 +400,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: TextStyle(fontSize: rs.font(16)),
             ),
             SizedBox(height: rs.height(24)),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.school),
-              label: const Text('View Semester Details'),
-              onPressed: () {
-                setState(() {
-                  _selectedIndex = 2; // Navigate to the Semester screen
-                });
-              },
+            Wrap(
+              spacing: rs.width(12),
+              runSpacing: rs.height(12),
+              alignment: WrapAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.calendar_month),
+                  label: const Text('View Calendar'),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CalendarScreen()),
+                    );
+                  },
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.school),
+                  label: const Text('View Semester Details'),
+                  onPressed: () {
+                    setState(() {
+                      _selectedIndex = 2; // Navigate to the Semester screen
+                    });
+                  },
+                ),
+              ],
             ),
           ],
         ),
@@ -450,7 +467,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         appBar: AppBar(
           title: Text(appBarTitles[_selectedIndex]),
           actions: [
-            if (isSemesterSet && hasSemesterStarted && !hasSemesterEnded)
+            if (isSemesterSet)
               IconButton(
                 icon: KeyedSubtree(key: _calendarKey, child: const Icon(Icons.calendar_month)),
                 onPressed: () {

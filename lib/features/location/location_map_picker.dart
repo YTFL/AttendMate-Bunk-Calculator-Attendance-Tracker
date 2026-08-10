@@ -24,6 +24,8 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
   GoogleMapController? _mapController;
   late TextEditingController _latController;
   late TextEditingController _lngController;
+  late FocusNode _latFocusNode;
+  late FocusNode _lngFocusNode;
 
   double _lat = 12.971593; // Default fallback (e.g. Bangalore center)
   double _lng = 77.594562;
@@ -38,10 +40,14 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
     }
     _latController = TextEditingController(text: _lat.toStringAsFixed(6));
     _lngController = TextEditingController(text: _lng.toStringAsFixed(6));
+    _latFocusNode = FocusNode();
+    _lngFocusNode = FocusNode();
   }
 
   @override
   void dispose() {
+    _latFocusNode.dispose();
+    _lngFocusNode.dispose();
     _latController.dispose();
     _lngController.dispose();
     _mapController?.dispose();
@@ -61,8 +67,12 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
       _lat = clampedLat;
       _lng = clampedLng;
       if (updateControllers) {
-        _latController.text = _lat.toStringAsFixed(6);
-        _lngController.text = _lng.toStringAsFixed(6);
+        if (!_latFocusNode.hasFocus) {
+          _latController.text = _lat.toStringAsFixed(6);
+        }
+        if (!_lngFocusNode.hasFocus) {
+          _lngController.text = _lng.toStringAsFixed(6);
+        }
       }
     });
 
@@ -221,53 +231,61 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: theme.scaffoldBackgroundColor,
       insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-              child: Row(
-                children: [
-                  Icon(Icons.location_on_outlined, color: theme.colorScheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Google Maps Geofence Picker',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black87,
+      child: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on_outlined, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Google Maps Geofence Picker',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black87,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-
-            const Divider(height: 1),
-
-            // Google Maps Canvas Viewport
-            Expanded(
-              child: Stack(
-                children: [
-                  GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: targetLatLng,
-                      zoom: 17.5,
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                    onMapCreated: (controller) => _mapController = controller,
-                    onTap: (pos) {
-                      _updateCoordinates(pos.latitude, pos.longitude);
-                    },
-                    onCameraMove: (camPos) {
-                      _updateCoordinates(camPos.target.latitude, camPos.target.longitude, updateControllers: true);
-                    },
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // Google Maps Canvas Viewport
+              Expanded(
+                child: Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: targetLatLng,
+                        zoom: 17.5,
+                      ),
+                      onMapCreated: (controller) => _mapController = controller,
+                      onTap: (pos) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        _updateCoordinates(pos.latitude, pos.longitude);
+                      },
+                      onCameraMove: (camPos) {
+                        _updateCoordinates(
+                          camPos.target.latitude,
+                          camPos.target.longitude,
+                          updateControllers: !(_latFocusNode.hasFocus || _lngFocusNode.hasFocus),
+                        );
+                      },
                     markers: {
                       Marker(
                         markerId: const MarkerId('geofence_center_marker'),
@@ -420,6 +438,7 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
                       Expanded(
                         child: TextFormField(
                           controller: _latController,
+                          focusNode: _latFocusNode,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                           decoration: const InputDecoration(
                             labelText: 'Latitude (-90 to +90)',
@@ -440,6 +459,7 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
                       Expanded(
                         child: TextFormField(
                           controller: _lngController,
+                          focusNode: _lngFocusNode,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                           decoration: const InputDecoration(
                             labelText: 'Longitude (-180 to +180)',
@@ -506,8 +526,9 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// Helper widget to pass events safely when transparent overlays are above GoogleMap

@@ -324,6 +324,9 @@ class TimetableImportUtils {
       color: color,
       schedule: schedule,
       targetAttendance: targetAttendance,
+      locationId: subjectData['locationId'] as String?,
+      room: subjectData['room'] as String?,
+      block: subjectData['block'] as String?,
     );
   }
 
@@ -361,6 +364,9 @@ class TimetableImportUtils {
       day: day,
       startTime: startTime,
       endTime: endTime,
+      locationId: slotData['locationId'] as String?,
+      room: slotData['room'] as String?,
+      block: slotData['block'] as String?,
     );
   }
 

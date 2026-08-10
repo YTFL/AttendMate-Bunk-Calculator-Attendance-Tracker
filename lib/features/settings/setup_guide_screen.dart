@@ -289,18 +289,17 @@ It also tells whether you can bunk safely, need to attend more, or if the target
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
 ## Overview
-AttendMate sends notifications when classes end.
+AttendMate sends notifications before and after your scheduled classes:
+1. **Pre-Class Location Reminder (5 Mins Before)**: Sends a notification formatted with your subject and classroom location (e.g. *Next Class: DBMS in Block B, Room 402*) so you can head directly to class.
+2. **End of Class Marking Reminder**: Prompts you to record attendance when class ends.
 
 ---
 
 ## Quick Actions
-From each notification, you can:
-- **Mark Present**
-- **Mark Absent**
+- **Pre-Class Notification**: Tap to open **Today** and view your schedule.
+- **End-of-Class Notification**: Tap **Mark Present** or **Mark Absent** directly from the notification.
 
-Tap notification body to open **Today**.
-
-> Ensure notification permissions are enabled in Android settings.
+> Ensure notification permissions and exact alarm permissions are enabled in Android settings.
 ''',
     ),
     _GuideSection(

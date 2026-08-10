@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as cal;
@@ -147,6 +148,7 @@ class CalendarService {
           return;
         }
       }
+
       // 1. Trigger Google login popup
       GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
       googleUser ??= await _googleSignIn.signInSilently();
@@ -313,6 +315,9 @@ class CalendarService {
             }
           }
 
+          final room = subject.getEffectiveRoom(slot);
+          final block = subject.getEffectiveBlock(slot);
+
           // 5. Build Event resource
           final cal.Event eventToImport = cal.Event()
             ..iCalUID = uniqueICalId
@@ -322,6 +327,10 @@ class CalendarService {
             ..start = (cal.EventDateTime()..dateTime = startDateTime.toUtc()..timeZone = "UTC")
             ..end = (cal.EventDateTime()..dateTime = endDateTime.toUtc()..timeZone = "UTC")
             ..recurrence = recurrenceRule;
+
+          if (room != null) {
+            eventToImport.location = '$room${block != null && block.isNotEmpty ? ' ($block)' : ''}';
+          }
 
           // 6. Execute import
           try {
