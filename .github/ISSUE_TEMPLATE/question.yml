@@ -1,0 +1,39 @@
+name: "❓ Question & Support"
+description: "Ask a question about using AttendMate, geofencing setup, notifications, or general inquiry."
+title: "[QUESTION]: "
+labels: ["question"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about how AttendMate works or need guidance on setting up features like Geofencing or Notifications? 
+        Please check the project [README](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/blob/main/git_public/README.md) and documentation first!
+
+  - type: textarea
+    id: question-summary
+    attributes:
+      label: Question Summary
+      description: What is your question or what would you like clarification on?
+      placeholder: "e.g. How does end-of-day auto attendance marking work at 10 PM?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant Context
+      description: Provide any relevant background (e.g., your device OS, feature you are trying to configure).
+      placeholder: "e.g. Setting up Geofence location for campus attendance tracking..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have reviewed the project README and documentation.
+          required: true
+        - label: I have searched previous GitHub issues and discussions.
+          required: true
