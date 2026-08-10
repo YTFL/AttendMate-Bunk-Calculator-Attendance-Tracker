@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 AttendMate README & Documentation
+    url: https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/blob/main/git_public/README.md
+    about: Read the project README and feature documentation.
+  - name: 🚀 Release Notes & Changelog
+    url: https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/blob/main/git_public/RELEASE_NOTES.md
+    about: Check version highlights and whats new in AttendMate.
+  - name: 💬 Contributing Guidelines
+    url: https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/blob/main/git_public/CONTRIBUTING.md
+    about: Learn how to contribute code, fix bugs, and open pull requests.
