@@ -1,7 +1,7 @@
 name: "✨ Feature Request"
 description: "Suggest a new feature, enhancement, or improvement for AttendMate."
 title: "[FEATURE]: "
-labels: ["enhancement", "triage"]
+labels: ["enhancement"]
 assignees: []
 body:
   - type: markdown
@@ -10,11 +10,11 @@ body:
         Thank you for taking the time to suggest an improvement for AttendMate!
         Please describe your feature idea in detail so we can understand the problem it solves and how it fits into the app.
 
-  - type: textarea
-    id: feature-title
+  - type: input
+    id: feature-summary
     attributes:
-      label: Feature Summary
-      description: A short, high-level summary of the requested feature.
+      label: "Feature Summary"
+      description: "A short, high-level summary of the requested feature."
       placeholder: "e.g. Export attendance history to PDF / CSV"
     validations:
       required: true
@@ -22,8 +22,8 @@ body:
   - type: textarea
     id: problem-statement
     attributes:
-      label: Problem / Motivation
-      description: Is your feature request related to a specific problem or limitation in AttendMate?
+      label: "Problem / Motivation"
+      description: "Is your feature request related to a specific problem or limitation in AttendMate?"
       placeholder: "e.g. I am always frustrated when I want to share my attendance report with my advisor because..."
     validations:
       required: true
@@ -31,8 +31,8 @@ body:
   - type: textarea
     id: proposed-solution
     attributes:
-      label: Proposed Solution
-      description: Describe how you envision the feature working in detail.
+      label: "Proposed Solution"
+      description: "Describe how you envision the feature working in detail."
       placeholder: "Describe how the user interface or feature should behave..."
     validations:
       required: true
@@ -40,8 +40,8 @@ body:
   - type: textarea
     id: alternatives-considered
     attributes:
-      label: Alternatives Considered
-      description: What other solutions or workarounds have you considered?
+      label: "Alternatives Considered"
+      description: "What other solutions or workarounds have you considered?"
       placeholder: "e.g. Manually taking screenshots of each subject's bunk meter..."
     validations:
       required: false
@@ -49,8 +49,8 @@ body:
   - type: textarea
     id: target-use-case
     attributes:
-      label: Target Use Case & User Impact
-      description: Who will benefit from this feature and how does it improve the AttendMate user experience?
+      label: "Target Use Case & User Impact"
+      description: "Who will benefit from this feature and how does it improve the AttendMate user experience?"
       placeholder: "e.g. Students in colleges requiring official printed attendance sheets..."
     validations:
       required: false
@@ -58,19 +58,19 @@ body:
   - type: textarea
     id: mockups
     attributes:
-      label: Mockups / Visual References
-      description: Attach UI sketches, wireframes, or screenshots from other apps if relevant.
-      placeholder: Attach image links or drag & drop images here...
+      label: "Mockups / Visual References"
+      description: "Attach UI sketches, wireframes, or screenshots from other apps if relevant."
+      placeholder: "Attach image links or drag and drop images here..."
     validations:
       required: false
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
-      description: Please verify before submitting:
+      label: "Pre-submission Checklist"
+      description: "Please verify before submitting:"
       options:
-        - label: I have searched existing issues to ensure this feature has not already been requested.
+        - label: "I have searched existing issues to ensure this feature has not already been requested."
           required: true
-        - label: This request describes a single feature or improvement (open separate issues for distinct ideas).
+        - label: "This request describes a single feature or improvement (open separate issues for distinct ideas)."
           required: true
