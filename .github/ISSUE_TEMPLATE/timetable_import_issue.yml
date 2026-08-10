@@ -1,0 +1,71 @@
+name: "📥 Timetable Import Issue"
+description: "Report an issue, validation failure, or bug specifically related to bulk JSON timetable import."
+title: "[IMPORT]: "
+labels: ["bug", "timetable-import"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Having trouble importing your timetable JSON file into AttendMate? 
+        Please share your JSON payload (sanitized) and the error message so we can inspect and resolve the formatting or parsing issue.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App Version
+      description: "What version of AttendMate are you using?"
+      placeholder: "e.g. v2.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: json-payload
+    attributes:
+      label: Timetable JSON Payload
+      description: Paste the JSON snippet you attempted to import. (Remove any sensitive personal data).
+      render: json
+      placeholder: |
+        {
+          "subjects": [
+            {
+              "name": "Data Structures",
+              "acronym": "DS",
+              "colorHex": "#FF5722",
+              "targetPercentage": 75,
+              "schedules": [
+                { "dayOfWeek": 1, "startTime": "09:00", "endTime": "10:00" }
+              ]
+            }
+          ]
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-message
+    attributes:
+      label: Error Message / Behavior Observed
+      description: What exact validation error or error message appeared in the import screen preview or dialog?
+      placeholder: "e.g. Invalid JSON format at line 4, or 'Could not parse dayOfWeek'"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-import
+    attributes:
+      label: Expected Subjects & Schedule
+      description: Describe what subjects/schedules were supposed to be created from this import.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please check before submitting:
+      options:
+        - label: I checked the JSON format reference inside the app's Timetable Import screen.
+          required: true
+        - label: I verified that the JSON syntax is valid using a linter (e.g. jsonlint.com).
+          required: true
