@@ -1,7 +1,7 @@
 name: "🐛 Bug Report"
 description: "Report a bug or unexpected behavior in AttendMate to help us reproduce and fix it."
 title: "[BUG]: "
-labels: ["bug", "triage"]
+labels: ["bug"]
 assignees: []
 body:
   - type: markdown
@@ -13,16 +13,16 @@ body:
   - type: textarea
     id: description
     attributes:
-      label: Bug Summary
-      description: A clear and concise description of what the bug is.
-      placeholder: Describe the issue you encountered in AttendMate...
+      label: "Bug Summary"
+      description: "A clear and concise description of what the bug is."
+      placeholder: "Describe the issue you encountered in AttendMate..."
     validations:
       required: true
 
   - type: input
     id: app-version
     attributes:
-      label: App Version
+      label: "App Version"
       description: "What version of AttendMate are you using? (Check in More tab -> Version)"
       placeholder: "e.g. v2.0.0 (Build 15)"
     validations:
@@ -31,8 +31,8 @@ body:
   - type: dropdown
     id: android-version
     attributes:
-      label: Android OS Version
-      description: Select your device's Android version.
+      label: "Android OS Version"
+      description: "Select your device's Android version."
       options:
         - "Android 15 (API 35)"
         - "Android 14 (API 34)"
@@ -50,8 +50,8 @@ body:
   - type: input
     id: device-model
     attributes:
-      label: Device Model & Brand
-      description: Manufacturer and exact model of your Android device.
+      label: "Device Model & Brand"
+      description: "Manufacturer and exact model of your Android device."
       placeholder: "e.g. Samsung Galaxy S23, Google Pixel 7a, Xiaomi Redmi Note 12"
     validations:
       required: true
@@ -59,8 +59,8 @@ body:
   - type: dropdown
     id: theme-setting
     attributes:
-      label: App Theme Configuration
-      description: Which theme mode is currently selected in app settings?
+      label: "App Theme Configuration"
+      description: "Which theme mode is currently selected in app settings?"
       options:
         - "System Default"
         - "Dark Mode (AMOLED Black)"
@@ -72,8 +72,8 @@ body:
   - type: dropdown
     id: time-format
     attributes:
-      label: Time Format Setting
-      description: Which time format is enabled in app settings?
+      label: "Time Format Setting"
+      description: "Which time format is enabled in app settings?"
       options:
         - "12-hour (AM/PM)"
         - "24-hour"
@@ -84,8 +84,8 @@ body:
   - type: textarea
     id: reproduction-steps
     attributes:
-      label: Steps to Reproduce
-      description: Detailed step-by-step guide to reproduce the issue.
+      label: "Steps to Reproduce"
+      description: "Detailed step-by-step guide to reproduce the issue."
       placeholder: |
         1. Open AttendMate and go to '...'
         2. Tap on '...'
@@ -97,8 +97,8 @@ body:
   - type: textarea
     id: expected-behavior
     attributes:
-      label: Expected Behavior
-      description: What did you expect to happen?
+      label: "Expected Behavior"
+      description: "What did you expect to happen?"
       placeholder: "e.g. The subject attendance target should update to 75% without error."
     validations:
       required: true
@@ -106,8 +106,8 @@ body:
   - type: textarea
     id: actual-behavior
     attributes:
-      label: Actual Behavior
-      description: What actually happened?
+      label: "Actual Behavior"
+      description: "What actually happened?"
       placeholder: "e.g. The app froze / showed an error dialog / calculated incorrect percentage."
     validations:
       required: true
@@ -115,8 +115,8 @@ body:
   - type: textarea
     id: error-logs
     attributes:
-      label: Crash Logs / Stack Trace
-      description: Paste any relevant app logs, crash reports, or `adb logcat` output here if available.
+      label: "Crash Logs / Stack Trace"
+      description: "Paste any relevant app logs, crash reports, or adb logcat output here if available."
       render: shell
       placeholder: "Paste exception or logcat stack trace here..."
     validations:
@@ -125,17 +125,17 @@ body:
   - type: textarea
     id: screenshots
     attributes:
-      label: Screenshots / Screen Recordings
-      description: Drag and drop screenshots or screen recording videos showing the issue.
-      placeholder: Attach image links or drag & drop images here...
+      label: "Screenshots / Screen Recordings"
+      description: "Drag and drop screenshots or screen recording videos showing the issue."
+      placeholder: "Attach image links or drag and drop images here..."
     validations:
       required: false
 
   - type: textarea
     id: additional-context
     attributes:
-      label: Additional Context
-      description: Add any other context about the issue (e.g. active geofencing, notification permissions state, exact alarm permission).
+      label: "Additional Context"
+      description: "Add any other context about the issue (e.g. active geofencing, notification permissions state, exact alarm permission)."
       placeholder: "e.g. Notification permission was disabled when this occurred."
     validations:
       required: false
@@ -143,12 +143,12 @@ body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
-      description: Please check all that apply before submitting your bug report.
+      label: "Pre-submission Checklist"
+      description: "Please check all that apply before submitting your bug report."
       options:
-        - label: I have checked existing open and closed issues to ensure this is not a duplicate.
+        - label: "I have checked existing open and closed issues to ensure this is not a duplicate."
           required: true
-        - label: I am using the latest released version of AttendMate (or latest build).
+        - label: "I am using the latest released version of AttendMate (or latest build)."
           required: true
-        - label: I have provided clear steps to reproduce the bug.
+        - label: "I have provided clear steps to reproduce the bug."
           required: true
