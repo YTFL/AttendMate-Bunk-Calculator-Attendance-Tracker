@@ -34,6 +34,7 @@ import '../location/location_manager_screen.dart';
 import 'diagnostics_log_screen.dart';
 import 'markdown_viewer_screen.dart';
 import 'semester_backup_screen.dart';
+import '../../utils/github_issue_helper.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -1040,6 +1041,12 @@ class _MoreScreenState extends State<MoreScreen> {
           const Divider(),
           _buildSectionHeader('Developer Options', colorScheme),
           ListTile(
+            leading: const Icon(Icons.bug_report_outlined, color: Colors.red),
+            title: const Text('Test GitHub Issue Handler'),
+            subtitle: const Text('Triggers a test diagnostic log report using the new GitHub template'),
+            onTap: _testGitHubIssueHandler,
+          ),
+          ListTile(
             leading: const Icon(Icons.system_update_outlined, color: Colors.red),
             title: const Text('Simulate Update Screen'),
             subtitle: const Text('Fetch latest release from GitHub and test the update UI & progress'),
@@ -1088,6 +1095,18 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Future<void> _testGitHubIssueHandler() async {
+    await GitHubIssueHelper.createIssueFromLog(
+      context: context,
+      tag: 'DeveloperDiagnosticsTest',
+      message:
+          'Test diagnostic log generated from Developer Options to verify GitHub issue pre-filling and template integration.',
+      level: 'ERROR',
+      errorStackTrace:
+          'TestStackTrace: line 42 at _testGitHubIssueHandler(more_screen.dart)',
     );
   }
 
