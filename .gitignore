@@ -43,8 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+android/build/reports/problems
 
-# Environment variables & Secrets
-.env
-client_secret_*.json
-*google-services.json
+
+# APK files in git_public
+/git_public/*.apk
