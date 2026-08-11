@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] - 2026-08-11
+
+### Added
+- **Native Android "Open with AttendMate" File Handler**: Registered AttendMate in Android OS as a handler for `.json` files. Clicking a `.json` file in WhatsApp, File Manager, Downloads, etc., and choosing "Open with AttendMate" will launch the app, automatically detect whether the file is a Full Backup or a Shared Semester, and present the appropriate import/restore prompt.
+- **Smart Auto-Restore & Conditional Backup on Folder Selection**: When selecting a backup folder, if existing backups are present in the folder, the app automatically restores the latest backup; if no backups exist, initial backup creation is attempted only if an active semester exists.
+- **Auto-Backup Semester Safeguard**: Automatic background backups (`force: false`) check if a semester exists before running and safely skip auto-backup if no semester is created.
+- **Direct Data Sharing**: Added direct data sharing with classmates from within the app.
+
+### Fixed
+- **Backup Storage Location**: Fixed backup creation so files are saved directly in the user-selected location rather than elsewhere.
+- **Location Data Backup**: Fixed backup generation to ensure location data is properly backed up.
+- **Planned Holiday Backup**: Fixed backup generation to ensure planned holiday data is saved in backups.
+- **Complete Database Clear**: Fixed clear database functionality so location data and saved holiday data are completely deleted.
+- **Setup Guide Auto-Scroll**: Fixed guide tutorial navigation to automatically scroll the page until the setup guide section is visible.
+
+---
+
 ## [2.0.1] - 2026-08-10
 
 ### Added
@@ -668,6 +685,8 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **2.0.2** (2026-08-11) - Native Android .json file handler ("Open with AttendMate"), smart auto-restore & conditional backup on folder selection, auto-backup semester safeguard, direct classmate data sharing, backup storage location fix, location & planned holiday backup fixes, database clear fixes, setup guide auto-scroll navigation fix
+- **2.0.1** (2026-08-10) - Class-wise location selection, classroom details in notifications, diagnostics log & GitHub issue reporting, timetable JSON import default, text field keyboard focus fixes, pre-semester calendar access fix
 - **2.0.0** (2026-07-22) - Major release with Geofenced Auto-Attendance & Interactive Google Maps, "What-If" Bunk Calculator, Leave Planner, Rolling Semester Backup System, Interactive Calendar Filtering, Guided Spotlight Tour, and UI modernizations
 - **1.6.2** (2026-07-17) - Preserved swipe card state, smooth liquid-like easing, dependency cleanup, Setup Guide duplicate fix
 - **1.6.1** (2026-07-11) - Google Calendar sign-in fix for updated package name
