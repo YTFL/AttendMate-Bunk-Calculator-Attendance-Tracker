@@ -20,6 +20,7 @@ class TutorialStep {
   final BorderRadius borderRadius;
   final bool isActionRequired;
   final bool preferPositionAbove;
+  final double scrollAlignment;
 
   const TutorialStep({
     required this.stepIndex,
@@ -31,6 +32,7 @@ class TutorialStep {
     this.borderRadius = const BorderRadius.all(Radius.circular(12.0)),
     this.isActionRequired = false,
     this.preferPositionAbove = false,
+    this.scrollAlignment = 0.15,
   });
 }
 

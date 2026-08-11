@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/semester_share_service.dart';
+import '../../utils/error_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../attendance/attendance_model.dart';
@@ -353,6 +356,15 @@ class _SemesterScreenState extends State<SemesterScreen> {
                       ),
                     ),
                   ),
+                  SizedBox(height: rs.height(12)),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _importSharedSemesterFile(context),
+                      icon: const Icon(Icons.group_add_outlined),
+                      label: const Text('Import Classmate\'s Semester'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -406,7 +418,10 @@ class _SemesterScreenState extends State<SemesterScreen> {
           // 3. Seamless Semester Parameters Section (Dates & Target %)
           _buildSemesterParametersCard(),
 
-          // 4. Semester Ended Warning / New Semester Trigger
+          // 4. Share Semester with Classmate Card
+          _buildShareSemesterCard(context),
+
+          // 5. Semester Ended Warning / New Semester Trigger
           if (semesterEnded) ...[
             SizedBox(height: rs.height(14)),
             _buildSemesterEndedAlert(),
@@ -414,6 +429,121 @@ class _SemesterScreenState extends State<SemesterScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildShareSemesterCard(BuildContext context) {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    return Container(
+      margin: EdgeInsets.only(top: rs.height(14)),
+      padding: EdgeInsets.all(rs.scale(16)),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
+            : theme.colorScheme.primaryContainer.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(rs.scale(18)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(rs.scale(8)),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.send_rounded,
+                  color: theme.colorScheme.primary,
+                  size: rs.scale(20),
+                ),
+              ),
+              SizedBox(width: rs.width(10)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Share Semester with Friend',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: rs.font(15),
+                      ),
+                    ),
+                    Text(
+                      'Shares dates & timetable without your attendance data',
+                      style: TextStyle(
+                        fontSize: rs.font(11.5),
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: rs.height(12)),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonalIcon(
+              onPressed: () => SemesterShareService().shareSemesterWithFriend(context),
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: const Text('Share Semester Data'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importSharedSemesterFile(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await const MethodChannel('com.attendmate.app/file_import').invokeMethod<dynamic>('pickImportFile');
+      if (result == null) return;
+      if (result is! Map) {
+        throw Exception('Invalid file picker response.');
+      }
+
+      final bytesDynamic = result['bytes'];
+      List<int> bytes = [];
+      if (bytesDynamic is Uint8List) {
+        bytes = bytesDynamic.toList();
+      } else if (bytesDynamic is List) {
+        bytes = bytesDynamic.cast<int>();
+      }
+
+      if (bytes.isEmpty) {
+        throw Exception('Selected file is empty.');
+      }
+
+      String content;
+      try {
+        content = utf8.decode(bytes);
+      } catch (_) {
+        content = latin1.decode(bytes, allowInvalid: true);
+      }
+
+      if (!context.mounted) return;
+      await SemesterShareService().processOpenedJsonContent(content, context);
+    } catch (e) {
+      if (!context.mounted) return;
+      if (isUserCancellation(e)) return;
+      messenger.showReplacingSnackBar(
+        SnackBar(
+          content: Text(formatUserFriendlyErrorMessage(e, defaultPrefix: 'Failed to import file')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildHeroHeader({

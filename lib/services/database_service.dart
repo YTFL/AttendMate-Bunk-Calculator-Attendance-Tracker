@@ -647,11 +647,14 @@ class DatabaseService {
   Future<void> clearSemesterAndAllData() async {
     try {
       final db = _getDb();
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'",
+      );
       final batch = db.batch();
-      batch.delete('semester');
-      batch.delete('subjects');
-      batch.delete('attendance');
-      batch.delete('system_calendar_events');
+      for (final table in tables) {
+        final tableName = table['name'] as String;
+        batch.delete(tableName);
+      }
       await batch.commit(noResult: true);
       await BackupService().notifyDataChanged();
     } catch (e) {

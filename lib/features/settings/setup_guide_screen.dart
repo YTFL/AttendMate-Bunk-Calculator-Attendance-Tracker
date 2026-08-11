@@ -496,7 +496,59 @@ AttendMate automatically creates a fresh backup and sends a system notification 
 3. Confirm the restoration. AttendMate will restore 1:1 exact data state, including all subjects, colors, schedules, attendance history, and preferences.
 ''',
     ),
-  _GuideSection(
+    _GuideSection(
+      title: '15. Sharing & Importing Semester Templates',
+      openInAppLabel: 'Open Semester Page',
+      openTarget: _GuideOpenTarget.semesterTab,
+      markdown: '''
+## Overview
+AttendMate allows you to export and share your complete semester schedule, subject timetables, classroom locations, and target attendance percentages directly with a classmate or friend. 
+
+Your friend can import your semester package instantly so they don't have to add all subjects, timeslots, and room locations manually!
+
+---
+
+## Privacy Protection
+- **No Attendance History**: When you share a semester package with a friend, your personal attendance records (Present / Absent logs) are **automatically stripped out** to keep your attendance data private.
+- **Clean Template**: The shared `.json` file contains only semester dates, target percentage, subjects, schedules, rooms, blocks, and location presets.
+
+---
+
+## How to Share Your Semester
+1. Open AttendMate and go to the **Semester** tab (or **More** tab).
+2. Tap **Share Semester Data** (or **Share Semester with Friend**).
+3. The native Android Share Sheet will appear. You can:
+   - Send the `.json` file directly via **WhatsApp**, **Telegram**, or **Email**.
+   - Save the `.json` file to your device file manager.
+   - Or copy the semester JSON to clipboard.
+
+---
+
+## How to Import a Classmate's Semester
+
+### Method 1: Android "Open With" Direct Launch (Recommended)
+1. In WhatsApp, Telegram, or File Manager, tap the `.json` file your classmate sent you.
+2. Select **Open With** → **AttendMate**.
+3. AttendMate will automatically detect the semester package and present the **Import Semester Setup** preview dialog.
+
+### Method 2: In-App Import
+1. Go to the **Semester** tab and tap **Import Classmate's Semester** (or go to **Subjects** → **Import**).
+2. Choose your classmate's `.json` file or paste the JSON text.
+
+---
+
+## Import Modes
+When previewing the shared semester, you can choose between two import modes:
+
+1. **Fresh Semester Setup (Recommended)**:
+   - Completely overwrites your database and sets up the shared semester with **0 attendance recorded**.
+   - Wipes old subjects, timetables, and stale location presets so you get a clean slate.
+
+2. **Merge Subjects into Current Semester**:
+   - Appends the imported subjects and schedule timeslots to your existing semester without clearing your current attendance logs or subjects.
+''',
+    ),
+    _GuideSection(
       title: '16. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,

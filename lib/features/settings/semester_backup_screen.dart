@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../services/backup_service.dart';
+import '../../services/database_service.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/snackbar_utils.dart';
 
@@ -70,10 +71,86 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
       if (selectedDirectory != null && selectedDirectory.trim().isNotEmpty) {
         await _backupService.setBackupDirectoryPath(selectedDirectory.trim());
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showReplacingSnackBar(
-          const SnackBar(content: Text('Backup location updated successfully.')),
-        );
         await _loadBackupData();
+
+        if (_backups.isNotEmpty) {
+          // If a folder with existing backups is selected, automatically restore the latest backup created in that folder
+          final latestBackup = _backups.first;
+          setState(() {
+            _isRestoring = true;
+          });
+          try {
+            if (!mounted) return;
+            await _backupService.restoreBackupFromFile(latestBackup.file, context: context);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showReplacingSnackBar(
+              SnackBar(
+                content: Text('Latest backup ("${latestBackup.fileName}") automatically restored.'),
+              ),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            if (!isUserCancellation(e)) {
+              ScaffoldMessenger.of(context).showReplacingSnackBar(
+                SnackBar(
+                  content: Text(formatUserFriendlyErrorMessage(e, defaultPrefix: 'Failed to auto-restore latest backup')),
+                  backgroundColor: Colors.red.shade700,
+                ),
+              );
+            }
+          } finally {
+            if (mounted) {
+              setState(() {
+                _isRestoring = false;
+              });
+              await _loadBackupData();
+            }
+          }
+        } else {
+          // Folder has no existing backups
+          final dbService = DatabaseService();
+          await dbService.init();
+          final semester = await dbService.loadSemester();
+          if (!mounted) return;
+
+          if (semester != null) {
+            // Create an immediate first backup in the newly selected folder if a semester exists
+            setState(() {
+              _isCreatingBackup = true;
+            });
+            try {
+              await _backupService.createBackup(
+                showNotification: false,
+                triggerReason: 'Initial backup after folder selection',
+                force: true,
+              );
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showReplacingSnackBar(
+                const SnackBar(content: Text('First backup created in selected folder.')),
+              );
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showReplacingSnackBar(
+                  SnackBar(
+                    content: Text(formatUserFriendlyErrorMessage(e, defaultPrefix: 'Folder set, but initial backup failed')),
+                    backgroundColor: Colors.orange.shade800,
+                  ),
+                );
+              }
+            } finally {
+              if (mounted) {
+                setState(() {
+                  _isCreatingBackup = false;
+                });
+                await _loadBackupData();
+              }
+            }
+          } else {
+            ScaffoldMessenger.of(context).showReplacingSnackBar(
+              const SnackBar(content: Text('Backup location set. Auto-backup will activate when a semester is created.')),
+            );
+          }
+        }
       }
     } catch (e) {
       if (!mounted) return;

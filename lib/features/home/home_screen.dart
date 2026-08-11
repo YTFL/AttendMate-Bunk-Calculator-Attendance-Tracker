@@ -7,6 +7,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../../main.dart';
 import '../../models/app_update_model.dart';
+import '../../services/app_file_intent_listener.dart';
 import '../../services/backup_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/responsive_scale.dart';
@@ -63,6 +64,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      AppFileIntentListener().init(context);
+
       final tutorialController = Provider.of<TutorialController>(context, listen: false);
       tutorialController.registerTabSwitcher((index) {
         if (mounted) {
@@ -434,6 +437,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    AppFileIntentListener().updateContext(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final semesterProvider = Provider.of<SemesterProvider>(context);
     final tutorialController = Provider.of<TutorialController>(context, listen: false);

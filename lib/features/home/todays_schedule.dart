@@ -464,7 +464,9 @@ class TodaySchedule extends StatelessWidget {
                   ),
                   child: Padding(
                     padding: rs.insetsAll(8),
-                    child: ListTile(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
                       contentPadding: rs.insetsSymmetric(horizontal: 8, vertical: 2),
                       leading: CircleAvatar(
                         radius: rs.scale(20.6),
@@ -521,7 +523,8 @@ class TodaySchedule extends StatelessWidget {
                       trailing: trailingWidget,
                     ),
                   ),
-                );
+                ),
+              );
 
                 if (semesterEnded) {
                   return cardWidget;

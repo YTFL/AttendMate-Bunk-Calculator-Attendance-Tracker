@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/semester_share_service.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
@@ -16,7 +17,9 @@ import '../tutorial/tutorial_controller.dart';
 import '../tutorial/tutorial_overlay.dart';
 
 class ImportTimetableScreen extends StatefulWidget {
-  const ImportTimetableScreen({super.key});
+  final String? initialText;
+
+  const ImportTimetableScreen({super.key, this.initialText});
 
   @override
   State<ImportTimetableScreen> createState() => _ImportTimetableScreenState();
@@ -43,6 +46,15 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
     if (subjectProvider.subjects.isEmpty) {
       _isMidSemesterUpdate = false;
+    }
+
+    if (widget.initialText != null && widget.initialText!.trim().isNotEmpty) {
+      _inputTextController.text = widget.initialText!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _parseAndValidateInput();
+        }
+      });
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,6 +93,17 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       });
       return;
     }
+
+    try {
+      final decoded = jsonDecode(inputText);
+      if (decoded is Map<String, dynamic>) {
+        final type = SemesterShareService().detectFileType(decoded);
+        if (type == ImportFileType.semesterShare || type == ImportFileType.fullBackup) {
+          SemesterShareService().processOpenedJsonContent(inputText, context);
+          return;
+        }
+      }
+    } catch (_) {}
 
     try {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
@@ -411,6 +434,17 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       if (!mounted) {
         return;
       }
+
+      try {
+        final decoded = jsonDecode(content);
+        if (decoded is Map<String, dynamic>) {
+          final type = SemesterShareService().detectFileType(decoded);
+          if (type == ImportFileType.semesterShare || type == ImportFileType.fullBackup) {
+            await SemesterShareService().processOpenedJsonContent(content, context);
+            return;
+          }
+        }
+      } catch (_) {}
 
       setState(() {
         _inputTextController.text = content;

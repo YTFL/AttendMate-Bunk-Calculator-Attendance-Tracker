@@ -1483,9 +1483,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
         ],
       ),
-      child: ListTile(
-        dense: true,
-        contentPadding: rs.insetsSymmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          dense: true,
+          contentPadding: rs.insetsSymmetric(horizontal: 12, vertical: 4),
         leading: Container(
           width: rs.scale(40),
           height: rs.scale(40),
@@ -1598,6 +1600,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       setState(() {});
                     },
                   ),
+        ),
       ),
     );
   }

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -79,42 +79,15 @@ class BackupService {
     await prefs.setBool(_prefHasUnbackedChangesKey, false);
   }
 
-  /// Convert SAF tree URI (content://...) into a standard Android filesystem path if possible
-  String _convertSafUriToPath(String uriStr) {
-    if (!uriStr.startsWith('content://')) return uriStr;
-    try {
-      final decoded = Uri.decodeFull(uriStr);
-      final treeIndex = decoded.indexOf('/tree/');
-      if (treeIndex != -1) {
-        final treePart = decoded.substring(treeIndex + 6);
-        final split = treePart.split(':');
-        if (split.length >= 2) {
-          final typePart = split[0];
-          final type = typePart.contains('/') ? typePart.split('/').last : typePart;
-          final relativePath = split.sublist(1).join(':');
-          if (type.toLowerCase() == 'primary') {
-            return relativePath.isEmpty ? '/storage/emulated/0' : '/storage/emulated/0/$relativePath';
-          } else {
-            return relativePath.isEmpty ? '/storage/$type' : '/storage/$type/$relativePath';
-          }
-        }
-      }
-    } catch (_) {}
-    return uriStr;
-  }
 
   /// Get the current backup directory path. Returns null if not specified by user.
+  /// Returns the stored path as-is — either a content:// SAF URI (handled by
+  /// platform channels) or a regular filesystem path.
   Future<String?> getBackupDirectoryPath() async {
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_prefBackupDirPathKey);
     if (customPath != null && customPath.trim().isNotEmpty) {
-      final rawPath = customPath.trim();
-      final converted = _convertSafUriToPath(rawPath);
-      final customDir = Directory(converted);
-      if (await customDir.exists()) {
-        return customDir.path;
-      }
-      return converted;
+      return customPath.trim();
     }
     return null;
   }
@@ -175,14 +148,7 @@ class BackupService {
     };
   }
 
-  Future<Directory> _getFallbackBackupDirectory() async {
-    final docsDir = await getApplicationDocumentsDirectory();
-    final backupDir = Directory('${docsDir.path}${Platform.pathSeparator}backups');
-    if (!await backupDir.exists()) {
-      await backupDir.create(recursive: true);
-    }
-    return backupDir;
-  }
+
 
   /// Create a backup file in the designated folder and enforce the 3 rolling backups limit
   Future<File?> createBackup({
@@ -203,6 +169,12 @@ class BackupService {
       }
 
       if (!force) {
+        final semester = await DatabaseService().loadSemester();
+        if (semester == null) {
+          debugPrint('BackupService: Auto-backup skipped because no active semester exists.');
+          return null;
+        }
+
         final hasChanges = await hasUnbackedDataChanges();
         if (!hasChanges) {
           debugPrint('BackupService: Auto-backup skipped because no data changes occurred since last backup.');
@@ -217,36 +189,20 @@ class BackupService {
 
       bool success = false;
       if (dirPath.startsWith('content://')) {
-        try {
-          success = await _fileChannel.invokeMethod('writeBackupFile', {
-            'dirUri': dirPath,
-            'fileName': filename,
-            'content': jsonString,
-          }) ?? false;
-        } catch (e) {
-          debugPrint('BackupService: Platform channel writeBackupFile failed ($e). Writing to fallback app storage...');
-          final fallbackDir = await _getFallbackBackupDirectory();
-          final file = File('${fallbackDir.path}${Platform.pathSeparator}$filename');
-          await file.writeAsString(jsonString);
-          success = true;
-        }
+        success = await _fileChannel.invokeMethod('writeBackupFile', {
+          'dirUri': dirPath,
+          'fileName': filename,
+          'content': jsonString,
+        }) ?? false;
       } else {
-        try {
-          final dir = Directory(dirPath);
-          if (!await dir.exists()) {
-            await dir.create(recursive: true);
-          }
-          final sep = Platform.pathSeparator;
-          final file = File('${dir.path}$sep$filename');
-          await file.writeAsString(jsonString);
-          success = true;
-        } on FileSystemException catch (fse) {
-          debugPrint('BackupService: Direct path $dirPath restricted by OS ($fse). Writing to fallback app storage...');
-          final fallbackDir = await _getFallbackBackupDirectory();
-          final file = File('${fallbackDir.path}${Platform.pathSeparator}$filename');
-          await file.writeAsString(jsonString);
-          success = true;
+        final dir = Directory(dirPath);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
         }
+        final sep = Platform.pathSeparator;
+        final file = File('${dir.path}$sep$filename');
+        await file.writeAsString(jsonString);
+        success = true;
       }
 
       if (!success) {
@@ -326,33 +282,6 @@ class BackupService {
         }
       } catch (_) {}
     }
-
-    // Always combine with items from fallback app storage if present
-    try {
-      final fallbackDir = await _getFallbackBackupDirectory();
-      if (fallbackDir.path != dirPath && await fallbackDir.exists()) {
-        final List<FileSystemEntity> entities = fallbackDir.listSync();
-        for (final entity in entities) {
-          if (entity is File) {
-            final fileName = entity.path.split(RegExp(r'[/\\]')).last;
-            if (fileName.startsWith('attendmate_backup_') && fileName.endsWith('.json')) {
-              if (!items.any((element) => element['fileName'] == fileName)) {
-                try {
-                  final stat = await entity.stat();
-                  final content = await entity.readAsString();
-                  items.add({
-                    'fileName': fileName,
-                    'fileSizeBytes': stat.size,
-                    'lastModified': stat.modified.millisecondsSinceEpoch,
-                    'content': content,
-                  });
-                } catch (_) {}
-              }
-            }
-          }
-        }
-      }
-    } catch (_) {}
 
     return items;
   }

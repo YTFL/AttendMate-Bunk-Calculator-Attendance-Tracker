@@ -18,6 +18,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  int? _lastStepIndex;
 
   @override
   void initState() {
@@ -38,26 +39,66 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     super.dispose();
   }
 
+  void _scrollToTargetKey(String? targetKeyName, TutorialController controller, double alignment) {
+    if (targetKeyName == null) return;
+
+    void performScroll() {
+      if (!mounted) return;
+      var key = controller.getKey(targetKeyName);
+      var targetContext = key?.currentContext;
+      if (targetContext != null && targetContext.mounted) {
+        try {
+          Scrollable.ensureVisible(
+            targetContext,
+            duration: const Duration(milliseconds: 400),
+            alignment: alignment,
+            curve: Curves.easeInOut,
+          );
+        } catch (_) {}
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      performScroll();
+      await Future.delayed(const Duration(milliseconds: 120));
+      performScroll();
+    });
+  }
+
   Rect? _getRectForTarget(GlobalKey? key, EdgeInsets padding) {
     if (key == null) return null;
     final context = key.currentContext;
     if (context == null) return null;
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.attached) return null;
+    try {
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null || !renderBox.attached || !renderBox.hasSize) return null;
 
-    final size = renderBox.size;
-    final offset = renderBox.localToGlobal(Offset.zero);
-    return Rect.fromLTWH(
-      offset.dx - padding.left,
-      offset.dy - padding.top,
-      size.width + padding.left + padding.right,
-      size.height + padding.top + padding.bottom,
-    );
+      final size = renderBox.size;
+      final offset = renderBox.localToGlobal(Offset.zero);
+      return Rect.fromLTWH(
+        offset.dx - padding.left,
+        offset.dy - padding.top,
+        size.width + padding.left + padding.right,
+        size.height + padding.top + padding.bottom,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = Provider.of<TutorialController>(context);
+
+    if (controller.isActive && controller.currentStep != null) {
+      final step = controller.currentStep!;
+      if (_lastStepIndex != controller.currentStepIndex) {
+        _lastStepIndex = controller.currentStepIndex;
+        _scrollToTargetKey(step.targetKeyName, controller, step.scrollAlignment);
+      }
+    } else {
+      _lastStepIndex = null;
+    }
 
     return Stack(
       children: [
