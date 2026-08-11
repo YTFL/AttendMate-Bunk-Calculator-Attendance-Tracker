@@ -87,6 +87,26 @@ class FileImportHandler(
                     result.error("INVALID_ARGS", "dirUri and fileName required", null)
                 }
             }
+            "getInitialOpenedFile" -> {
+                val activity = activityProvider()
+                if (activity != null) {
+                    val payload = activity.consumeInitialOpenedFilePayload()
+                    result.success(payload)
+                } else {
+                    result.success(null)
+                }
+            }
+            "shareFile" -> {
+                val fileName = call.argument<String>("fileName")
+                val content = call.argument<String>("content")
+                val activity = activityProvider()
+                if (fileName != null && content != null && activity != null) {
+                    val success = activity.shareFileNative(fileName, content)
+                    result.success(success)
+                } else {
+                    result.error("INVALID_ARGS", "fileName, content, and activity required", null)
+                }
+            }
             else -> result.notImplemented()
         }
     }

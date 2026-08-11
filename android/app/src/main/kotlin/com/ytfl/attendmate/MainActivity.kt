@@ -18,14 +18,24 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.attendmate.app/update"
+    private val BUILD_CONFIG_CHANNEL = "com.attendmate.app/build_config"
     private val FILE_IMPORT_CHANNEL = "com.attendmate.app/file_import"
     private val FILE_PICKER_REQUEST_CODE = 9101
     private val DIR_PICKER_REQUEST_CODE = 9102
     private var pendingFileImportResult: MethodChannel.Result? = null
     private var pendingDirImportResult: MethodChannel.Result? = null
+    private var initialOpenedFilePayload: Map<String, Any>? = null
+    private var fileChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BUILD_CONFIG_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getGoogleClientId" -> result.success(BuildConfig.GOOGLE_CLIENT_ID)
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -46,71 +56,80 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_IMPORT_CHANNEL).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "pickImportFile" -> {
-                    if (pendingFileImportResult != null) {
-                        result.error("BUSY", "A file picker request is already in progress.", null)
-                        return@setMethodCallHandler
-                    }
+        fileChannel = FileImportHandler.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext) { this }
 
-                    pendingFileImportResult = result
-                    openImportFilePicker()
-                }
-                "pickDirectory" -> {
-                    if (pendingDirImportResult != null) {
-                        result.error("BUSY", "A directory picker request is already in progress.", null)
-                        return@setMethodCallHandler
-                    }
+        // Process file VIEW/EDIT intent if app launched via clicking a file
+        intent?.let { handleViewFileIntent(it) }
+    }
 
-                    pendingDirImportResult = result
-                    openDirectoryPicker()
-                }
-                "writeBackupFile" -> {
-                    val dirUriStr = call.argument<String>("dirUri")
-                    val fileName = call.argument<String>("fileName")
-                    val content = call.argument<String>("content")
-                    if (dirUriStr != null && fileName != null && content != null) {
-                        try {
-                            val success = writeBackupFileNative(dirUriStr, fileName, content)
-                            result.success(success)
-                        } catch (e: Exception) {
-                            result.error("WRITE_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "dirUri, fileName, and content required", null)
-                    }
-                }
-                "getBackupFiles" -> {
-                    val dirUriStr = call.argument<String>("dirUri")
-                    if (dirUriStr != null) {
-                        try {
-                            val list = getBackupFilesNative(dirUriStr)
-                            result.success(list)
-                        } catch (e: Exception) {
-                            result.error("READ_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "dirUri is required", null)
-                    }
-                }
-                "deleteBackupFile" -> {
-                    val dirUriStr = call.argument<String>("dirUri")
-                    val fileName = call.argument<String>("fileName")
-                    if (dirUriStr != null && fileName != null) {
-                        try {
-                            val success = deleteBackupFileNative(dirUriStr, fileName)
-                            result.success(success)
-                        } catch (e: Exception) {
-                            result.error("DELETE_ERROR", e.message, null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "dirUri and fileName required", null)
-                    }
-                }
-                else -> result.notImplemented()
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleViewFileIntent(intent)
+    }
+
+    private fun handleViewFileIntent(intent: Intent) {
+        val action = intent.action
+        if (Intent.ACTION_VIEW == action || Intent.ACTION_EDIT == action) {
+            val uri = intent.data ?: return
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return
+                val name = queryDisplayName(uri) ?: "opened_file.json"
+                val payload = mapOf("name" to name, "bytes" to bytes)
+                initialOpenedFilePayload = payload
+
+                fileChannel?.invokeMethod("onFileOpened", payload)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
+    }
+
+    fun consumeInitialOpenedFilePayload(): Map<String, Any>? {
+        val payload = initialOpenedFilePayload
+        initialOpenedFilePayload = null
+        return payload
+    }
+
+    fun shareFileNative(fileName: String, content: String): Boolean {
+        return try {
+            val cachePath = File(cacheDir, "shares")
+            if (!cachePath.exists()) cachePath.mkdirs()
+            val file = File(cachePath, fileName)
+            file.writeText(content, Charsets.UTF_8)
+
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Share Semester Data")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun openImportFilePickerForResult(result: MethodChannel.Result) {
+        if (pendingFileImportResult != null) {
+            result.error("BUSY", "A file picker request is already in progress.", null)
+            return
+        }
+        pendingFileImportResult = result
+        openImportFilePicker()
+    }
+
+    fun openDirectoryPickerForResult(result: MethodChannel.Result) {
+        if (pendingDirImportResult != null) {
+            result.error("BUSY", "A directory picker request is already in progress.", null)
+            return
+        }
+        pendingDirImportResult = result
+        openDirectoryPicker()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -282,98 +301,5 @@ class MainActivity : FlutterActivity() {
             }
         }
         return null
-    }
-
-    private fun writeBackupFileNative(dirUriStr: String, fileName: String, content: String): Boolean {
-        if (dirUriStr.startsWith("content://")) {
-            val treeUri = Uri.parse(dirUriStr)
-            val dir = DocumentFile.fromTreeUri(this, treeUri) ?: return false
-            val existing = dir.findFile(fileName)
-            existing?.delete()
-
-            val newFile = dir.createFile("application/json", fileName) ?: return false
-            contentResolver.openOutputStream(newFile.uri)?.use { os ->
-                os.write(content.toByteArray(Charsets.UTF_8))
-                os.flush()
-            }
-            return true
-        } else {
-            val dir = File(dirUriStr)
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-            val file = File(dir, fileName)
-            file.writeText(content, Charsets.UTF_8)
-            return true
-        }
-    }
-
-    private fun getBackupFilesNative(dirUriStr: String): List<Map<String, Any>> {
-        val resultList = mutableListOf<Map<String, Any>>()
-        if (dirUriStr.startsWith("content://")) {
-            val treeUri = Uri.parse(dirUriStr)
-            val dir = DocumentFile.fromTreeUri(this, treeUri) ?: return resultList
-            val files = dir.listFiles()
-            for (i in files.indices) {
-                val file = files[i]
-                val name = file.name ?: continue
-                if (name.startsWith("attendmate_backup_") && name.endsWith(".json")) {
-                    val bytes = file.length()
-                    val lastMod = file.lastModified()
-                    var textContent = ""
-                    try {
-                        contentResolver.openInputStream(file.uri)?.use { isStream ->
-                            textContent = isStream.bufferedReader().use { it.readText() }
-                        }
-                    } catch (_: Exception) {}
-
-                    resultList.add(mapOf(
-                        "fileName" to name,
-                        "fileSizeBytes" to bytes,
-                        "lastModified" to lastMod,
-                        "content" to textContent
-                    ))
-                }
-            }
-        } else {
-            val dir = File(dirUriStr)
-            if (dir.exists()) {
-                val files = dir.listFiles()
-                if (files != null) {
-                    for (i in files.indices) {
-                        val file = files[i]
-                        if (file.isFile && file.name.startsWith("attendmate_backup_") && file.name.endsWith(".json")) {
-                            var textContent = ""
-                            try {
-                                textContent = file.readText(Charsets.UTF_8)
-                            } catch (_: Exception) {}
-
-                            resultList.add(mapOf(
-                                "fileName" to file.name,
-                                "fileSizeBytes" to file.length(),
-                                "lastModified" to file.lastModified(),
-                                "content" to textContent
-                            ))
-                        }
-                    }
-                }
-            }
-        }
-        return resultList
-    }
-
-    private fun deleteBackupFileNative(dirUriStr: String, fileName: String): Boolean {
-        if (dirUriStr.startsWith("content://")) {
-            val treeUri = Uri.parse(dirUriStr)
-            val dir = DocumentFile.fromTreeUri(this, treeUri) ?: return false
-            val file = dir.findFile(fileName) ?: return false
-            return file.delete()
-        } else {
-            val file = File(dirUriStr, fileName)
-            if (file.exists()) {
-                return file.delete()
-            }
-            return false
-        }
     }
 }
