@@ -285,30 +285,47 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                           onPressed: isFetchingGps
                               ? null
                               : () async {
-                                  setDialogState(() => isFetchingGps = true);
                                   final hasPermission = await _handleLocationPermission();
-                                  if (hasPermission) {
+                                  if (!hasPermission) return;
+
+                                  setDialogState(() => isFetchingGps = true);
+                                  try {
+                                    Position? pos;
                                     try {
-                                      final pos = await Geolocator.getCurrentPosition(
+                                      pos = await Geolocator.getCurrentPosition(
                                         locationSettings: const LocationSettings(
                                           accuracy: LocationAccuracy.high,
+                                          timeLimit: Duration(seconds: 15),
                                         ),
                                       );
+                                    } catch (_) {
+                                      pos = await Geolocator.getLastKnownPosition();
+                                    }
+
+                                    final currentPos = pos;
+                                    if (currentPos != null) {
+                                      final lat = currentPos.latitude;
+                                      final lng = currentPos.longitude;
                                       setDialogState(() {
-                                        latitude = pos.latitude;
-                                        longitude = pos.longitude;
+                                        latitude = lat;
+                                        longitude = lng;
                                         isFetchingGps = false;
                                       });
-                                    } catch (e) {
+                                    } else {
                                       setDialogState(() => isFetchingGps = false);
                                       if (mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Error getting coordinates: $e')),
+                                          const SnackBar(content: Text('Could not obtain current or last known GPS location. Please try again.')),
                                         );
                                       }
                                     }
-                                  } else {
+                                  } catch (e) {
                                     setDialogState(() => isFetchingGps = false);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Error getting coordinates: $e')),
+                                      );
+                                    }
                                   }
                                 },
                           icon: isFetchingGps

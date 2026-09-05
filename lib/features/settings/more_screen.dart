@@ -15,6 +15,7 @@ import '../../models/app_update_model.dart';
 import '../../services/database_service.dart';
 import '../../services/update_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/battery_optimization_service.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/url_launcher_utils.dart';
 import '../attendance/attendance_model.dart';
@@ -52,6 +53,7 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _isCheckingForUpdate = false;
   bool _hasCheckedForUpdate = false;
   bool _devModeCalendarSyncEnabled = false;
+  bool? _isBatteryOptimizationIgnoring;
 
   static const String _issuesUrl =
       'https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues';
@@ -68,8 +70,18 @@ class _MoreScreenState extends State<MoreScreen> {
     super.initState();
     _packageInfoFuture = PackageInfo.fromPlatform();
     _currentVersionReleaseDateFuture = _loadBundledReleaseDate();
+    _checkBatteryOptimizationStatus();
     if (kDebugMode) {
       _loadDevModeCalendarSync();
+    }
+  }
+
+  Future<void> _checkBatteryOptimizationStatus() async {
+    final isIgnoring = await BatteryOptimizationService().isIgnoringBatteryOptimizations();
+    if (mounted) {
+      setState(() {
+        _isBatteryOptimizationIgnoring = isIgnoring;
+      });
     }
   }
 
@@ -777,6 +789,48 @@ class _MoreScreenState extends State<MoreScreen> {
               );
             },
           ),
+        ),
+        ListTile(
+          leading: Icon(
+            _isBatteryOptimizationIgnoring == true
+                ? Icons.battery_charging_full_rounded
+                : Icons.battery_alert_rounded,
+            color: _isBatteryOptimizationIgnoring == false
+                ? Colors.orange.shade800
+                : null,
+          ),
+          title: const Text('Background Access'),
+          subtitle: Text(
+            _isBatteryOptimizationIgnoring == null
+                ? 'Checking background access status...'
+                : _isBatteryOptimizationIgnoring!
+                    ? 'Granted (Optimal background execution)'
+                    : 'Restricted (Tap to allow)',
+          ),
+          trailing: _isBatteryOptimizationIgnoring == false
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withAlpha(38),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withAlpha(102)),
+                  ),
+                  child: const Text(
+                    'Fix Access',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                )
+              : const Icon(Icons.chevron_right),
+          onTap: () {
+            BatteryOptimizationService().showBatteryOptimizationDialog(
+              context,
+              onStatusChanged: _checkBatteryOptimizationStatus,
+            );
+          },
         ),
 
 

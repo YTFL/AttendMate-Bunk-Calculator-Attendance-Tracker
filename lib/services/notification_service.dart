@@ -96,10 +96,11 @@ class NotificationService {
           final preClassNotificationId = _preClassNotificationId(subject.id, slot);
           if (!_scheduledNotifications.contains(preClassNotificationId)) {
             final scheduleDateOnly = DateTime(preClassTime.year, preClassTime.month, preClassTime.day);
-            final isAlreadyMarked = existingAttendance.any((record) =>
-                record.subjectId == subject.id &&
-                DateTime(record.date.year, record.date.month, record.date.day) == scheduleDateOnly &&
-                (record.slotKey ?? '') == slot.slotKey
+            final isAlreadyMarked = isClassAlreadyMarked(
+              existingAttendance: existingAttendance,
+              subjectId: subject.id,
+              date: scheduleDateOnly,
+              slotKey: slot.slotKey,
             );
 
             if (!isAlreadyMarked) {
@@ -154,10 +155,11 @@ class NotificationService {
         
         // Check if attendance is already marked for this subject on the scheduled date
         final scheduleDateOnly = DateTime(scheduleTime.year, scheduleTime.month, scheduleTime.day);
-        final isAlreadyMarked = existingAttendance.any((record) =>
-            record.subjectId == subject.id &&
-          DateTime(record.date.year, record.date.month, record.date.day) == scheduleDateOnly &&
-          (record.slotKey ?? '') == slot.slotKey
+        final isAlreadyMarked = isClassAlreadyMarked(
+          existingAttendance: existingAttendance,
+          subjectId: subject.id,
+          date: scheduleDateOnly,
+          slotKey: slot.slotKey,
         );
         
         if (isAlreadyMarked) {
@@ -189,69 +191,75 @@ class NotificationService {
           final effectiveLocationId = subject.getEffectiveLocationId(slot);
           if (effectiveLocationId != null) {
             final now = DateTime.now();
-            final startDateTime = DateTime(
-              scheduleDateOnly.year,
-              scheduleDateOnly.month,
-              scheduleDateOnly.day,
-              slot.startTime.hour,
-              slot.startTime.minute,
-            );
-            final geofenceCheckTime = startDateTime.add(const Duration(minutes: 5));
-            Duration delay = geofenceCheckTime.difference(now);
-            if (delay.isNegative) {
-              delay = Duration.zero;
-            }
+            final isToday = scheduleDateOnly.year == now.year &&
+                scheduleDateOnly.month == now.month &&
+                scheduleDateOnly.day == now.day;
 
-            final classEnd = DateTime(
-              scheduleDateOnly.year,
-              scheduleDateOnly.month,
-              scheduleDateOnly.day,
-              slot.endTime.hour,
-              slot.endTime.minute,
-            );
+            if (isToday) {
+              final startDateTime = DateTime(
+                scheduleDateOnly.year,
+                scheduleDateOnly.month,
+                scheduleDateOnly.day,
+                slot.startTime.hour,
+                slot.startTime.minute,
+              );
+              final geofenceCheckTime = startDateTime.add(const Duration(minutes: 5));
+              Duration delay = geofenceCheckTime.difference(now);
+              if (delay.isNegative) {
+                delay = Duration.zero;
+              }
 
-            if (now.isBefore(classEnd)) {
-              final taskKey = 'geofence_${subject.id}_${slot.slotKey}_${scheduleDateOnly.millisecondsSinceEpoch}';
-              try {
+              final classEnd = DateTime(
+                scheduleDateOnly.year,
+                scheduleDateOnly.month,
+                scheduleDateOnly.day,
+                slot.endTime.hour,
+                slot.endTime.minute,
+              );
+
+              if (now.isBefore(classEnd)) {
+                final taskKey = 'geofence_${subject.id}_${slot.slotKey}_${scheduleDateOnly.millisecondsSinceEpoch}';
+                try {
+                  await DatabaseService().logAppEvent(
+                    tag: 'NotificationService',
+                    message: 'Registering geofenceCheckTask for "${subject.name}" ($taskKey) with locationId: $effectiveLocationId, delay: $delay',
+                  );
+                  await Workmanager().registerOneOffTask(
+                    taskKey,
+                    'geofenceCheckTask',
+                    initialDelay: delay,
+                    inputData: {
+                      'subjectId': subject.id,
+                      'locationId': effectiveLocationId,
+                      'date': scheduleDateOnly.toIso8601String(),
+                      'slotKey': slot.slotKey,
+                      'subjectName': subject.name,
+                      'notificationId': notificationId,
+                    },
+                    existingWorkPolicy: ExistingWorkPolicy.replace,
+                    constraints: Constraints(
+                      networkType: NetworkType.notRequired,
+                      requiresBatteryNotLow: false,
+                      requiresCharging: false,
+                      requiresDeviceIdle: false,
+                      requiresStorageNotLow: false,
+                    ),
+                  );
+                } catch (e) {
+                  debugPrint('Failed to register Workmanager task: $e');
+                  await DatabaseService().logAppEvent(
+                    tag: 'NotificationService',
+                    message: 'Failed to register Workmanager task for "${subject.name}": $e',
+                    level: 'ERROR',
+                  );
+                }
+              } else {
                 await DatabaseService().logAppEvent(
                   tag: 'NotificationService',
-                  message: 'Registering geofenceCheckTask for "${subject.name}" ($taskKey) with locationId: $effectiveLocationId, delay: $delay',
-                );
-                await Workmanager().registerOneOffTask(
-                  taskKey,
-                  'geofenceCheckTask',
-                  initialDelay: delay,
-                  inputData: {
-                    'subjectId': subject.id,
-                    'locationId': effectiveLocationId,
-                    'date': scheduleDateOnly.toIso8601String(),
-                    'slotKey': slot.slotKey,
-                    'subjectName': subject.name,
-                    'notificationId': notificationId,
-                  },
-                  existingWorkPolicy: ExistingWorkPolicy.replace,
-                  constraints: Constraints(
-                    networkType: NetworkType.notRequired,
-                    requiresBatteryNotLow: false,
-                    requiresCharging: false,
-                    requiresDeviceIdle: false,
-                    requiresStorageNotLow: false,
-                  ),
-                );
-              } catch (e) {
-                debugPrint('Failed to register Workmanager task: $e');
-                await DatabaseService().logAppEvent(
-                  tag: 'NotificationService',
-                  message: 'Failed to register Workmanager task for "${subject.name}": $e',
-                  level: 'ERROR',
+                  message: 'Skipped registering geofenceCheckTask for "${subject.name}": today\'s class has already ended.',
+                  level: 'WARNING',
                 );
               }
-            } else {
-              await DatabaseService().logAppEvent(
-                tag: 'NotificationService',
-                message: 'Skipped registering geofenceCheckTask for "${subject.name}": class has already ended.',
-                level: 'WARNING',
-              );
             }
           }
         } catch (e) {
@@ -259,6 +267,64 @@ class NotificationService {
         }
       }
     }
+  }
+
+  /// Checks if a class slot for a subject on a specific date is already marked
+  /// as present (attended), absent, holiday (cancelled), or planned absent.
+  bool isClassAlreadyMarked({
+    required List<Attendance> existingAttendance,
+    required String subjectId,
+    required DateTime date,
+    required String? slotKey,
+  }) {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    // 1. Get all records for this specific date
+    final recordsForDay = existingAttendance.where((record) =>
+        DateTime(record.date.year, record.date.month, record.date.day) == dateOnly
+    ).toList();
+
+    if (recordsForDay.isEmpty) {
+      return false;
+    }
+
+    // 2. Check if the entire day is marked as a holiday
+    // (A day is a holiday if records exist for the day and all are cancelled)
+    final isDayHoliday = recordsForDay.isNotEmpty &&
+        recordsForDay.every((record) => record.status == AttendanceStatus.cancelled);
+    if (isDayHoliday) {
+      return true;
+    }
+
+    // 3. Check if there's any record for this specific subject on this date
+    final subjectRecords = recordsForDay.where((record) => record.subjectId == subjectId).toList();
+    if (subjectRecords.isEmpty) {
+      return false;
+    }
+
+    final cleanSlotKey = slotKey ?? '';
+
+    return subjectRecords.any((record) {
+      final recordSlotKey = record.slotKey ?? '';
+
+      // A record applies to this slot if:
+      // - slotKey matches exactly
+      // - record's slotKey is empty/null (applies to all slots of the subject on that day)
+      // - cleanSlotKey is empty/null
+      final isSlotMatch = recordSlotKey == cleanSlotKey ||
+          recordSlotKey.isEmpty ||
+          cleanSlotKey.isEmpty;
+
+      if (!isSlotMatch) {
+        return false;
+      }
+
+      // Check if status is present (attended), absent, holiday (cancelled), or plannedAbsent
+      return record.status == AttendanceStatus.attended ||
+          record.status == AttendanceStatus.absent ||
+          record.status == AttendanceStatus.cancelled ||
+          record.status == AttendanceStatus.plannedAbsent;
+    });
   }
 
   NotificationDetails _notificationDetails() {
@@ -700,10 +766,11 @@ class NotificationService {
           continue;
         }
 
-        final isAlreadyMarked = existingAttendance.any((record) =>
-            record.subjectId == subject.id &&
-            DateTime(record.date.year, record.date.month, record.date.day) == today &&
-            (record.slotKey ?? '') == slot.slotKey
+        final isAlreadyMarked = isClassAlreadyMarked(
+          existingAttendance: existingAttendance,
+          subjectId: subject.id,
+          date: today,
+          slotKey: slot.slotKey,
         );
 
         if (!isAlreadyMarked) {
@@ -791,10 +858,11 @@ class NotificationService {
           continue;
         }
 
-        final isAlreadyMarked = existingAttendance.any((record) =>
-            record.subjectId == subject.id &&
-            DateTime(record.date.year, record.date.month, record.date.day) == today &&
-            (record.slotKey ?? '') == slot.slotKey
+        final isAlreadyMarked = isClassAlreadyMarked(
+          existingAttendance: existingAttendance,
+          subjectId: subject.id,
+          date: today,
+          slotKey: slot.slotKey,
         );
 
         if (!isAlreadyMarked) {

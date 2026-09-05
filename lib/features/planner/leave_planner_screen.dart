@@ -5,6 +5,7 @@ import '../../services/database_service.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../widgets/app_time_picker.dart';
+import '../attendance/attendance_provider.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import '../tutorial/tutorial_controller.dart';
@@ -596,7 +597,12 @@ class _LeavePlannerScreenState extends State<LeavePlannerScreen> {
                       affectedSubjectIds: subjects.map((s) => s.id).toList(),
                     );
 
+                    final attendanceProvider = Provider.of<AttendanceProvider>(parentContext, listen: false);
                     await _databaseService.savePlannedLeave(newLeave);
+                    await attendanceProvider.syncPlannedLeavesWithAttendance(
+                      plannedLeaves: [newLeave],
+                      subjects: subjects,
+                    );
                     nav.pop();
                     _loadLeaves();
                     subjectProvider.scheduleAutoSync();
@@ -906,7 +912,18 @@ class _LeavePlannerScreenState extends State<LeavePlannerScreen> {
                       affectedSubjectIds: subjects.map((s) => s.id).toList(),
                     );
 
+                    final attendanceProvider = Provider.of<AttendanceProvider>(parentContext, listen: false);
                     await _databaseService.savePlannedLeave(updatedLeave);
+                    final allLeaves = await _databaseService.loadPlannedLeaves();
+                    await attendanceProvider.cleanupPlannedLeaveAttendance(
+                      deletedLeave: leave,
+                      remainingLeaves: allLeaves,
+                      subjects: subjects,
+                    );
+                    await attendanceProvider.syncPlannedLeavesWithAttendance(
+                      plannedLeaves: [updatedLeave],
+                      subjects: subjects,
+                    );
                     nav.pop();
                     _loadLeaves();
                     subjectProvider.scheduleAutoSync();
@@ -927,6 +944,7 @@ class _LeavePlannerScreenState extends State<LeavePlannerScreen> {
   void _confirmDeleteLeave(BuildContext context, PlannedLeave leave) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+    final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
     showDialog(
       context: context,
       barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
@@ -943,6 +961,12 @@ class _LeavePlannerScreenState extends State<LeavePlannerScreen> {
             onPressed: () async {
               final dialogNav = Navigator.of(ctx);
               await _databaseService.deletePlannedLeave(leave.id);
+              final remainingLeaves = await _databaseService.loadPlannedLeaves();
+              await attendanceProvider.cleanupPlannedLeaveAttendance(
+                deletedLeave: leave,
+                remainingLeaves: remainingLeaves,
+                subjects: subjectProvider.subjects,
+              );
               dialogNav.pop();
               _loadLeaves();
               subjectProvider.scheduleAutoSync();

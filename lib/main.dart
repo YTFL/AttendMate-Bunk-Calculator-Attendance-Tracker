@@ -55,11 +55,6 @@ void callbackDispatcher() {
         if (shouldCheck) {
           await updateService.checkForUpdate();
         }
-      } else if (task == 'endOfDayAttendanceCheck') {
-        // Auto-mark all unmarked classes as present at end of day (or catch up previous days)
-        final today = DateTime.now();
-        final today0 = DateTime(today.year, today.month, today.day);
-        await _performEndOfDayAttendanceMarking(today0);
       } else if (task == 'geofenceCheckTask') {
         final subjectId = inputData?['subjectId'] as String?;
         final locationId = inputData?['locationId'] as String?;
@@ -222,12 +217,28 @@ Future<void> _performGeofenceCheck(
       final records = await db.loadAttendance();
       final normDate = DateTime(date.year, date.month, date.day);
 
-      // Check if already marked
-      final alreadyMarked = records.any((r) {
-        final rNorm = DateTime(r.date.year, r.date.month, r.date.day);
-        return r.subjectId == subjectId &&
-            rNorm == normDate &&
-            (r.slotKey ?? '') == (slotKey ?? '');
+      // Check if already marked (present/absent/holiday)
+      final recordsForDay = records.where((r) =>
+          DateTime(r.date.year, r.date.month, r.date.day) == normDate
+      ).toList();
+
+      final isDayHoliday = recordsForDay.isNotEmpty &&
+          recordsForDay.every((r) => r.status == AttendanceStatus.cancelled);
+
+      final subjectRecords = recordsForDay.where((r) => r.subjectId == subjectId).toList();
+      final cleanSlotKey = slotKey ?? '';
+
+      final alreadyMarked = isDayHoliday || subjectRecords.any((r) {
+        final recordSlotKey = r.slotKey ?? '';
+        final isSlotMatch = recordSlotKey == cleanSlotKey ||
+            recordSlotKey.isEmpty ||
+            cleanSlotKey.isEmpty;
+        return isSlotMatch && (
+            r.status == AttendanceStatus.attended ||
+            r.status == AttendanceStatus.absent ||
+            r.status == AttendanceStatus.cancelled ||
+            r.status == AttendanceStatus.plannedAbsent
+        );
       });
 
       if (alreadyMarked) {
@@ -324,116 +335,6 @@ Future<void> _performGeofenceCheck(
       message: 'Uncaught error in geofence check: $e',
       level: 'ERROR',
     );
-  }
-}
-
-/// Helper function to perform end-of-day attendance marking
-/// This is a top-level function so it can be called from the callback dispatcher
-@pragma('vm:entry-point')
-Future<void> _performEndOfDayAttendanceMarking(DateTime todayDate) async {
-  try {
-    final databaseService = DatabaseService();
-    final semester = await databaseService.loadSemester();
-    if (semester == null) return;
-
-    final subjects = await databaseService.loadSubjects();
-    if (subjects.isEmpty) return;
-
-    final records = await databaseService.loadAttendance();
-    final mutableRecords = List<Attendance>.from(records);
-
-    // Index records by composite key: subjectId_dateEpoch_slotKey
-    final Map<String, Attendance> indexedRecords = {};
-    // Index records by date to check isHoliday in O(1)
-    final Map<DateTime, List<Attendance>> recordsByDate = {};
-
-    for (final record in mutableRecords) {
-      final normDate = DateTime(record.date.year, record.date.month, record.date.day);
-      final key = '${record.subjectId}_${normDate.millisecondsSinceEpoch}_${record.slotKey ?? ""}';
-      indexedRecords[key] = record;
-      recordsByDate.putIfAbsent(normDate, () => []).add(record);
-    }
-
-    bool changed = false;
-
-    // 1. First, check and mark all past days (from semester start up to yesterday)
-    DateTime checkFromDate = DateTime(semester.startDate.year, semester.startDate.month, semester.startDate.day);
-    for (DateTime date = checkFromDate;
-        date.isBefore(todayDate);
-        date = date.add(const Duration(days: 1))) {
-      
-      // Skip if holiday
-      final recordsForDay = recordsByDate[date];
-      if (recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled)) {
-        continue;
-      }
-
-      for (final subject in subjects) {
-        final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(date)).toList();
-        for (final slot in slotsForDay) {
-          final key = '${subject.id}_${date.millisecondsSinceEpoch}_${slot.slotKey}';
-          if (!indexedRecords.containsKey(key)) {
-            final newRecord = Attendance(
-              subjectId: subject.id,
-              date: date,
-              status: AttendanceStatus.attended,
-              slotKey: slot.slotKey,
-            );
-            mutableRecords.add(newRecord);
-            indexedRecords[key] = newRecord;
-            recordsByDate.putIfAbsent(date, () => []).add(newRecord);
-            changed = true;
-          }
-        }
-      }
-    }
-
-    // 2. Secondly, if today is late enough (after 10 PM), check and mark today as well
-    final now = DateTime.now();
-    if (now.hour >= 22) {
-      final recordsForDay = recordsByDate[todayDate];
-      final isHoliday = recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled);
-      
-      if (!isHoliday) {
-        for (final subject in subjects) {
-          final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(todayDate)).toList();
-          for (final slot in slotsForDay) {
-            final key = '${subject.id}_${todayDate.millisecondsSinceEpoch}_${slot.slotKey}';
-            if (!indexedRecords.containsKey(key)) {
-              final newRecord = Attendance(
-                subjectId: subject.id,
-                date: todayDate,
-                status: AttendanceStatus.attended,
-                slotKey: slot.slotKey,
-              );
-              mutableRecords.add(newRecord);
-              indexedRecords[key] = newRecord;
-              recordsByDate.putIfAbsent(todayDate, () => []).add(newRecord);
-              changed = true;
-            }
-          }
-        }
-      }
-    }
-
-    if (changed) {
-      final originalKeys = records.map((r) {
-        final normDate = DateTime(r.date.year, r.date.month, r.date.day);
-        return '${r.subjectId}_${normDate.millisecondsSinceEpoch}_${r.slotKey ?? ""}';
-      }).toSet();
-
-      final newRecords = mutableRecords.where((r) {
-        final normDate = DateTime(r.date.year, r.date.month, r.date.day);
-        final key = '${r.subjectId}_${normDate.millisecondsSinceEpoch}_${r.slotKey ?? ""}';
-        return !originalKeys.contains(key);
-      }).toList();
-
-      if (newRecords.isNotEmpty) {
-        await databaseService.saveMultipleAttendanceIncremental(newRecords);
-      }
-    }
-  } catch (e) {
-    debugPrint('Background attendance marking failed: $e');
   }
 }
 
@@ -586,20 +487,10 @@ Future<void> main() async {
       );
     }
 
-    // Register periodic task: auto-mark unmarked classes at end of day
-    await Workmanager().registerPeriodicTask(
-      'end_of_day_attendance_check',
-      'endOfDayAttendanceCheck',
-      frequency: const Duration(days: 1),
-      initialDelay: const Duration(minutes: 15),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-      constraints: Constraints(
-        requiresBatteryNotLow: false,
-        requiresCharging: false,
-        requiresDeviceIdle: false,
-        networkType: NetworkType.notRequired,
-      ),
-    );
+    // Cancel legacy auto-mark periodic task if previously registered
+    try {
+      await Workmanager().cancelByUniqueName('end_of_day_attendance_check');
+    } catch (_) {}
 
     // Register periodic task: daily semester backup at 10:00 PM
     final now = DateTime.now();
@@ -820,9 +711,6 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
           await prefs.setBool(_hasSeenSetupPromptKey, true);
         }
       }
-
-      // Mark previous days' attendance as present (fallback for missed end-of-day markings)
-      await _markPreviousDaysAttendance();
     } catch (_) {
     }
 
@@ -841,47 +729,6 @@ class _FirstLaunchGateState extends State<FirstLaunchGate> {
         }
         Provider.of<TutorialController>(context, listen: false).startTutorial();
       });
-    }
-  }
-
-  /// Mark attendance for previous unmarked days as a fallback
-  /// This runs when the app starts to handle cases where end-of-day marking didn't work
-  Future<void> _markPreviousDaysAttendance() async {
-    try {
-      // Wait a moment for providers to be initialized
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (!mounted) {
-        return;
-      }
-
-      // Get providers from context
-      final semesterProvider = Provider.of<SemesterProvider>(context, listen: false);
-      final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
-      final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
-
-      // Only run if semester is set and has started
-      if (semesterProvider.semester == null || !semesterProvider.hasSemesterStarted) {
-        return;
-      }
-
-      // Wait for subjects to load
-      int attempts = 0;
-      while (subjectProvider.isLoading && attempts < 10) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        attempts++;
-      }
-
-      // Mark previous days' attendance
-      await attendanceProvider.markPreviousDaysAttendanceAsPresent(
-        semesterStartDate: semesterProvider.semester!.startDate,
-        subjects: subjectProvider.subjects,
-      );
-
-      debugPrint('Previous days attendance marked successfully');
-    } catch (e) {
-      debugPrint('Error in fallback attendance marking: $e');
-      // Silently fail - this is a non-critical operation
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import 'attendance_model.dart';
+import '../planner/planned_leave_model.dart';
 import '../subject/subject_model.dart';
 
 class AttendanceProvider with ChangeNotifier {
@@ -29,10 +30,12 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
   
-  /// Reload attendance from database (useful after clearing data)
-  Future<void> reloadAttendance() async {
-    _isLoading = true;
-    notifyListeners();
+  /// Reload attendance from database (useful after clearing data or resuming from background)
+  Future<void> reloadAttendance({bool showLoading = false}) async {
+    if (showLoading) {
+      _isLoading = true;
+      notifyListeners();
+    }
     await _loadAttendance();
   }
 
@@ -125,6 +128,19 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Delete attendance records for a specific subject on or after a given date
+  Future<void> deleteRecordsForSubjectFromDate(String subjectId, DateTime fromDate) async {
+    final normFromDate = DateTime(fromDate.year, fromDate.month, fromDate.day);
+    _attendanceRecords.removeWhere((record) {
+      if (record.subjectId != subjectId) return false;
+      final normRecordDate = DateTime(record.date.year, record.date.month, record.date.day);
+      return !normRecordDate.isBefore(normFromDate);
+    });
+    await _databaseService.deleteAttendanceForSubjectFromDate(subjectId, normFromDate);
+    notifyListeners();
+  }
+
+
   /// Delete all attendance records for a specific date
   Future<void> deleteRecordsForDate(DateTime date) async {
     _attendanceRecords.removeWhere((record) => record.date == date);
@@ -153,95 +169,108 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Fallback method: Mark attendance for all previous unmarked days as present
-  /// This is called when the app starts to handle missed end-of-day markings
-  /// It marks all scheduled classes from past days as present if they haven't been marked yet
-  Future<void> markPreviousDaysAttendanceAsPresent({
-    required DateTime semesterStartDate,
+  /// Mark all class slots falling within active planned leaves as absent across the entire leave duration (including future dates).
+  Future<void> syncPlannedLeavesWithAttendance({
+    required List<PlannedLeave> plannedLeaves,
     required List<Subject> subjects,
   }) async {
-    try {
-      if (subjects.isEmpty) {
-        return;
-      }
+    if (plannedLeaves.isEmpty || subjects.isEmpty) return;
 
-      final today = DateTime.now();
-      final todayDate = DateTime(today.year, today.month, today.day);
-      
-      // Start from the semester start date
-      DateTime checkFromDate = DateTime(semesterStartDate.year, semesterStartDate.month, semesterStartDate.day);
+    final recordsToMark = <Attendance>[];
 
-      // 1. Index attendance records by composite key: subjectId_dateEpoch_slotKey
-      final Map<String, Attendance> indexedRecords = {};
-      // 2. Index attendance records by date to check isHoliday in O(1)
-      final Map<DateTime, List<Attendance>> recordsByDate = {};
+    for (final leave in plannedLeaves) {
+      DateTime current = DateTime(leave.startDate.year, leave.startDate.month, leave.startDate.day);
+      final end = DateTime(leave.endDate.year, leave.endDate.month, leave.endDate.day);
 
-      for (final record in _attendanceRecords) {
-        final normDate = DateTime(record.date.year, record.date.month, record.date.day);
-        final key = '${record.subjectId}_${normDate.millisecondsSinceEpoch}_${record.slotKey ?? ""}';
-        indexedRecords[key] = record;
-        recordsByDate.putIfAbsent(normDate, () => []).add(record);
-      }
-
-      bool changed = false;
-      final newRecords = <Attendance>[];
-
-      // Check all days from checkFromDate to yesterday
-      for (DateTime date = checkFromDate;
-          date.isBefore(todayDate);
-          date = date.add(const Duration(days: 1))) {
-        
-        // Skip if this day is marked as a holiday
-        final recordsForDay = recordsByDate[date];
-        if (recordsForDay != null && recordsForDay.isNotEmpty && recordsForDay.every((r) => r.status == AttendanceStatus.cancelled)) {
-          continue;
-        }
-
-        // For each subject, check and mark classes
+      while (!current.isAfter(end)) {
         for (final subject in subjects) {
-          // Find all slots scheduled for this date
-          final slotsForDay = subject.schedule.where((slot) => slot.occursOnDate(date)).toList();
-          
-          if (slotsForDay.isEmpty) {
+          if (leave.affectedSubjectIds.isNotEmpty && !leave.affectedSubjectIds.contains(subject.id)) {
             continue;
           }
 
-          // For each slot, check if attendance is marked
-          for (final slot in slotsForDay) {
-            final key = '${subject.id}_${date.millisecondsSinceEpoch}_${slot.slotKey}';
-            final attendance = indexedRecords[key];
+          for (final slot in subject.schedule) {
+            if (slot.occursOnDate(current)) {
+              final slotStart = DateTime(current.year, current.month, current.day, slot.startTime.hour, slot.startTime.minute);
+              final slotEnd = DateTime(current.year, current.month, current.day, slot.endTime.hour, slot.endTime.minute);
 
-            // If not marked, mark it as present in memory
-            if (attendance == null) {
-              _attendanceRecords.removeWhere(
-                (record) =>
-                    record.subjectId == subject.id &&
-                    record.date == date &&
-                    record.slotKey == slot.slotKey,
-              );
+              if (slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate)) {
+                final hasRecord = _attendanceRecords.any(
+                  (r) =>
+                      r.subjectId == subject.id &&
+                      r.date.year == current.year &&
+                      r.date.month == current.month &&
+                      r.date.day == current.day &&
+                      (r.slotKey == null || r.slotKey == slot.slotKey || r.slotKey!.isEmpty),
+                );
 
-              final newRecord = Attendance(
-                subjectId: subject.id,
-                date: date,
-                status: AttendanceStatus.attended,
-                slotKey: slot.slotKey,
-              );
-              _attendanceRecords.add(newRecord);
-              newRecords.add(newRecord);
-              indexedRecords[key] = newRecord;
-              changed = true;
+                if (!hasRecord) {
+                  recordsToMark.add(Attendance(
+                    subjectId: subject.id,
+                    date: current,
+                    status: AttendanceStatus.absent,
+                    slotKey: slot.slotKey,
+                  ));
+                }
+              }
+            }
+          }
+        }
+        current = current.add(const Duration(days: 1));
+      }
+    }
+
+    if (recordsToMark.isNotEmpty) {
+      await markMultipleAttendance(recordsToMark);
+    }
+  }
+
+  /// Cleans up absent records that were tied to a removed/edited planned leave (if not covered by other remaining leaves).
+  Future<void> cleanupPlannedLeaveAttendance({
+    required PlannedLeave deletedLeave,
+    required List<PlannedLeave> remainingLeaves,
+    required List<Subject> subjects,
+  }) async {
+    if (subjects.isEmpty) return;
+
+    DateTime current = DateTime(deletedLeave.startDate.year, deletedLeave.startDate.month, deletedLeave.startDate.day);
+    final end = DateTime(deletedLeave.endDate.year, deletedLeave.endDate.month, deletedLeave.endDate.day);
+
+    while (!current.isAfter(end)) {
+      for (final subject in subjects) {
+        if (deletedLeave.affectedSubjectIds.isNotEmpty && !deletedLeave.affectedSubjectIds.contains(subject.id)) {
+          continue;
+        }
+
+        for (final slot in subject.schedule) {
+          if (slot.occursOnDate(current)) {
+            final slotStart = DateTime(current.year, current.month, current.day, slot.startTime.hour, slot.startTime.minute);
+            final slotEnd = DateTime(current.year, current.month, current.day, slot.endTime.hour, slot.endTime.minute);
+
+            if (slotStart.isBefore(deletedLeave.endDate) && slotEnd.isAfter(deletedLeave.startDate)) {
+              final isCoveredByOtherLeave = remainingLeaves.any((l) =>
+                  (l.affectedSubjectIds.isEmpty || l.affectedSubjectIds.contains(subject.id)) &&
+                  slotStart.isBefore(l.endDate) &&
+                  slotEnd.isAfter(l.startDate));
+
+              if (!isCoveredByOtherLeave) {
+                final existingRecord = getAttendanceForSubjectOnDate(
+                  subject.id,
+                  current,
+                  slotKey: slot.slotKey,
+                );
+                if (existingRecord != null && existingRecord.status == AttendanceStatus.absent) {
+                  await deleteRecordForSubjectOnDate(
+                    subject.id,
+                    current,
+                    slotKey: slot.slotKey,
+                  );
+                }
+              }
             }
           }
         }
       }
-
-      if (changed) {
-        await _databaseService.saveMultipleAttendanceIncremental(newRecords);
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('Error marking previous days attendance: $e');
-      // Silently fail - this is a fallback mechanism
+      current = current.add(const Duration(days: 1));
     }
   }
 }

@@ -13,7 +13,7 @@ class TimetableExportUtils {
   static List<Subject> _extractWeeklySubjects(List<Subject> subjects) {
     final weeklySubjects = <Subject>[];
     for (final subject in subjects) {
-      final weeklySchedule = subject.schedule.where((slot) => !slot.isSpecialClass).toList();
+      final weeklySchedule = subject.activeSchedule.where((slot) => !slot.isSpecialClass).toList();
       if (weeklySchedule.isEmpty) {
         continue;
       }
@@ -21,6 +21,7 @@ class TimetableExportUtils {
     }
     return weeklySubjects;
   }
+
 
   static Future<Directory> _resolveDownloadsDirectory() async {
     if (Platform.isAndroid) {

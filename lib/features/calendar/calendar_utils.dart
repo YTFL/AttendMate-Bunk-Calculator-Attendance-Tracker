@@ -13,6 +13,7 @@ enum DayState {
   bunkedFullDay,
   futureClasses,
   plannedLeave,
+  locked,
 }
 
 /// Class to represent the state and information of a calendar day
@@ -36,6 +37,21 @@ class CalendarDayInfo {
 
 /// Utility class for calendar-related calculations
 class CalendarUtils {
+  /// Helper to check if a subject's attendance on a given date is locked by manual baseline override
+  static bool isLockedByManualOverride(Subject subject, DateTime date) {
+    final manualOverride = subject.manualAttendanceOverride;
+    if (manualOverride == null) {
+      return false;
+    }
+
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final effectiveFrom = manualOverride.effectiveFrom;
+    final normalizedEffectiveFrom =
+        DateTime(effectiveFrom.year, effectiveFrom.month, effectiveFrom.day);
+
+    return normalizedDate.isBefore(normalizedEffectiveFrom);
+  }
+
   /// Get the state of a specific day
   static CalendarDayInfo getDayState({
     required DateTime date,
@@ -47,7 +63,8 @@ class CalendarUtils {
     // Check if the date is in the future
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
-    final isFuture = date.isAfter(todayDate);
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final isFuture = normalizedDate.isAfter(todayDate);
 
     // Get all subjects with classes on this day
     var subjectsWithClassesToday = subjects
@@ -71,7 +88,7 @@ class CalendarUtils {
     });
 
     // If no classes scheduled for this day
-    if (subjectsWithClassesToday.isEmpty) {
+    if (subjectsWithClassesToday.isEmpty || totalClassesCount == 0) {
       return CalendarDayInfo(
         date: date,
         state: DayState.noClasses,
@@ -83,13 +100,11 @@ class CalendarUtils {
     }
 
     // Get all attendance records for this day
-    final normalizedDate = DateTime(date.year, date.month, date.day);
     final rawAttendanceToday = indexedRecords != null
         ? (indexedRecords[normalizedDate] ?? [])
         : attendanceRecords.where((record) => isSameDay(record.date, date)).toList();
 
     final attendanceRecordsToday = List<Attendance>.from(rawAttendanceToday);
-    bool hasLeaveAutoMark = false;
 
     // Check for planned leave auto-marking for unrecorded slots
     for (final subject in subjectsWithClassesToday) {
@@ -108,7 +123,6 @@ class CalendarUtils {
               (r.slotKey == null || r.slotKey == slot.slotKey || r.slotKey!.isEmpty));
 
           if (!hasExplicitRecord) {
-            hasLeaveAutoMark = true;
             attendanceRecordsToday.add(Attendance(
               subjectId: subject.id,
               date: date,
@@ -120,132 +134,99 @@ class CalendarUtils {
       }
     }
 
-    final markedRecordsToday = attendanceRecordsToday.where((record) {
-      final subject = subjectsWithClassesToday
-          .where((s) => s.id == record.subjectId)
-          .cast<Subject?>()
-          .firstWhere((s) => s != null, orElse: () => null);
-      if (subject == null) return false;
+    int lockedCount = 0;
+    int attendedCount = 0;
+    int absentCount = 0;
+    int cancelledCount = 0;
+    int unmarkedCount = 0;
+    int leaveAbsentCount = 0;
 
-      final slotKey = record.slotKey ?? '';
-      if (slotKey.isEmpty) {
-        return true;
+    for (final subject in subjectsWithClassesToday) {
+      final isLocked = isLockedByManualOverride(subject, date);
+      for (final slot in subject.schedule.where((s) => s.occursOnDate(date))) {
+        if (isLocked) {
+          lockedCount++;
+        } else {
+          final record = attendanceRecordsToday
+              .where((r) =>
+                  r.subjectId == subject.id &&
+                  (r.slotKey == null ||
+                      r.slotKey == slot.slotKey ||
+                      (r.slotKey?.isEmpty ?? true)))
+              .cast<Attendance?>()
+              .firstWhere((r) => r != null, orElse: () => null);
+
+          if (record != null) {
+            if (record.status == AttendanceStatus.attended) {
+              attendedCount++;
+            } else if (record.status == AttendanceStatus.absent) {
+              absentCount++;
+              final slotStart = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
+              final slotEnd = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
+              final isCoveredByLeave = plannedLeaves.any((leave) =>
+                  (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) &&
+                  slotStart.isBefore(leave.endDate) &&
+                  slotEnd.isAfter(leave.startDate));
+              if (isCoveredByLeave) {
+                leaveAbsentCount++;
+              }
+            } else if (record.status == AttendanceStatus.cancelled) {
+              cancelledCount++;
+            }
+          } else {
+            unmarkedCount++;
+          }
+        }
       }
-
-      return subject.schedule.any(
-        (slot) => slot.occursOnDate(date) && slot.slotKey == slotKey,
-      );
-    }).toList();
-
-    final markedCount = markedRecordsToday.length;
-
-    // Check if it's a holiday (all scheduled classes are cancelled)
-    final isHoliday = totalClassesCount > 0 &&
-        markedCount == totalClassesCount &&
-        markedRecordsToday.every((record) => record.status == AttendanceStatus.cancelled);
-
-    if (isHoliday) {
-      return CalendarDayInfo(
-        date: date,
-        state: DayState.holiday,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
     }
 
-    // Check if all classes today are marked/covered as absent via planned leave
-    final isEntireDayPlannedLeave = totalClassesCount > 0 &&
-        markedCount == totalClassesCount &&
-        hasLeaveAutoMark &&
-        markedRecordsToday.every((record) => record.status == AttendanceStatus.absent);
+    final accountedCount = lockedCount + attendedCount + absentCount + cancelledCount;
 
-    if (isEntireDayPlannedLeave) {
-      return CalendarDayInfo(
-        date: date,
-        state: DayState.plannedLeave,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
-    }
+    DayState dayState;
 
-    // Calculate how many classes are marked and what status they have
-    final attendedCount = markedRecordsToday
-        .where((record) => record.status == AttendanceStatus.attended)
-        .length;
-    final absentCount = markedRecordsToday
-        .where((record) => record.status == AttendanceStatus.absent)
-        .length;
-
-    // Check if all classes are marked
-    final allMarked = markedCount == totalClassesCount;
-
-    if (!allMarked) {
-      // If future date without all classes auto-marked by leave
-      if (isFuture) {
-        return CalendarDayInfo(
-          date: date,
-          state: DayState.futureClasses,
-          classesCount: totalClassesCount,
-          markedClasses: markedCount,
-          subjectsWithClassesToday: subjectsWithClassesToday,
-          attendanceRecordsToday: attendanceRecordsToday,
-        );
+    if (isFuture) {
+      if (cancelledCount == totalClassesCount) {
+        dayState = DayState.holiday;
+      } else if (lockedCount == totalClassesCount) {
+        dayState = DayState.locked;
+      } else if (unmarkedCount == 0) {
+        if (attendedCount == totalClassesCount) {
+          dayState = DayState.attendedFullDay;
+        } else if (absentCount == totalClassesCount) {
+          dayState = (leaveAbsentCount == totalClassesCount)
+              ? DayState.plannedLeave
+              : DayState.bunkedFullDay;
+        } else {
+          dayState = DayState.classesMarked;
+        }
+      } else if (attendedCount > 0 || absentCount > 0 || cancelledCount > 0) {
+        dayState = DayState.classesMarked;
+      } else {
+        dayState = DayState.futureClasses;
       }
-
-      return CalendarDayInfo(
-        date: date,
-        state: DayState.classesNotMarked,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
-    }
-
-    // All classes are marked
-    if (attendedCount == totalClassesCount) {
-      return CalendarDayInfo(
-        date: date,
-        state: DayState.attendedFullDay,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
-    }
-
-    if (absentCount == totalClassesCount) {
-      return CalendarDayInfo(
-        date: date,
-        state: isEntireDayPlannedLeave ? DayState.plannedLeave : DayState.bunkedFullDay,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
-    }
-
-    // Mixed attendance (some attended, some absent)
-    if (markedCount > 0) {
-      return CalendarDayInfo(
-        date: date,
-        state: DayState.classesMarked,
-        classesCount: totalClassesCount,
-        markedClasses: markedCount,
-        subjectsWithClassesToday: subjectsWithClassesToday,
-        attendanceRecordsToday: attendanceRecordsToday,
-      );
+    } else {
+      if (unmarkedCount > 0) {
+        dayState = DayState.classesNotMarked;
+      } else if (lockedCount == totalClassesCount) {
+        dayState = DayState.locked;
+      } else if (cancelledCount == totalClassesCount) {
+        dayState = DayState.holiday;
+      } else if (attendedCount == totalClassesCount) {
+        dayState = DayState.attendedFullDay;
+      } else if (absentCount == totalClassesCount) {
+        dayState = (leaveAbsentCount == totalClassesCount)
+            ? DayState.plannedLeave
+            : DayState.bunkedFullDay;
+      } else {
+        dayState = DayState.classesMarked;
+      }
     }
 
     return CalendarDayInfo(
       date: date,
-      state: DayState.classesNotMarked,
+      state: dayState,
       classesCount: totalClassesCount,
-      markedClasses: 0,
+      markedClasses: accountedCount,
       subjectsWithClassesToday: subjectsWithClassesToday,
       attendanceRecordsToday: attendanceRecordsToday,
     );
@@ -270,6 +251,8 @@ class CalendarUtils {
         return const Color(0xFF7E57C2);
       case DayState.plannedLeave:
         return const Color(0xFFFF7043);
+      case DayState.locked:
+        return const Color(0xFF607D8B);
     }
   }
 
@@ -292,6 +275,8 @@ class CalendarUtils {
         return Icons.schedule;
       case DayState.plannedLeave:
         return Icons.event_busy_rounded;
+      case DayState.locked:
+        return Icons.lock_outline;
     }
   }
 
@@ -314,6 +299,8 @@ class CalendarUtils {
         return 'Upcoming';
       case DayState.plannedLeave:
         return 'Planned Leave';
+      case DayState.locked:
+        return 'Locked';
     }
   }
 

@@ -156,8 +156,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           content: Text(
             'Updated from ${_formatDate(_effectiveFromDate)}: '
             '${result.matchedSubjects} matched, '
-            '${result.newSubjects} new, '
-            '${result.retiredSubjects} retired.',
+            '${result.newSubjects} new'
+            '${result.retiredSubjects > 0 ? ', ${result.retiredSubjects} retired' : ''}.',
           ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
@@ -259,28 +259,9 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       }
     }
 
-    for (final existing in existingSubjects) {
-      if (matchedExistingIds.contains(existing.id)) {
-        continue;
-      }
-
-      final beforeSlots = _futureWeeklySlots(existing, effectiveDate);
-      if (beforeSlots.isEmpty) {
-        continue;
-      }
-
-      changes.add(
-        _MidSemesterChangePreview(
-          heading: existing.name,
-          beforeSlots: beforeSlots,
-          afterSlots: const <TimeSlot>[],
-          kind: _MidSemesterChangeKind.retired,
-        ),
-      );
-    }
-
     return changes;
   }
+
 
   int _findMatchingExistingSubjectIndex({
     required List<Subject> existingSubjects,
@@ -1568,22 +1549,28 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     {
       "name": "Mathematics",
       "acronym": "MTH",
+      "room": "Room 101",
+      "block": "Block A",
       "schedule": [
         {
           "day": "monday",
           "startTime": "09:00",
-          "endTime": "10:30"
+          "endTime": "10:30",
+          "room": "Room 101",
+          "block": "Block A"
         },
         {
           "day": "wednesday",
           "startTime": "14:00",
-          "endTime": "15:30"
+          "endTime": "15:30",
+          "room": "Lab 2"
         }
       ]
     },
     {
       "name": "Physics",
       "acronym": "PHY",
+      "room": "Hall 3",
       "schedule": [
         {
           "day": "tuesday",
@@ -1595,6 +1582,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   ]
 }''';
   }
+
 
   String _getCsvFormatReference() {
     return TimetableImportUtils.generateTemplateCsv();

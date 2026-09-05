@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -40,6 +41,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late int _selectedIndex;
+  String _scheduleTitle = "Today";
+  bool _canGoPrevious = true;
+  bool _canGoNext = true;
+  final GlobalKey<TodayScheduleState> _todayScheduleKey = GlobalKey<TodayScheduleState>();
   final UpdateService _updateService = UpdateService();
   AppUpdate? _pendingUpdate;
   bool _isDownloading = false;
@@ -164,37 +169,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       try {
+        // Only reload attendance — SubjectProvider already listens to AttendanceProvider
+        // via addListener(notifyListeners), so a separate reloadSubjects() call is redundant
+        // and causes a double UI rebuild cascade on every app resume.
         final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
-        final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
-        
-        attendanceProvider.reloadAttendance();
-        subjectProvider.reloadSubjects();
+        attendanceProvider.reloadAttendance(showLoading: false);
       } catch (e) {
         debugPrint('Failed to reload database on app resume: $e');
       }
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
-      // Schedule 15-minute delayed background backup ONLY IF backups are enabled and data changes occurred
+      // Execute immediate exit backup if backups are enabled and data changes occurred
       try {
         final backupService = BackupService();
+        backupService.cancelDebouncedAutoBackup();
         Future.wait([
           backupService.isBackupEnabled(),
           backupService.hasUnbackedDataChanges(),
-        ]).then((results) {
-          final isEnabled = results[0];
-          final hasChanges = results[1];
-          if (isEnabled && hasChanges) {
-            Workmanager().registerOneOffTask(
-              'app_close_15min_backup',
-              'appCloseBackupTask',
-              initialDelay: const Duration(minutes: 15),
-              existingWorkPolicy: ExistingWorkPolicy.replace,
+          backupService.getBackupDirectoryPath(),
+        ]).then((results) async {
+          final isEnabled = results[0] as bool;
+          final hasChanges = results[1] as bool;
+          final dirPath = results[2] as String?;
+          if (isEnabled && hasChanges && dirPath != null && dirPath.isNotEmpty) {
+            debugPrint('HomeScreen: Executing immediate app exit auto-backup...');
+            await backupService.createBackup(
+              showNotification: false,
+              triggerReason: 'App exit immediate auto-backup',
+              force: false,
             );
           } else {
-            debugPrint('HomeScreen: Skipping 15-min exit backup (enabled: $isEnabled, changes: $hasChanges).');
+            debugPrint('HomeScreen: Skipping exit backup (enabled: $isEnabled, changes: $hasChanges, dir: $dirPath).');
           }
         });
+
+        // Schedule 15-minute delayed background backup as fallback
+        Workmanager().registerOneOffTask(
+          'app_close_15min_backup',
+          'appCloseBackupTask',
+          initialDelay: const Duration(minutes: 15),
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+        );
       } catch (e) {
-        debugPrint('Failed to schedule 15-min exit backup task: $e');
+        debugPrint('Failed to execute/schedule exit backup task: $e');
       }
     }
   }
@@ -325,6 +341,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _onItemTapped(int index) {
+    if (index == 0) {
+      _todayScheduleKey.currentState?.jumpToToday();
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -448,7 +467,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     final List<Widget> widgetOptions = <Widget>[
       isSemesterSet
-          ? (hasSemesterStarted ? const TodaySchedule() : _buildSemesterYetToBeginWidget())
+          ? (hasSemesterStarted
+              ? TodaySchedule(
+                  key: _todayScheduleKey,
+                  onDayChanged: (title, canGoPrev, canGoNext) {
+                    if (mounted) {
+                      setState(() {
+                        _scheduleTitle = title;
+                        _canGoPrevious = canGoPrev;
+                        _canGoNext = canGoNext;
+                      });
+                    }
+                  },
+                )
+              : _buildSemesterYetToBeginWidget())
           : _buildSemesterRequiredWidget(),
       isSemesterSet ? const SubjectScreen() : _buildSemesterRequiredWidget(),
       const SemesterScreen(),
@@ -459,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ];
 
     const List<String> appBarTitles = <String>[
-      'Today\'s Schedule',
+      'Today',
       'Subjects',
       'Semester Details',
       'Bunk Meter',
@@ -469,11 +501,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return TutorialOverlay(
       child: Scaffold(
         appBar: AppBar(
-          title: Text(appBarTitles[_selectedIndex]),
+          title: Text(_selectedIndex == 0 ? _scheduleTitle : appBarTitles[_selectedIndex]),
           actions: [
+            if (_selectedIndex == 0 && isSemesterSet && hasSemesterStarted)
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded),
+                tooltip: _canGoPrevious ? 'Previous Day' : null,
+                visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                onPressed: _canGoPrevious
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        _todayScheduleKey.currentState?.goToPreviousDay();
+                      }
+                    : null,
+              ),
             if (isSemesterSet)
               IconButton(
                 icon: KeyedSubtree(key: _calendarKey, child: const Icon(Icons.calendar_month)),
+                visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
                 onPressed: () {
                   if (tutorialController.isActive && tutorialController.currentStepIndex == 15) {
                     tutorialController.nextStep();
@@ -484,6 +529,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   );
                 },
                 tooltip: 'Attendance Calendar',
+              ),
+            if (_selectedIndex == 0 && isSemesterSet && hasSemesterStarted)
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded),
+                tooltip: _canGoNext ? 'Next Day' : null,
+                visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+                onPressed: _canGoNext
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        _todayScheduleKey.currentState?.goToNextDay();
+                      }
+                    : null,
               ),
             if (_selectedIndex == 1 && isSemesterSet && !hasSemesterEnded)
               IconButton(

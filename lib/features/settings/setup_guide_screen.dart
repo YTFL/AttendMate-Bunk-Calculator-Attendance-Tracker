@@ -13,6 +13,7 @@ import 'swipe_actions_settings_screen.dart';
 import '../location/location_manager_screen.dart';
 import '../planner/leave_planner_screen.dart';
 import 'semester_backup_screen.dart';
+import '../../services/battery_optimization_service.dart';
 
 class SetupGuideScreen extends StatefulWidget {
   final int initialPage;
@@ -33,11 +34,15 @@ class _SetupGuideScreenState extends State<SetupGuideScreen> {
     {
       "name": "Subject Name",
       "acronym": "ACR",
+      "room": "Room 101",
+      "block": "Block A",
       "schedule": [
         {
           "day": "monday",
           "startTime": "09:00",
-          "endTime": "10:00"
+          "endTime": "10:00",
+          "room": "Room 101",
+          "block": "Block A"
         }
       ]
     }
@@ -47,10 +52,14 @@ class _SetupGuideScreenState extends State<SetupGuideScreen> {
 Rules to follow:
 - "name" is the full subject name as shown in the timetable.
 - "acronym" is a short 2–4 letter code for the subject (create one if not shown).
+- "room" is the room number or name (optional, e.g. "Room 101", "Lab 2").
+- "block" is the building or block name (optional, e.g. "Block A", "Science Wing").
 - "day" must be fully lowercase: monday, tuesday, wednesday, thursday, friday, saturday, or sunday.
 - "startTime" and "endTime" must be in 24-hour HH:MM format (e.g. 09:00, 14:30).
+- "room" and "block" can be specified at the subject level or inside individual schedule slots.
 - Include every subject and every time slot shown in the timetable.
 - Return only the raw JSON with no extra explanation.''';
+
 
   final List<_GuideSection> _sections = [
     _GuideSection(
@@ -549,7 +558,30 @@ When previewing the shared semester, you can choose between two import modes:
 ''',
     ),
     _GuideSection(
-      title: '16. Tips & Tricks',
+      title: '16. Background Access',
+      openInAppLabel: 'Configure Background Access',
+      openTarget: _GuideOpenTarget.batteryOptimization,
+      markdown: '''
+## Overview
+Android battery saver optimization can kill AttendMate when running in the background, causing class reminders, location auto-attendance triggers, and daily automatic backups to stop working after some time.
+
+---
+
+## Why Is Unrestricted Access Required?
+1. **Background Notifications**: Ensures class reminders fire reliably even when AttendMate has been closed for hours.
+2. **Location Auto-Attendance**: Allows low-power background location checks 5 minutes after class starts.
+3. **Automated Backups**: Ensures your daily 10:00 PM rolling backup runs reliably without being killed by Android battery optimization.
+
+---
+
+## How to Grant Exemption
+1. Open the **More** tab and scroll to **Background Access**.
+2. Tap **Fix Access** or the tile to open the prompt.
+3. Tap **Allow** to grant exemption from Android battery optimization.
+''',
+    ),
+    _GuideSection(
+      title: '17. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
@@ -557,7 +589,7 @@ When previewing the shared semester, you can choose between two import modes:
 - Color-code subjects for faster recognition.
 - Use **Special One-Day Class** for makeup classes, extra labs, or one-time events.
 - Use JSON import to save setup time.
-- Keep notifications enabled for quick marking.
+- Keep notifications and background permissions enabled for quick marking.
 - Use Calendar to fix past mistakes.
 - Use **Holiday** when classes are officially cancelled.
 
@@ -625,6 +657,9 @@ When previewing the shared semester, you can choose between two import modes:
         return _openHomeTab(3, subLevelBuilder: (context) => const LeavePlannerScreen());
       case _GuideOpenTarget.semesterBackup:
         return _openHomeTab(4, subLevelBuilder: (context) => const SemesterBackupScreen());
+      case _GuideOpenTarget.batteryOptimization:
+        BatteryOptimizationService().showBatteryOptimizationDialog(context);
+        return;
     }
   }
 
@@ -783,6 +818,7 @@ enum _GuideOpenTarget {
   locationManager,
   leavePlanner,
   semesterBackup,
+  batteryOptimization,
 }
 
 class _TableOfContentsPage extends StatelessWidget {

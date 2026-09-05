@@ -71,44 +71,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     List<Subject> subjects,
     AttendanceProvider attendanceProvider,
   ) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day, 23, 59);
-
-    for (final leave in plannedLeaves) {
-      DateTime current = DateTime(leave.startDate.year, leave.startDate.month, leave.startDate.day);
-      final end = DateTime(leave.endDate.year, leave.endDate.month, leave.endDate.day);
-
-      while (!current.isAfter(end) && !current.isAfter(today)) {
-        for (final subject in subjects) {
-          if (leave.affectedSubjectIds.isNotEmpty && !leave.affectedSubjectIds.contains(subject.id)) continue;
-          for (final slot in subject.schedule) {
-            if (slot.occursOnDate(current)) {
-              final slotStart = DateTime(current.year, current.month, current.day, slot.startTime.hour, slot.startTime.minute);
-              final slotEnd = DateTime(current.year, current.month, current.day, slot.endTime.hour, slot.endTime.minute);
-              if (slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate)) {
-                final hasRecord = attendanceProvider.attendanceRecords.any(
-                  (r) => r.subjectId == subject.id &&
-                         r.date.year == current.year &&
-                         r.date.month == current.month &&
-                         r.date.day == current.day &&
-                         (r.slotKey == null || r.slotKey == slot.slotKey || r.slotKey!.isEmpty),
-                );
-
-                if (!hasRecord) {
-                  await attendanceProvider.markAttendance(
-                    subject.id,
-                    current,
-                    AttendanceStatus.absent,
-                    slotKey: slot.slotKey,
-                  );
-                }
-              }
-            }
-          }
-        }
-        current = current.add(const Duration(days: 1));
-      }
-    }
+    await attendanceProvider.syncPlannedLeavesWithAttendance(
+      plannedLeaves: plannedLeaves,
+      subjects: subjects,
+    );
   }
 
   @override
@@ -413,6 +379,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       (DayState.attendedFullDay, 'Attended'),
       (DayState.bunkedFullDay, 'Bunked'),
       (DayState.plannedLeave, 'Planned Leave'),
+      (DayState.locked, 'Locked'),
       (DayState.classesNotMarked, 'Not Marked'),
       (DayState.classesMarked, 'Mixed'),
       (DayState.holiday, 'Holiday'),
@@ -1068,145 +1035,94 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                         ],
                         // Bulk Action Buttons Row
-                        if (pageDayInfo.classesCount > 0 &&
-                            pageDayInfo.state != DayState.futureClasses)
-                          Padding(
-                            padding: EdgeInsets.only(bottom: rs.height(12)),
-                            child: Row(
-                              children: [
-                                _buildBulkActionButton(
-                                  context: context,
-                                  icon: Icons.check_circle_outline_rounded,
-                                  label: 'Present',
-                                  color: const Color(0xFF4CAF50),
-                                  onPressed: () async {
-                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                    final navigator = Navigator.of(context);
-                                    final subjectProvider =
-                                        Provider.of<SubjectProvider>(context, listen: false);
-                                    final editableClasses = classesForDay
-                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
-                                        .toList();
-                                    final lockedCount = classesForDay.length - editableClasses.length;
+                        if (pageDayInfo.classesCount > 0)
+                          Builder(
+                            builder: (context) {
+                              final scaffoldMessenger = ScaffoldMessenger.of(context);
+                              final navigator = Navigator.of(context);
+                              final attendanceProvider =
+                                  Provider.of<AttendanceProvider>(context, listen: false);
+                              final editableClasses = classesForDay
+                                  .where((subject) => !_isLockedByManualOverride(subject, pageDate))
+                                  .toList();
+                              final lockedCount = classesForDay.length - editableClasses.length;
 
-                                    if (editableClasses.isEmpty) {
-                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                        const SnackBar(
-                                          content: Text('Classes on this date are locked due to manual count update.'),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                      return;
-                                    }
+                              Future<void> applyBulkStatus(
+                                AttendanceStatus targetStatus,
+                                String successMessage,
+                              ) async {
+                                if (editableClasses.isEmpty) {
+                                  scaffoldMessenger.showReplacingSnackBar(
+                                    const SnackBar(
+                                      content: Text('Classes on this date are locked due to manual count update.'),
+                                      backgroundColor: Colors.orange,
+                                    ),
+                                  );
+                                  return;
+                                }
 
-                                    for (final subject in editableClasses) {
-                                      await subjectProvider.markAttendance(
-                                        subject.id,
-                                        pageDate,
+                                final records = <Attendance>[];
+                                for (final subject in editableClasses) {
+                                  for (final slot in subject.schedule) {
+                                    records.add(Attendance(
+                                      subjectId: subject.id,
+                                      date: pageDate,
+                                      status: targetStatus,
+                                      slotKey: slot.slotKey,
+                                    ));
+                                  }
+                                }
+                                await attendanceProvider.markMultipleAttendance(records);
+
+                                final message = lockedCount > 0
+                                    ? 'Marked ${records.length} class(es). $lockedCount locked.'
+                                    : successMessage;
+                                scaffoldMessenger.showReplacingSnackBar(
+                                  SnackBar(content: Text(message)),
+                                );
+                                navigator.pop();
+                              }
+
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: rs.height(12)),
+                                child: Row(
+                                  children: [
+                                    _buildBulkActionButton(
+                                      context: context,
+                                      icon: Icons.check_circle_outline_rounded,
+                                      label: 'Present',
+                                      color: const Color(0xFF4CAF50),
+                                      onPressed: () => applyBulkStatus(
                                         AttendanceStatus.attended,
-                                        slotKey: subject.schedule.first.slotKey,
-                                      );
-                                    }
-
-                                    final message = lockedCount > 0
-                                        ? 'Marked ${editableClasses.length} class(es) as present. $lockedCount locked.'
-                                        : 'All classes marked as present';
-                                    scaffoldMessenger.showReplacingSnackBar(
-                                      SnackBar(content: Text(message)),
-                                    );
-                                    navigator.pop();
-                                  },
-                                ),
-                                SizedBox(width: rs.width(8)),
-                                _buildBulkActionButton(
-                                  context: context,
-                                  icon: Icons.highlight_off_rounded,
-                                  label: 'Skip Day',
-                                  color: const Color(0xFFEF5350),
-                                  onPressed: () async {
-                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                    final navigator = Navigator.of(context);
-                                    final subjectProvider =
-                                        Provider.of<SubjectProvider>(context, listen: false);
-                                    final editableClasses = classesForDay
-                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
-                                        .toList();
-                                    final lockedCount = classesForDay.length - editableClasses.length;
-
-                                    if (editableClasses.isEmpty) {
-                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                        const SnackBar(
-                                          content: Text('Classes on this date are locked due to manual count update.'),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    for (final subject in editableClasses) {
-                                      await subjectProvider.markAttendance(
-                                        subject.id,
-                                        pageDate,
+                                        'All classes marked as present',
+                                      ),
+                                    ),
+                                    SizedBox(width: rs.width(8)),
+                                    _buildBulkActionButton(
+                                      context: context,
+                                      icon: Icons.highlight_off_rounded,
+                                      label: 'Skip Day',
+                                      color: const Color(0xFFEF5350),
+                                      onPressed: () => applyBulkStatus(
                                         AttendanceStatus.absent,
-                                        slotKey: subject.schedule.first.slotKey,
-                                      );
-                                    }
-
-                                    final message = lockedCount > 0
-                                        ? 'Marked ${editableClasses.length} class(es) as absent. $lockedCount locked.'
-                                        : 'All classes marked as absent';
-                                    scaffoldMessenger.showReplacingSnackBar(
-                                      SnackBar(content: Text(message)),
-                                    );
-                                    navigator.pop();
-                                  },
-                                ),
-                                SizedBox(width: rs.width(8)),
-                                _buildBulkActionButton(
-                                  context: context,
-                                  icon: Icons.celebration_outlined,
-                                  label: 'Holiday',
-                                  color: const Color(0xFFAB47BC),
-                                  onPressed: () async {
-                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                    final navigator = Navigator.of(context);
-                                    final subjectProvider =
-                                        Provider.of<SubjectProvider>(context, listen: false);
-                                    final editableClasses = classesForDay
-                                        .where((subject) => !_isLockedByManualOverride(subject, pageDate))
-                                        .toList();
-                                    final lockedCount = classesForDay.length - editableClasses.length;
-
-                                    if (editableClasses.isEmpty) {
-                                      ScaffoldMessenger.of(context).showReplacingSnackBar(
-                                        const SnackBar(
-                                          content: Text('Classes on this date are locked due to manual count update.'),
-                                          backgroundColor: Colors.orange,
-                                        ),
-                                      );
-                                      return;
-                                    }
-
-                                    for (final subject in editableClasses) {
-                                      await subjectProvider.markAttendance(
-                                        subject.id,
-                                        pageDate,
+                                        'All classes marked as absent',
+                                      ),
+                                    ),
+                                    SizedBox(width: rs.width(8)),
+                                    _buildBulkActionButton(
+                                      context: context,
+                                      icon: Icons.celebration_outlined,
+                                      label: 'Holiday',
+                                      color: const Color(0xFFAB47BC),
+                                      onPressed: () => applyBulkStatus(
                                         AttendanceStatus.cancelled,
-                                        slotKey: subject.schedule.first.slotKey,
-                                      );
-                                    }
-
-                                    final message = lockedCount > 0
-                                        ? 'Marked ${editableClasses.length} class(es) as holiday. $lockedCount locked.'
-                                        : 'Day marked as holiday';
-                                    scaffoldMessenger.showReplacingSnackBar(
-                                      SnackBar(content: Text(message)),
-                                    );
-                                    navigator.pop();
-                                  },
+                                        'Day marked as holiday',
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            },
                           ),
                         // Copy Timetable Button
                         if (pageDayInfo.state != DayState.futureClasses)
@@ -1454,7 +1370,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final rs = context.rs;
     final theme = Theme.of(context);
     final status = attendance?.status;
-    final isFutureClass = dayState == DayState.futureClasses;
     final isLockedByManualOverride = _isLockedByManualOverride(subject, date);
     final overrideDate = subject.manualAttendanceOverride?.effectiveFrom;
     final timeSlot = CalendarUtils.getTimeSlotForDate(subject, date);
@@ -1554,52 +1469,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ],
               )
             : null,
-        trailing: isFutureClass
-            ? Container(
-                padding: rs.insetsSymmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(rs.scale(20)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.schedule, size: rs.scale(14), color: Colors.white),
-                    SizedBox(width: rs.width(4)),
-                    Text(
-                      'Pending',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: rs.font(12),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : isLockedByManualOverride
-                ? _buildLockedStatusButton()
-                : _buildAttendanceStatusButton(
-                    status,
-                    () async {
-                      final newStatus = _getNextStatus(status);
-                      if (newStatus == null) {
-                        await attendanceProvider.deleteRecordForSubjectOnDate(
-                          subject.id,
-                          date,
-                          slotKey: slotKey,
-                        );
-                      } else {
-                        await attendanceProvider.markAttendance(
-                          subject.id,
-                          date,
-                          newStatus,
-                          slotKey: slotKey,
-                        );
-                      }
-                      setState(() {});
-                    },
-                  ),
+        trailing: isLockedByManualOverride
+            ? _buildLockedStatusButton()
+            : _buildAttendanceStatusButton(
+                status,
+                () async {
+                  final newStatus = _getNextStatus(status);
+                  if (newStatus == null) {
+                    await attendanceProvider.deleteRecordForSubjectOnDate(
+                      subject.id,
+                      date,
+                      slotKey: slotKey,
+                    );
+                  } else {
+                    await attendanceProvider.markAttendance(
+                      subject.id,
+                      date,
+                      newStatus,
+                      slotKey: slotKey,
+                    );
+                  }
+                  setState(() {});
+                },
+              ),
         ),
       ),
     );
@@ -1743,17 +1635,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   bool _isLockedByManualOverride(Subject subject, DateTime date) {
-    final manualOverride = subject.manualAttendanceOverride;
-    if (manualOverride == null) {
-      return false;
-    }
-
-    final normalizedDate = DateTime(date.year, date.month, date.day);
-    final effectiveFrom = manualOverride.effectiveFrom;
-    final normalizedEffectiveFrom =
-        DateTime(effectiveFrom.year, effectiveFrom.month, effectiveFrom.day);
-
-    return normalizedDate.isBefore(normalizedEffectiveFrom);
+    return CalendarUtils.isLockedByManualOverride(subject, date);
   }
 
   String _formatShortDate(DateTime date) {

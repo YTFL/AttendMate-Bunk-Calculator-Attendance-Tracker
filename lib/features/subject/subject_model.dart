@@ -93,7 +93,42 @@ class Subject {
   bool get isSpecialClass =>
       schedule.isNotEmpty && schedule.every((slot) => slot.isSpecialClass);
 
+  /// Returns only the current/latest active schedule slots, filtering out old expired slots.
+  List<TimeSlot> get activeSchedule {
+    final now = normalizeDate(DateTime.now());
+    if (now == null) return schedule;
+
+    final active = schedule.where((slot) {
+      if (slot.isSpecialClass) {
+        final spec = normalizeDate(slot.specificDate);
+        if (spec != null && spec.isBefore(now)) {
+          return false;
+        }
+        return true;
+      }
+      final until = normalizeDate(slot.effectiveUntil);
+      if (until != null && until.isBefore(now)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (active.isEmpty && schedule.isNotEmpty) {
+      final maxFrom = schedule
+          .map((s) => normalizeDate(s.effectiveFrom))
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (max, date) => max == null || date.isAfter(max) ? date : max);
+      if (maxFrom != null) {
+        return schedule.where((s) => normalizeDate(s.effectiveFrom) == maxFrom).toList();
+      }
+      return schedule;
+    }
+
+    return active;
+  }
+
   DateTime? get specialClassDate {
+
     if (!isSpecialClass) {
       return null;
     }
@@ -219,6 +254,15 @@ extension SubjectManualOverrideExtension on Subject {
             '$_manualOverrideSlotKeyPrefix|held=$classesHeld|attended=$classesAttended',
       ),
     );
+
+    return copyWith(attendanceRecords: filtered);
+  }
+
+  Subject copyWithClearedManualAttendanceOverride() {
+    final filtered = attendanceRecords.where((record) {
+      final slotKey = record.slotKey ?? '';
+      return !slotKey.startsWith(_manualOverrideSlotKeyPrefix);
+    }).toList();
 
     return copyWith(attendanceRecords: filtered);
   }

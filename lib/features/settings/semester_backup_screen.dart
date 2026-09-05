@@ -29,13 +29,15 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBackupData();
+    _loadBackupData(isInitialLoad: true);
   }
 
-  Future<void> _loadBackupData() async {
-    setState(() {
-      _isLoading = true;
-    });
+  Future<void> _loadBackupData({bool isInitialLoad = false}) async {
+    if (isInitialLoad) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     final dirPath = await _backupService.getBackupDirectoryPath();
     final backupFiles = await _backupService.getBackupFiles();

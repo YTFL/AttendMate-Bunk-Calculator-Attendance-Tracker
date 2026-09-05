@@ -722,6 +722,24 @@ class DatabaseService {
     }
   }
 
+  /// Delete attendance records for a specific subject on or after a given date
+  Future<void> deleteAttendanceForSubjectFromDate(String subjectId, DateTime fromDate) async {
+    try {
+      final db = _getDb();
+      final normalizedDate = DateTime(fromDate.year, fromDate.month, fromDate.day);
+      await db.delete(
+        'attendance',
+        where: 'subjectId = ? AND date >= ?',
+        whereArgs: [subjectId, normalizedDate.toIso8601String()],
+      );
+      await BackupService().notifyDataChanged();
+    } catch (e) {
+      debugPrint('DatabaseService deleteAttendanceForSubjectFromDate error: $e');
+      rethrow;
+    }
+  }
+
+
   /// Delete all attendance records on a specific date
   Future<void> deleteAttendanceForDate(DateTime date) async {
     try {

@@ -9,6 +9,7 @@ import '../../services/database_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
+import '../calendar/calendar_utils.dart' hide isSameDay;
 import 'subject_model.dart';
 
 class TimetableUpdateResult {
@@ -73,10 +74,12 @@ class SubjectProvider with ChangeNotifier {
     }
   }
   
-  /// Reload subjects from database (useful after clearing data)
-  Future<void> reloadSubjects() async {
-    _isLoading = true;
-    notifyListeners();
+  /// Reload subjects from database (useful after clearing data or resuming from background)
+  Future<void> reloadSubjects({bool showLoading = false}) async {
+    if (showLoading) {
+      _isLoading = true;
+      notifyListeners();
+    }
     await _loadSubjects();
   }
 
@@ -109,10 +112,11 @@ class SubjectProvider with ChangeNotifier {
     DateTime effectiveFromDate,
   ) async {
     final normalizedEffectiveFrom = normalizeDate(effectiveFromDate) ?? effectiveFromDate;
-    final originalSubjectIds = _subjects.map((subject) => subject.id).toSet();
     final imported = List<Subject>.from(importedSubjects);
     final updatedSubjects = List<Subject>.from(_subjects);
     final matchedExistingIds = <String>{};
+    final affectedSubjectIds = <String>{};
+
 
     int matchedCount = 0;
     int changedCount = 0;
@@ -123,16 +127,6 @@ class SubjectProvider with ChangeNotifier {
         importedSubject: importedSubject,
         matchedExistingIds: matchedExistingIds,
       );
-
-      final importedWeeklySlots = importedSubject.schedule
-          .where((slot) => !slot.isSpecialClass)
-          .map(
-            (slot) => slot.copyWith(
-              effectiveFrom: normalizedEffectiveFrom,
-              clearEffectiveUntil: true,
-            ),
-          )
-          .toList();
 
       if (matchIndex == -1) {
         final seededSchedule = importedSubject.schedule.map((slot) {
@@ -152,6 +146,39 @@ class SubjectProvider with ChangeNotifier {
       matchedCount++;
       final existing = updatedSubjects[matchIndex];
       matchedExistingIds.add(existing.id);
+      affectedSubjectIds.add(existing.id);
+
+      final importedNewSlots = importedSubject.schedule.map((slot) {
+        TimeSlot? matchingExistingSlot;
+        for (final s in existing.schedule) {
+          if (s.day == slot.day &&
+              s.startTime.hour == slot.startTime.hour &&
+              s.startTime.minute == slot.startTime.minute) {
+            matchingExistingSlot = s;
+            break;
+          }
+        }
+
+        final slotRoom = slot.room ?? matchingExistingSlot?.room;
+        final slotBlock = slot.block ?? matchingExistingSlot?.block;
+        final slotLocationId = slot.locationId ?? matchingExistingSlot?.locationId;
+
+        if (slot.isSpecialClass) {
+          return slot.copyWith(
+            room: slotRoom,
+            block: slotBlock,
+            locationId: slotLocationId,
+          );
+        }
+
+        return slot.copyWith(
+          effectiveFrom: normalizedEffectiveFrom,
+          clearEffectiveUntil: true,
+          room: slotRoom,
+          block: slotBlock,
+          locationId: slotLocationId,
+        );
+      }).toList();
 
       final oldWeeklyBeforeCutoff = _closeWeeklySlotsFromDate(
         existing.schedule,
@@ -160,14 +187,20 @@ class SubjectProvider with ChangeNotifier {
 
       final mergedSchedule = <TimeSlot>[
         ...oldWeeklyBeforeCutoff,
-        ...importedWeeklySlots,
+        ...importedNewSlots,
       ];
 
       final updatedSubject = existing.copyWith(
         name: importedSubject.name,
         acronym: importedSubject.acronym,
+        color: importedSubject.color,
+        targetAttendance: importedSubject.targetAttendance,
+        room: () => importedSubject.room ?? existing.room,
+        block: () => importedSubject.block ?? existing.block,
+        locationId: () => importedSubject.locationId ?? existing.locationId,
         schedule: _sortedSchedule(mergedSchedule),
       );
+
 
       if (_scheduleFingerprint(existing.schedule) !=
           _scheduleFingerprint(updatedSubject.schedule)) {
@@ -177,36 +210,16 @@ class SubjectProvider with ChangeNotifier {
       updatedSubjects[matchIndex] = updatedSubject;
     }
 
-    int retiredCount = 0;
-
-    for (int i = 0; i < updatedSubjects.length; i++) {
-      final subject = updatedSubjects[i];
-      if (!originalSubjectIds.contains(subject.id)) {
-        continue;
-      }
-      if (matchedExistingIds.contains(subject.id)) {
-        continue;
-      }
-
-      final trimmedSchedule = _closeWeeklySlotsFromDate(
-        subject.schedule,
-        normalizedEffectiveFrom,
-      );
-
-      final hadWeeklySlots = subject.schedule.any((slot) => !slot.isSpecialClass);
-      final hasWeeklyAfterTrim = trimmedSchedule.any((slot) => !slot.isSpecialClass);
-      if (hadWeeklySlots && !hasWeeklyAfterTrim) {
-        retiredCount++;
-      }
-
-      if (_scheduleFingerprint(subject.schedule) != _scheduleFingerprint(trimmedSchedule)) {
-        changedCount++;
-        updatedSubjects[i] = subject.copyWith(schedule: _sortedSchedule(trimmedSchedule));
-      }
-    }
-
     _subjects = updatedSubjects;
     await _databaseService.saveSubjects(_subjects);
+
+    for (final subjectId in affectedSubjectIds) {
+      await _attendanceProvider.deleteRecordsForSubjectFromDate(
+        subjectId,
+        normalizedEffectiveFrom,
+      );
+    }
+
     await _refreshAttendanceReminders();
     notifyListeners();
     _scheduleAutoSync();
@@ -214,10 +227,11 @@ class SubjectProvider with ChangeNotifier {
     return TimetableUpdateResult(
       matchedSubjects: matchedCount,
       newSubjects: imported.length - matchedCount,
-      retiredSubjects: retiredCount,
+      retiredSubjects: 0,
       changedSubjectSchedules: changedCount,
     );
   }
+
 
   int _findMatchingSubjectIndex({
     required List<Subject> existingSubjects,
@@ -253,6 +267,10 @@ class SubjectProvider with ChangeNotifier {
 
     return schedule.where((slot) {
       if (slot.isSpecialClass) {
+        final specDate = normalizeDate(slot.specificDate);
+        if (specDate != null && !specDate.isBefore(effectiveFrom)) {
+          return false;
+        }
         return true;
       }
       final from = normalizeDate(slot.effectiveFrom);
@@ -273,6 +291,7 @@ class SubjectProvider with ChangeNotifier {
       return slot.copyWith(effectiveUntil: normalizedCutoffEnd);
     }).toList();
   }
+
 
   String _normalizeToken(String? value) {
     return (value ?? '').trim().toLowerCase();
@@ -377,6 +396,18 @@ class SubjectProvider with ChangeNotifier {
       classesAttended: classesAttended,
     );
 
+    _subjects[index] = updated;
+    await _databaseService.saveSubjects(_subjects);
+    notifyListeners();
+  }
+
+  Future<void> resetManualBaseline(String subjectId) async {
+    final index = _subjects.indexWhere((subject) => subject.id == subjectId);
+    if (index == -1) {
+      return;
+    }
+
+    final updated = _subjects[index].copyWithClearedManualAttendanceOverride();
     _subjects[index] = updated;
     await _databaseService.saveSubjects(_subjects);
     notifyListeners();
@@ -558,6 +589,13 @@ class SubjectProvider with ChangeNotifier {
     AttendanceStatus status, {
     String? slotKey,
   }) async {
+    final subjectIndex = subjects.indexWhere((s) => s.id == subjectId);
+    if (subjectIndex != -1) {
+      if (CalendarUtils.isLockedByManualOverride(subjects[subjectIndex], date)) {
+        return;
+      }
+    }
+
     await _attendanceProvider.markAttendance(
       subjectId,
       date,
@@ -570,6 +608,9 @@ class SubjectProvider with ChangeNotifier {
     final classesForDay = getClassesForDate(date);
     final records = <Attendance>[];
     for (var subject in classesForDay) {
+      if (CalendarUtils.isLockedByManualOverride(subject, date)) {
+        continue;
+      }
       for (final slot in subject.schedule) {
         records.add(Attendance(
           subjectId: subject.id,
@@ -579,13 +620,18 @@ class SubjectProvider with ChangeNotifier {
         ));
       }
     }
-    await _attendanceProvider.markMultipleAttendance(records);
+    if (records.isNotEmpty) {
+      await _attendanceProvider.markMultipleAttendance(records);
+    }
   }
 
   Future<void> markDayAsAbsent(DateTime date) async {
     final classesForDay = getClassesForDate(date);
     final records = <Attendance>[];
     for (var subject in classesForDay) {
+      if (CalendarUtils.isLockedByManualOverride(subject, date)) {
+        continue;
+      }
       for (final slot in subject.schedule) {
         records.add(Attendance(
           subjectId: subject.id,
@@ -595,7 +641,9 @@ class SubjectProvider with ChangeNotifier {
         ));
       }
     }
-    await _attendanceProvider.markMultipleAttendance(records);
+    if (records.isNotEmpty) {
+      await _attendanceProvider.markMultipleAttendance(records);
+    }
   }
 
   /// Check if a date is marked as a holiday
@@ -605,7 +653,7 @@ class SubjectProvider with ChangeNotifier {
 
   /// Check if there are any classes scheduled for a given date (day of week)
   bool hasClassesOnDate(DateTime date) {
-    return _subjects.any((subject) => subject.schedule.any((s) => s.occursOnDate(date)));
+    return subjects.any((subject) => subject.schedule.any((s) => s.occursOnDate(date)));
   }
 
   /// Get all cancelled (holiday) attendance records for a specific date
@@ -618,6 +666,13 @@ class SubjectProvider with ChangeNotifier {
 
   /// Delete attendance record for a specific subject on a specific date
   Future<void> unmarkAttendance(String subjectId, DateTime date, {String? slotKey}) async {
+    final subjectIndex = subjects.indexWhere((s) => s.id == subjectId);
+    if (subjectIndex != -1) {
+      if (CalendarUtils.isLockedByManualOverride(subjects[subjectIndex], date)) {
+        return;
+      }
+    }
+
     await _attendanceProvider.deleteRecordForSubjectOnDate(
       subjectId,
       date,
@@ -632,8 +687,12 @@ class SubjectProvider with ChangeNotifier {
   }
 
   Future<void> markDayAsPresent(DateTime date) async {
+    final classesForDay = getClassesForDate(date);
     final records = <Attendance>[];
-    for (var subject in _subjects) {
+    for (var subject in classesForDay) {
+      if (CalendarUtils.isLockedByManualOverride(subject, date)) {
+        continue;
+      }
       final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date));
       for (final slot in slotsForDay) {
         records.add(Attendance(
@@ -644,7 +703,9 @@ class SubjectProvider with ChangeNotifier {
         ));
       }
     }
-    await _attendanceProvider.markMultipleAttendance(records);
+    if (records.isNotEmpty) {
+      await _attendanceProvider.markMultipleAttendance(records);
+    }
   }
 
   /// Auto-mark all unmarked classes as present at end of day
@@ -656,8 +717,12 @@ class SubjectProvider with ChangeNotifier {
       return;
     }
 
+    final classesForDay = getClassesForDate(date);
     final records = <Attendance>[];
-    for (var subject in _subjects) {
+    for (var subject in classesForDay) {
+      if (CalendarUtils.isLockedByManualOverride(subject, date)) {
+        continue;
+      }
       final slotsForDay = subject.schedule.where((s) => s.occursOnDate(date)).toList();
       if (slotsForDay.isEmpty) {
         continue;
@@ -680,7 +745,9 @@ class SubjectProvider with ChangeNotifier {
         }
       }
     }
-    await _attendanceProvider.markMultipleAttendance(records);
+    if (records.isNotEmpty) {
+      await _attendanceProvider.markMultipleAttendance(records);
+    }
   }
 
   Timer? _autoSyncTimer;

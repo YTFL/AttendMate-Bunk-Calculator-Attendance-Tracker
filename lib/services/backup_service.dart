@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -49,6 +50,8 @@ class BackupService {
   static const int maxRollingBackups = 3;
   static const MethodChannel _fileChannel = MethodChannel('com.attendmate.app/file_import');
 
+  Timer? _autoBackupDebounceTimer;
+
   /// Check if automatic backups are enabled by user
   Future<bool> isBackupEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -65,6 +68,30 @@ class BackupService {
   Future<void> notifyDataChanged() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefHasUnbackedChangesKey, true);
+    scheduleDebouncedAutoBackup();
+  }
+
+  /// Schedule a debounced auto-backup 3 seconds after data changes
+  void scheduleDebouncedAutoBackup() {
+    _autoBackupDebounceTimer?.cancel();
+    _autoBackupDebounceTimer = Timer(const Duration(seconds: 3), () async {
+      final isEnabled = await isBackupEnabled();
+      final hasPath = await hasUserSetBackupDirectory();
+      if (isEnabled && hasPath) {
+        debugPrint('BackupService: Triggering debounced auto-backup after data change...');
+        await createBackup(
+          showNotification: false,
+          triggerReason: 'Auto-backup after data change',
+          force: false,
+        );
+      }
+    });
+  }
+
+  /// Cancel any pending debounced auto-backup
+  void cancelDebouncedAutoBackup() {
+    _autoBackupDebounceTimer?.cancel();
+    _autoBackupDebounceTimer = null;
   }
 
   /// Check if there are unsaved data changes requiring a backup
@@ -207,6 +234,11 @@ class BackupService {
 
       if (!success) {
         debugPrint('BackupService: Native writeBackupFile returned false');
+        await DatabaseService().logAppEvent(
+          tag: 'BackupService',
+          message: 'Auto-backup failed: Storage write returned false',
+          level: 'ERROR',
+        );
         return null;
       }
 
@@ -216,9 +248,11 @@ class BackupService {
       // Enforce the 3 rolling backups limit immediately
       await enforceRollingLimit();
 
+      final reasonText = triggerReason != null ? " [$triggerReason]" : "";
       await DatabaseService().logAppEvent(
         tag: 'BackupService',
-        message: 'Backup successfully created: $filename ${triggerReason != null ? "($triggerReason)" : ""}',
+        message: 'Automatic backup created: $filename$reasonText',
+        level: 'INFO',
       );
 
       if (showNotification) {
@@ -237,7 +271,7 @@ class BackupService {
       debugPrint('BackupService createBackup error: $e');
       await DatabaseService().logAppEvent(
         tag: 'BackupService',
-        message: 'Failed to create backup: $e',
+        message: 'Auto-backup failed with error: $e',
         level: 'ERROR',
       );
       return null;
@@ -245,13 +279,14 @@ class BackupService {
   }
 
   /// Helper to fetch raw list of backup file maps from either SAF tree URI or direct directory path
-  Future<List<Map<String, dynamic>>> _fetchBackupFilesRaw(String dirPath) async {
+  Future<List<Map<String, dynamic>>> _fetchBackupFilesRaw(String dirPath, {bool includeContent = true}) async {
     final List<Map<String, dynamic>> items = [];
 
     if (dirPath.startsWith('content://')) {
       try {
         final List<dynamic>? rawList = await _fileChannel.invokeMethod('getBackupFiles', {
           'dirUri': dirPath,
+          'includeContent': includeContent,
         });
         if (rawList != null) {
           items.addAll(rawList.map((e) => Map<String, dynamic>.from(e as Map)));
@@ -268,7 +303,7 @@ class BackupService {
               if (fileName.startsWith('attendmate_backup_') && fileName.endsWith('.json')) {
                 try {
                   final stat = await entity.stat();
-                  final content = await entity.readAsString();
+                  final content = includeContent ? await entity.readAsString() : '';
                   items.add({
                     'fileName': fileName,
                     'fileSizeBytes': stat.size,
@@ -292,7 +327,7 @@ class BackupService {
       final dirPath = await getBackupDirectoryPath();
       if (dirPath == null || dirPath.trim().isEmpty) return;
 
-      final items = await _fetchBackupFilesRaw(dirPath);
+      final items = await _fetchBackupFilesRaw(dirPath, includeContent: false);
       if (items.length <= maxRollingBackups) return;
 
       items.sort((a, b) {

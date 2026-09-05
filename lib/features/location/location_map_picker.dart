@@ -109,10 +109,28 @@ class _InteractiveMapPickerDialogState extends State<InteractiveMapPickerDialog>
         }
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      _updateCoordinates(pos.latitude, pos.longitude, moveCamera: true);
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (_) {
+        pos = await Geolocator.getLastKnownPosition();
+      }
+
+      final currentPos = pos;
+      if (currentPos != null) {
+        _updateCoordinates(currentPos.latitude, currentPos.longitude, moveCamera: true);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not obtain current or last known GPS location. Please try again.')),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

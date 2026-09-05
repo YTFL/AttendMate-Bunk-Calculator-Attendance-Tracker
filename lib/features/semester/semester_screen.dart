@@ -4,12 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/database_service.dart';
 import '../../services/semester_share_service.dart';
+import '../../utils/attendance_math.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../attendance/attendance_model.dart';
 import '../attendance/attendance_provider.dart';
+import '../planner/planned_leave_model.dart';
+import '../planner/projected_attendance_calculator.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import 'semester_model.dart';
@@ -31,6 +35,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
   double? _targetPercentage;
   late TextEditingController _targetPercentageController;
   bool _isEditingParameters = false;
+  List<PlannedLeave> _plannedLeaves = [];
 
   @override
   void initState() {
@@ -45,6 +50,16 @@ class _SemesterScreenState extends State<SemesterScreen> {
     _targetPercentageController = TextEditingController(
       text: _targetPercentage?.toStringAsFixed(0) ?? '75',
     );
+    _loadPlannedLeaves();
+  }
+
+  Future<void> _loadPlannedLeaves() async {
+    final leaves = await DatabaseService().loadPlannedLeaves();
+    if (mounted) {
+      setState(() {
+        _plannedLeaves = leaves;
+      });
+    }
   }
 
   @override
@@ -615,7 +630,6 @@ class _SemesterScreenState extends State<SemesterScreen> {
     }
 
     final targetPercentage = semester.targetPercentage;
-    final targetRatio = targetPercentage / 100;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final endDate = today.isAfter(semester.endDate) ? semester.endDate : today;
@@ -644,15 +658,23 @@ class _SemesterScreenState extends State<SemesterScreen> {
         : (totalAttended / totalMarked) * 100;
     final slackPercentage = currentPercentage - targetPercentage;
 
+    final semesterProjection = ProjectedAttendanceCalculator.calculateForSemester(
+      subjects: subjects,
+      attendanceRecords: attendanceProvider.attendanceRecords,
+      semester: semester,
+      plannedLeaves: _plannedLeaves,
+    );
+
     int futureScheduled = totalClassesInSemester - scheduledSoFar;
     if (futureScheduled < 0) futureScheduled = 0;
 
-    // Current-state bunkable: how many classes you've "saved" or "over-spent" relative to target.
-    // Positive = surplus (you could have bunked this many more and still been at target).
-    // Negative = deficit (you've bunked this many too many — must make them up).
-    final int bunkable = totalMarked == 0
-        ? 0
-        : (totalAttended - targetRatio * totalMarked).floor();
+    // Current-state bunkable: how many classes can be safely bunked (surplus)
+    // or how many classes must be attended to recover target (deficit).
+    final int bunkable = AttendanceMath.calculateBunkableDeficitOrSurplus(
+      attended: totalAttended,
+      marked: totalMarked,
+      targetPercentage: targetPercentage,
+    );
 
     String message;
     Color statusColor;
@@ -663,9 +685,15 @@ class _SemesterScreenState extends State<SemesterScreen> {
       statusColor = const Color(0xFF4CAF50);
       statusIcon = Icons.check_circle_outline_rounded;
     } else if (bunkable == 0) {
-      message = 'Attendance is exactly at target';
-      statusColor = const Color(0xFFFFA726);
-      statusIcon = Icons.adjust_rounded;
+      if (currentPercentage > targetPercentage) {
+        message = 'Attendance is above target (0 bunkable classes)';
+        statusColor = const Color(0xFF4CAF50);
+        statusIcon = Icons.check_circle_outline_rounded;
+      } else {
+        message = 'Attendance is exactly at target';
+        statusColor = const Color(0xFFFFA726);
+        statusIcon = Icons.adjust_rounded;
+      }
     } else {
       message = 'You are ${bunkable.abs()} classes short of target';
       statusColor = const Color(0xFFEF5350);
@@ -820,8 +848,348 @@ class _SemesterScreenState extends State<SemesterScreen> {
               ],
             ),
           ),
+          if (semesterProjection.hasActivePlannedLeave) ...[
+            SizedBox(height: rs.height(10)),
+            InkWell(
+              borderRadius: BorderRadius.circular(rs.scale(12)),
+              onTap: () => _showProjectedAttendanceDetailDialog(
+                context: context,
+                semester: semester,
+                semesterProjection: semesterProjection,
+                subjects: subjects,
+              ),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: rs.width(12),
+                  vertical: rs.height(10),
+                ),
+                decoration: BoxDecoration(
+                  color: semesterProjection.projectedSlack >= 0
+                      ? const Color(0xFF4CAF50).withValues(alpha: isDarkMode ? 0.15 : 0.08)
+                      : const Color(0xFFEF5350).withValues(alpha: isDarkMode ? 0.15 : 0.08),
+                  borderRadius: BorderRadius.circular(rs.scale(12)),
+                  border: Border.all(
+                    color: semesterProjection.projectedSlack >= 0
+                        ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+                        : const Color(0xFFEF5350).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_available_rounded,
+                      color: semesterProjection.projectedSlack >= 0
+                          ? const Color(0xFF4CAF50)
+                          : const Color(0xFFEF5350),
+                      size: rs.scale(20),
+                    ),
+                    SizedBox(width: rs.width(8)),
+                    Expanded(
+                      child: Text(
+                        'Projected (After Leave): ${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: rs.font(13),
+                          fontWeight: FontWeight.bold,
+                          color: semesterProjection.projectedSlack >= 0
+                              ? (isDarkMode ? Colors.green.shade300 : Colors.green.shade900)
+                              : (isDarkMode ? Colors.red.shade300 : Colors.red.shade900),
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: rs.scale(18),
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  void _showProjectedAttendanceDetailDialog({
+    required BuildContext context,
+    required Semester semester,
+    required SemesterProjectedAttendance semesterProjection,
+    required List<Subject> subjects,
+  }) {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    final latestLeaveEnd = semesterProjection.latestLeaveEndDate ?? DateTime.now();
+
+    final recoveryResult = ProjectedAttendanceCalculator.calculateClassesNeededAfterLeave(
+      subjects: subjects,
+      semester: semester,
+      projectedAttended: semesterProjection.totalAttended,
+      projectedMarked: semesterProjection.totalMarked,
+      leaveEndDate: latestLeaveEnd,
+      targetPercentage: semester.targetPercentage,
+    );
+
+    final isBelowTarget = semesterProjection.projectedSlack < 0;
+
+    showDialog(
+      context: context,
+      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(rs.scale(20)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(rs.scale(8)),
+              decoration: BoxDecoration(
+                color: (isBelowTarget ? Colors.red : Colors.green).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.event_available_rounded,
+                color: isBelowTarget ? Colors.red : Colors.green,
+                size: rs.scale(22),
+              ),
+            ),
+            SizedBox(width: rs.width(10)),
+            Expanded(
+              child: Text(
+                'Projected Leave Overview',
+                style: TextStyle(
+                  fontSize: rs.font(16),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(rs.scale(12)),
+                decoration: BoxDecoration(
+                  color: (isBelowTarget ? Colors.red : Colors.green).withValues(alpha: isDarkMode ? 0.15 : 0.08),
+                  borderRadius: BorderRadius.circular(rs.scale(12)),
+                  border: Border.all(
+                    color: (isBelowTarget ? Colors.red : Colors.green).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Projected After Leave',
+                          style: TextStyle(
+                            fontSize: rs.font(11),
+                            color: theme.textTheme.bodySmall?.color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(height: rs.height(4)),
+                        Text(
+                          '${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: rs.font(24),
+                            fontWeight: FontWeight.bold,
+                            color: isBelowTarget ? Colors.red : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Target: ${semester.targetPercentage.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            fontSize: rs.font(12),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: rs.height(4)),
+                        Text(
+                          '${semesterProjection.projectedSlack >= 0 ? '+' : ''}${semesterProjection.projectedSlack.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: rs.font(12),
+                            fontWeight: FontWeight.bold,
+                            color: isBelowTarget ? Colors.red : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: rs.height(14)),
+
+              Text(
+                'Breakdown up to Leave End',
+                style: TextStyle(
+                  fontSize: rs.font(13),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: rs.height(8)),
+              _buildDetailRow(
+                rs: rs,
+                theme: theme,
+                icon: Icons.event_busy_rounded,
+                iconColor: Colors.red,
+                label: 'Classes Missed During Leave',
+                value: '${semesterProjection.totalPlannedMissed} classes',
+              ),
+              SizedBox(height: rs.height(6)),
+              _buildDetailRow(
+                rs: rs,
+                theme: theme,
+                icon: Icons.check_circle_outline_rounded,
+                iconColor: Colors.green,
+                label: 'Upcoming Assumed Present',
+                value: '${semesterProjection.totalAssumedPresent} classes',
+              ),
+
+              SizedBox(height: rs.height(14)),
+              const Divider(),
+              SizedBox(height: rs.height(10)),
+
+              Text(
+                'After Planned Leave Requirements',
+                style: TextStyle(
+                  fontSize: rs.font(13),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: rs.height(8)),
+
+              if (isBelowTarget) ...[
+                Container(
+                  padding: EdgeInsets.all(rs.scale(12)),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: isDarkMode ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.amber.shade800,
+                            size: rs.scale(20),
+                          ),
+                          SizedBox(width: rs.width(8)),
+                          Expanded(
+                            child: Text(
+                              recoveryResult.isAchievable
+                                  ? 'Must attend next ${recoveryResult.classesNeeded} classes continuously after leave'
+                                  : 'Target unreachable after leave (Max: ${recoveryResult.maxAchievablePercentage.toStringAsFixed(1)}%)',
+                              style: TextStyle(
+                                fontSize: rs.font(13),
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: rs.height(6)),
+                      Text(
+                        recoveryResult.isAchievable
+                            ? 'Attending ${recoveryResult.classesNeeded} classes continuously after ${DateFormat.yMMMd().format(latestLeaveEnd)} will restore your overall attendance to the ${semester.targetPercentage.toStringAsFixed(0)}% target.'
+                            : 'Even attending all ${recoveryResult.remainingAfterLeave} remaining classes after leave will only reach ${recoveryResult.maxAchievablePercentage.toStringAsFixed(1)}%.',
+                        style: TextStyle(
+                          fontSize: rs.font(12),
+                          color: theme.textTheme.bodySmall?.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                Container(
+                  padding: EdgeInsets.all(rs.scale(12)),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: isDarkMode ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.green,
+                        size: rs.scale(20),
+                      ),
+                      SizedBox(width: rs.width(8)),
+                      Expanded(
+                        child: Text(
+                          'Your attendance remains on track above the target after the leave!',
+                          style: TextStyle(
+                            fontSize: rs.font(12),
+                            fontWeight: FontWeight.w600,
+                            color: isDarkMode ? Colors.green.shade200 : Colors.green.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow({
+    required ResponsiveScale rs,
+    required ThemeData theme,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: rs.scale(16), color: iconColor),
+        SizedBox(width: rs.width(8)),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: rs.font(12),
+              color: theme.textTheme.bodySmall?.color,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: rs.font(12),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1169,7 +1537,6 @@ class _SemesterScreenState extends State<SemesterScreen> {
     }
 
     final targetPercentage = semester.targetPercentage;
-    final targetRatio = targetPercentage / 100;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final endDate = today.isAfter(semester.endDate) ? semester.endDate : today;
@@ -1204,11 +1571,13 @@ class _SemesterScreenState extends State<SemesterScreen> {
     int futureScheduled = totalClassesInSemester - scheduledSoFar;
     if (futureScheduled < 0) futureScheduled = 0;
 
-    // Current-state bunkable: attended - target × marked.
-    // Positive = surplus, Negative = deficit.
-    final int bunkable = totalMarked == 0
-        ? 0
-        : (totalAttended - targetRatio * totalMarked).floor();
+    // Current-state bunkable: how many classes can be safely bunked (surplus)
+    // or how many classes must be attended to recover target (deficit).
+    final int bunkable = AttendanceMath.calculateBunkableDeficitOrSurplus(
+      attended: totalAttended,
+      marked: totalMarked,
+      targetPercentage: targetPercentage,
+    );
 
 
     final slackText =

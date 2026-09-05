@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../utils/attendance_math.dart';
 import '../../utils/responsive_scale.dart';
 import '../attendance/attendance_model.dart';
 import '../attendance/attendance_provider.dart';
@@ -11,6 +12,7 @@ import '../semester/semester_provider.dart';
 import '../../utils/string_extension.dart';
 import '../../services/database_service.dart';
 import '../planner/planned_leave_model.dart';
+import '../planner/projected_attendance_calculator.dart';
 import '../planner/leave_planner_screen.dart';
 import '../calendar/calendar_screen.dart';
 import '../tutorial/tutorial_controller.dart';
@@ -44,35 +46,6 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
         _plannedLeaves = leaves;
       });
     }
-  }
-
-  int _calculatePlannedLeaveMissedClasses(Subject subject, List<PlannedLeave> leaves) {
-    final now = DateTime.now();
-    int count = 0;
-    for (final leave in leaves) {
-      if (!leave.affectedSubjectIds.contains(subject.id)) continue;
-      if (now.isAfter(leave.endDate)) continue;
-
-      final startDay = DateTime(leave.startDate.year, leave.startDate.month, leave.startDate.day);
-      final endDay = DateTime(leave.endDate.year, leave.endDate.month, leave.endDate.day);
-
-      DateTime cur = startDay;
-      while (!cur.isAfter(endDay)) {
-        for (final slot in subject.schedule) {
-          if (slot.occursOnDate(cur)) {
-            final slotStart = DateTime(cur.year, cur.month, cur.day, slot.startTime.hour, slot.startTime.minute);
-            final slotEnd = DateTime(cur.year, cur.month, cur.day, slot.endTime.hour, slot.endTime.minute);
-            if (slotStart.isAfter(now) || (slotStart.year == now.year && slotStart.month == now.month && slotStart.day == now.day)) {
-              if (slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate)) {
-                count++;
-              }
-            }
-          }
-        }
-        cur = cur.add(const Duration(days: 1));
-      }
-    }
-    return count;
   }
 
   @override
@@ -346,364 +319,137 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                   ),
                 )
               : ListView.builder(
-      key: ValueKey(Theme.of(context).brightness),
-      itemCount: filteredSubjects.length,
-      itemBuilder: (context, index) {
-        final subject = filteredSubjects[index];
-        final snapshot = snapshots[subject.id]!;
+                  key: ValueKey(Theme.of(context).brightness),
+                  itemCount: filteredSubjects.length,
+                  itemBuilder: (context, index) {
+                    final subject = filteredSubjects[index];
+                    final snapshot = snapshots[subject.id]!;
+                    final isExpanded = _expandedSubjectIds.contains(subject.id);
 
-        if (snapshot.totalClassesInWindow == 0 && snapshot.classesHeldSoFar == 0) {
-          final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-          final isExpanded = _expandedSubjectIds.contains(subject.id);
-          return Card(
-            elevation: 3.0,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8.0),
-              side: BorderSide(
-                color: isDarkMode
-                    ? Colors.white.withValues(alpha: 0.4)
-                    : Colors.black.withValues(alpha: 0.2),
-                width: 1.5,
-              ),
-            ),
-            shadowColor: isDarkMode
-                ? Colors.white.withValues(alpha: 0.3)
-                : Colors.black.withValues(alpha: 0.4),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8.0),
-              onTap: () {
-                setState(() {
-                  if (isExpanded) {
-                    _expandedSubjectIds.remove(subject.id);
-                  } else {
-                    _expandedSubjectIds.add(subject.id);
-                  }
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20.6,
-                          backgroundColor: subject.color,
-                          child: Center(
-                            child: Text(
-                              subject.acronym ?? '',
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              softWrap: true,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                                height: 1.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            subject.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'No classes scheduled for this subject in the semester.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
-                    ),
-                  ],
+                    final subjectProjection = ProjectedAttendanceCalculator.calculateForSubject(
+                      subject: subject,
+                      attendanceRecords: attendanceProvider.attendanceRecords,
+                      semester: semester,
+                      plannedLeaves: _plannedLeaves,
+                    );
+
+                    final classesHeldSoFar = snapshot.classesHeldSoFar;
+                    final attendedClasses = snapshot.attendedClasses;
+                    final absentClasses = snapshot.absentClasses;
+                    final markedClasses = snapshot.markedClasses;
+                    final currentPercentage =
+                        (markedClasses == 0) ? 100.0 : (attendedClasses / markedClasses) * 100;
+
+                    // Calculate future bunking ability or required attendance
+                    String message;
+                    Color messageColor;
+                    String compactStatus;
+
+                    if (snapshot.totalClassesInWindow == 0 && snapshot.classesHeldSoFar == 0) {
+                      message = 'No classes scheduled for this subject in the semester.';
+                      compactStatus = 'No classes scheduled for this subject in the semester.';
+                      messageColor = Colors.grey;
+                    } else {
+                      final currentRatio = (markedClasses == 0)
+                          ? 1.0
+                          : (attendedClasses / markedClasses);
+
+                      final double targetPercentage = subject.targetAttendance / 100.0;
+
+                      int futureScheduled = snapshot.totalClassesInWindow - snapshot.scheduledSoFarInWindow;
+                      if (futureScheduled < 0) {
+                        futureScheduled = 0;
+                      }
+
+                      if (currentRatio >= targetPercentage) {
+                        // Already at or above target
+                        final maxBunkable = AttendanceMath.calculateBunkableClasses(
+                          attended: attendedClasses,
+                          marked: markedClasses,
+                          targetPercentage: subject.targetAttendance.toDouble(),
+                        );
+                        final bunkable = maxBunkable.clamp(0, futureScheduled);
+
+                        if (bunkable == 0) {
+                          message = 'You currently cannot bunk anymore classes';
+                          compactStatus = 'Can\'t bunk';
+                        } else {
+                          message = 'You can bunk next $bunkable classes continously';
+                          compactStatus = 'Bunkable: $bunkable';
+                        }
+                        messageColor = Colors.green.shade700;
+                      } else {
+                        // Below target - need to attend more classes
+                        final neededClasses = AttendanceMath.calculateClassesNeededToReachTarget(
+                          attended: attendedClasses,
+                          marked: markedClasses,
+                          targetPercentage: subject.targetAttendance.toDouble(),
+                        );
+
+                        // Check if target is achievable with remaining classes
+                        if (neededClasses != -1 && neededClasses <= futureScheduled) {
+                          message = 'Must attend next $neededClasses classes';
+                          compactStatus = 'Must attend: $neededClasses';
+                          messageColor = Colors.orange.shade700;
+                        } else {
+                          // Target is not achievable
+                          final maxAttainableFuture = attendedClasses + futureScheduled;
+                          final maxAttainableMarked = markedClasses + futureScheduled;
+                          final maxAttainablePercentage =
+                              (maxAttainableMarked == 0) ? 100.0 : (maxAttainableFuture / maxAttainableMarked) * 100;
+
+                          message = 'Target unreachable (max ${maxAttainablePercentage.toStringAsFixed(1)}%)';
+                          compactStatus = 'Can\'t reach target';
+                          messageColor = Colors.red.shade700;
+                        }
+                      }
+                    }
+
+                    return _BunkMeterSubjectCard(
+                      key: ValueKey(subject.id),
+                      subject: subject,
+                      snapshot: snapshot,
+                      isExpanded: isExpanded,
+                      onExpansionChanged: (expanded) {
+                        setState(() {
+                          if (expanded) {
+                            _expandedSubjectIds.add(subject.id);
+                          } else {
+                            _expandedSubjectIds.remove(subject.id);
+                          }
+                        });
+                      },
+                      subjectProjection: subjectProjection,
+                      message: message,
+                      messageColor: messageColor,
+                      compactStatus: compactStatus,
+                      currentPercentage: currentPercentage,
+                      classesHeldSoFar: classesHeldSoFar,
+                      attendedClasses: attendedClasses,
+                      absentClasses: absentClasses,
+                      today: today,
+                      subjectProvider: subjectProvider,
+                      onUpdateCountsManually: () => _showManualCountUpdateDialog(
+                        subject: subject,
+                        subjectProvider: subjectProvider,
+                        currentHeld: classesHeldSoFar,
+                        currentAttended: attendedClasses,
+                        effectiveFrom: today,
+                      ),
+                      onShowManualBaselineTooltip: () => _showManualBaselineTooltip(
+                        context: context,
+                        subject: subject,
+                        subjectProvider: subjectProvider,
+                        countingStart: snapshot.countingStart,
+                      ),
+                    );
+                  },
                 ),
-              ),
-            ),
-          );
-        }
-
-        final classesHeldSoFar = snapshot.classesHeldSoFar;
-        final attendedClasses = snapshot.attendedClasses;
-        final absentClasses = snapshot.absentClasses;
-        final markedClasses = snapshot.markedClasses;
-        final currentPercentage =
-            (markedClasses == 0) ? 100.0 : (attendedClasses / markedClasses) * 100;
-
-        // Calculate future bunking ability or required attendance
-        String message;
-        Color messageColor;
-        String compactStatus;
-
-        final currentRatio = (markedClasses == 0)
-            ? 1.0
-            : (attendedClasses / markedClasses);
-
-        final double targetPercentage = subject.targetAttendance / 100.0;
-
-        int futureScheduled = snapshot.totalClassesInWindow - snapshot.scheduledSoFarInWindow;
-        if (futureScheduled < 0) {
-          futureScheduled = 0;
-        }
-
-        if (currentRatio >= targetPercentage) {
-          // Already at or above target
-          int bunkable = 0;
-          int simulatedMarked = markedClasses;
-          int simulatedAttended = attendedClasses;
-
-          while (bunkable < futureScheduled) {
-            final nextMarked = simulatedMarked + 1;
-            final nextRatio = (nextMarked == 0) ? 1.0 : (simulatedAttended / nextMarked);
-            if (nextRatio >= targetPercentage) {
-              bunkable++;
-              simulatedMarked = nextMarked;
-            } else {
-              break;
-            }
-          }
-
-          if (bunkable == 0) {
-            message = 'You currently cannot bunk anymore classes';
-            compactStatus = 'Can\'t bunk';
-          } else {
-            message = 'You can bunk next $bunkable classes continously';
-            compactStatus = 'Bunkable: $bunkable';
-          }
-          messageColor = Colors.green.shade700;
-        } else {
-          // Below target - need to attend more classes
-          int neededClasses = 0;
-          int simulatedMarked = markedClasses;
-          int simulatedAttended = attendedClasses;
-
-          // Calculate how many classes need to be attended
-          while (simulatedMarked == 0 || (simulatedAttended / simulatedMarked) < targetPercentage) {
-            simulatedMarked++;
-            simulatedAttended++;
-            neededClasses++;
-          }
-
-          // Check if target is achievable with remaining classes
-          if (neededClasses <= futureScheduled) {
-            message = 'Must attend next $neededClasses classes';
-            compactStatus = 'Must attend: $neededClasses';
-            messageColor = Colors.orange.shade700;
-          } else {
-            // Target is not achievable
-            final maxAttainableFuture = attendedClasses + futureScheduled;
-            final maxAttainableMarked = markedClasses + futureScheduled;
-            final maxAttainablePercentage =
-                (maxAttainableMarked == 0) ? 100.0 : (maxAttainableFuture / maxAttainableMarked) * 100;
-
-            message = 'Target unreachable (max ${maxAttainablePercentage.toStringAsFixed(1)}%)';
-            compactStatus = 'Can\'t reach target';
-            messageColor = Colors.red.shade700;
-          }
-        }
-
-        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-        final isExpanded = _expandedSubjectIds.contains(subject.id);
-
-        final int plannedMissed = _calculatePlannedLeaveMissedClasses(subject, _plannedLeaves);
-        final double projectedRatio = (markedClasses + plannedMissed) == 0
-            ? 100.0
-            : (attendedClasses / (markedClasses + plannedMissed)) * 100;
-        final bool projectedBelowTarget = projectedRatio < targetPercentage * 100;
-
-        return Card(
-          elevation: 3.0,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-            side: BorderSide(
-              color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.4)
-                  : Colors.black.withValues(alpha: 0.2),
-              width: 1.5,
-            ),
-          ),
-          shadowColor: isDarkMode
-              ? Colors.white.withValues(alpha: 0.3)
-              : Colors.black.withValues(alpha: 0.4),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8.0),
-            onTap: () {
-              setState(() {
-                if (isExpanded) {
-                  _expandedSubjectIds.remove(subject.id);
-                } else {
-                  _expandedSubjectIds.add(subject.id);
-                }
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 20.6,
-                        backgroundColor: subject.color,
-                        child: Center(
-                          child: Text(
-                            subject.acronym ?? subject.name.acronymFromName(),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            softWrap: true,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                              height: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              subject.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              'Target: ${subject.targetAttendance}%',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        isExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    isExpanded ? message : compactStatus,
-                    style: TextStyle(fontSize: 14, color: messageColor, fontWeight: FontWeight.w600),
-                  ),
-                  if (plannedMissed > 0) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: projectedBelowTarget
-                            ? Colors.red.withValues(alpha: 0.1)
-                            : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: projectedBelowTarget
-                              ? Colors.red.shade300
-                              : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.event_available_outlined,
-                            size: 14,
-                            color: projectedBelowTarget ? Colors.red : (isDarkMode ? Colors.white70 : Colors.black87),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Projected (After Leave): ${projectedRatio.toStringAsFixed(1)}% ($plannedMissed class${plannedMissed > 1 ? "es" : ""} missed)',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: projectedBelowTarget ? Colors.red.shade700 : (isDarkMode ? Colors.white70 : Colors.black87),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (isExpanded) ...[
-                    const SizedBox(height: 10),
-                    const Divider(height: 1),
-                    const SizedBox(height: 10),
-                    if (snapshot.manualOverride != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          'Manual baseline active from ${snapshot.countingStart.day}/${snapshot.countingStart.month}/${snapshot.countingStart.year}. Any attendance or timetable changes before this date are ignored in this card.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange.shade800,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildStatColumn('Classes Held', classesHeldSoFar.toString()),
-                        _buildStatColumn('Attended', attendedClasses.toString()),
-                        _buildStatColumn('Bunked', absentClasses.toString()),
-                        _buildStatColumn('Current %', '${currentPercentage.toStringAsFixed(1)}%'),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showManualCountUpdateDialog(
-                          subject: subject,
-                          subjectProvider: subjectProvider,
-                          currentHeld: classesHeldSoFar,
-                          currentAttended: attendedClasses,
-                          effectiveFrom: today,
-                        ),
-                        icon: const Icon(Icons.edit_calendar_outlined),
-                        label: const Text('Update Counts Manually'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-          ),
         ),
       ],
     );
   }
 
-  Widget _buildStatColumn(String title, String value) {
-    return Column(
-      children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
 
   /// Sort subjects: ones that need attendance (below target) first, then alphabetically
   List<Subject> _getSortedSubjects(
@@ -806,6 +552,77 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     );
   }
 
+  Future<void> _showManualBaselineTooltip({
+    required BuildContext context,
+    required Subject subject,
+    required SubjectProvider subjectProvider,
+    required DateTime countingStart,
+  }) async {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: rs.scale(24)),
+              SizedBox(width: rs.width(8)),
+              Expanded(
+                child: Text(
+                  'Manual Baseline',
+                  style: TextStyle(fontSize: rs.font(16), fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Manual baseline active from ${countingStart.day}/${countingStart.month}/${countingStart.year}. Any attendance or timetable changes before this date are ignored in this card.',
+                style: TextStyle(
+                  fontSize: rs.font(13),
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+              ),
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                await subjectProvider.resetManualBaseline(subject.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Manual baseline reset for ${subject.name}.'),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.restart_alt_rounded, size: 18),
+              label: const Text('Reset Baseline'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _showManualCountUpdateDialog({
     required Subject subject,
     required SubjectProvider subjectProvider,
@@ -831,10 +648,23 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
         effectiveFrom: effectiveFrom,
         initialHeld: currentHeld,
         initialAttended: currentAttended,
+        hasManualOverride: subject.manualAttendanceOverride != null,
       ),
     );
 
     if (manualInput == null || !mounted) {
+      return;
+    }
+
+    if (manualInput.isReset) {
+      await subjectProvider.resetManualBaseline(subject.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Manual baseline reset for ${subject.name}.'),
+          ),
+        );
+      }
       return;
     }
 
@@ -843,6 +673,331 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       classesHeld: manualInput.held,
       classesAttended: manualInput.attended,
       effectiveFrom: effectiveFrom,
+    );
+  }
+}
+
+class _BunkMeterSubjectCard extends StatefulWidget {
+  final Subject subject;
+  final _SubjectAttendanceSnapshot snapshot;
+  final bool isExpanded;
+  final ValueChanged<bool> onExpansionChanged;
+  final SubjectProjectedAttendance subjectProjection;
+  final String message;
+  final Color messageColor;
+  final String compactStatus;
+  final double currentPercentage;
+  final int classesHeldSoFar;
+  final int attendedClasses;
+  final int absentClasses;
+  final DateTime today;
+  final SubjectProvider subjectProvider;
+  final VoidCallback onUpdateCountsManually;
+  final VoidCallback onShowManualBaselineTooltip;
+
+  const _BunkMeterSubjectCard({
+    super.key,
+    required this.subject,
+    required this.snapshot,
+    required this.isExpanded,
+    required this.onExpansionChanged,
+    required this.subjectProjection,
+    required this.message,
+    required this.messageColor,
+    required this.compactStatus,
+    required this.currentPercentage,
+    required this.classesHeldSoFar,
+    required this.attendedClasses,
+    required this.absentClasses,
+    required this.today,
+    required this.subjectProvider,
+    required this.onUpdateCountsManually,
+    required this.onShowManualBaselineTooltip,
+  });
+
+  @override
+  State<_BunkMeterSubjectCard> createState() => _BunkMeterSubjectCardState();
+}
+
+class _BunkMeterSubjectCardState extends State<_BunkMeterSubjectCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _iconTurns;
+  late final Animation<double> _heightFactor;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+      value: widget.isExpanded ? 1.0 : 0.0,
+    );
+    _iconTurns = _controller.drive(
+      Tween<double>(begin: 0.0, end: 0.5).chain(
+        CurveTween(curve: Curves.easeInOut),
+      ),
+    );
+    _heightFactor = _controller.drive(
+      CurveTween(curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _BunkMeterSubjectCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isExpanded != oldWidget.isExpanded) {
+      if (widget.isExpanded) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    final newExpanded = !widget.isExpanded;
+    if (newExpanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+    widget.onExpansionChanged(newExpanded);
+  }
+
+  Widget _buildStatColumn(String title, String value) {
+    return Column(
+      children: [
+        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final subject = widget.subject;
+    final snapshot = widget.snapshot;
+    final subjectProjection = widget.subjectProjection;
+    final int plannedMissed = subjectProjection.plannedMissedCount;
+    final double projectedRatio = subjectProjection.projectedPercentage;
+    final bool projectedBelowTarget = projectedRatio < subject.targetAttendance;
+
+    return Card(
+      elevation: 3.0,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8.0),
+        side: BorderSide(
+          color: isDarkMode
+              ? Colors.white.withValues(alpha: 0.4)
+              : Colors.black.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+      ),
+      shadowColor: isDarkMode
+          ? Colors.white.withValues(alpha: 0.3)
+          : Colors.black.withValues(alpha: 0.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(8.0),
+            onTap: _handleTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20.6,
+                        backgroundColor: subject.color,
+                        child: Center(
+                          child: Text(
+                            subject.acronym ?? subject.name.acronymFromName(),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            softWrap: true,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              height: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              subject.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  'Target: ${subject.targetAttendance}%',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                if (snapshot.manualOverride != null) ...[
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: widget.onShowManualBaselineTooltip,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.warning_amber_rounded, size: 12, color: Colors.orange.shade800),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Manual Baseline',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange.shade900,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      RotationTransition(
+                        turns: _iconTurns,
+                        child: Icon(
+                          Icons.expand_more,
+                          color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  AnimatedCrossFade(
+                    firstChild: Text(
+                      widget.compactStatus,
+                      style: TextStyle(fontSize: 14, color: widget.messageColor, fontWeight: FontWeight.w600),
+                    ),
+                    secondChild: Text(
+                      widget.message,
+                      style: TextStyle(fontSize: 14, color: widget.messageColor, fontWeight: FontWeight.w600),
+                    ),
+                    crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 200),
+                  ),
+                  if (subjectProjection.hasActivePlannedLeave && plannedMissed > 0) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: projectedBelowTarget
+                            ? Colors.red.withValues(alpha: 0.1)
+                            : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: projectedBelowTarget
+                              ? Colors.red.shade300
+                              : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.event_available_outlined,
+                            size: 14,
+                            color: projectedBelowTarget ? Colors.red : (isDarkMode ? Colors.white70 : Colors.black87),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Projected (After Leave): ${projectedRatio.toStringAsFixed(1)}% ($plannedMissed class${plannedMissed > 1 ? "es" : ""} missed, ${subjectProjection.assumedPresentCount} assumed present)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: projectedBelowTarget ? Colors.red.shade700 : (isDarkMode ? Colors.white70 : Colors.black87),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller.view,
+              builder: (context, child) {
+                return Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: _heightFactor.value,
+                  child: child,
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 1),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildStatColumn('Classes Held', widget.classesHeldSoFar.toString()),
+                        _buildStatColumn('Attended', widget.attendedClasses.toString()),
+                        _buildStatColumn('Bunked', widget.absentClasses.toString()),
+                        _buildStatColumn('Current %', '${widget.currentPercentage.toStringAsFixed(1)}%'),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: widget.onUpdateCountsManually,
+                        icon: const Icon(Icons.edit_calendar_outlined),
+                        label: const Text('Update Counts Manually'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -872,10 +1027,12 @@ class _SubjectAttendanceSnapshot {
 class _ManualCountInput {
   final int held;
   final int attended;
+  final bool isReset;
 
   const _ManualCountInput({
     required this.held,
     required this.attended,
+    this.isReset = false,
   });
 }
 
@@ -884,12 +1041,14 @@ class _ManualCountUpdateSheet extends StatefulWidget {
   final DateTime effectiveFrom;
   final int initialHeld;
   final int initialAttended;
+  final bool hasManualOverride;
 
   const _ManualCountUpdateSheet({
     required this.subjectName,
     required this.effectiveFrom,
     required this.initialHeld,
     required this.initialAttended,
+    this.hasManualOverride = false,
   });
 
   @override
@@ -927,6 +1086,10 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
     }
 
     Navigator.pop(context, _ManualCountInput(held: held, attended: attended));
+  }
+
+  void _resetBaseline() {
+    Navigator.pop(context, const _ManualCountInput(held: 0, attended: 0, isReset: true));
   }
 
   void _incrementHeld() {
@@ -1178,7 +1341,22 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
                 ),
               ),
             ],
-            SizedBox(height: rs.height(20)),
+            if (widget.hasManualOverride) ...[
+              SizedBox(height: rs.height(10)),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: _resetBaseline,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  label: const Text('Reset Manual Baseline'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                    padding: EdgeInsets.symmetric(vertical: rs.height(10)),
+                  ),
+                ),
+              ),
+            ],
+            SizedBox(height: rs.height(12)),
             Row(
               children: [
                 Expanded(

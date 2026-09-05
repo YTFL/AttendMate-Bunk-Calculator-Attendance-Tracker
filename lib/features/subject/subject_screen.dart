@@ -112,129 +112,35 @@ class _SubjectScreenState extends State<SubjectScreen> {
                   itemCount: filteredSubjects.length,
                   itemBuilder: (context, index) {
                     final subject = filteredSubjects[index];
-                    final sortedSchedule = _sortedSchedule(subject.schedule);
+                    final sortedSchedule = _sortedSchedule(subject.activeSchedule);
+                    final isExpanded = !_collapsedSubjectIds.contains(subject.id);
 
-                    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-                    return Card(
-                      elevation: isDarkMode ? 0 : 1,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(rs.scale(12)),
-                        side: BorderSide(
-                          color: Theme.of(context).dividerColor.withValues(alpha: isDarkMode ? 0.25 : 0.15),
-                          width: 1,
-                        ),
-                      ),
-                      margin: EdgeInsets.only(bottom: rs.height(10)),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(rs.scale(12)),
-                        onTap: () {
-                          setState(() {
-                            if (_collapsedSubjectIds.contains(subject.id)) {
-                              _collapsedSubjectIds.remove(subject.id);
-                            } else {
-                              _collapsedSubjectIds.add(subject.id);
-                            }
-                          });
-                        },
-                        child: Padding(
-                          padding: rs.insetsSymmetric(horizontal: 14, vertical: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: rs.scale(20.6),
-                                    backgroundColor: subject.color,
-                                    child: Center(
-                                      child: Text(
-                                        subject.acronym ?? '',
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        softWrap: true,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: rs.font(11),
-                                          height: 1.0,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: rs.width(12)),
-                                  Expanded(
-                                    child: Text(
-                                      subject.name,
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(15)),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined),
-                                    tooltip: 'Edit Subject',
-                                    onPressed: semesterEnded
-                                        ? null
-                                        : () {
-                                            FocusScope.of(context).unfocus();
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => EditSubjectScreen(subject: subject),
-                                              ),
-                                            );
-                                          },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                    tooltip: 'Delete Subject',
-                                    onPressed: semesterEnded
-                                        ? null
-                                        : () => _showDeleteConfirmation(context, subjectProvider, subject),
-                                  ),
-                                  Icon(
-                                    _collapsedSubjectIds.contains(subject.id)
-                                        ? Icons.expand_more
-                                        : Icons.expand_less,
-                                    color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
-                                  ),
-                                ],
-                              ),
-                              if (!_collapsedSubjectIds.contains(subject.id) && sortedSchedule.isNotEmpty) ...[
-                                SizedBox(height: rs.height(6)),
-                                Divider(
-                                  height: rs.height(12),
-                                  thickness: 1,
-                                  color: Theme.of(context).dividerColor.withValues(alpha: 0.12),
-                                ),
-                                SizedBox(height: rs.height(4)),
-                                Wrap(
-                                  spacing: rs.width(4),
-                                  runSpacing: rs.height(3),
-                                  children: sortedSchedule.map((timeSlot) {
-                                    final dayLabel = timeSlot.specificDate == null
-                                        ? timeSlot.day.name.capitalize().substring(0, 3)
-                                        : '${timeSlot.day.name.capitalize().substring(0, 3)} ${timeSlot.specificDate!.day}/${timeSlot.specificDate!.month}';
-                                    final room = subject.getEffectiveRoom(timeSlot);
-                                    final roomText = room != null ? ' • $room' : '';
-                                    return Chip(
-                                      label: Text(
-                                        '$dayLabel: ${timeSlot.formatTimeRange(timeFormatProvider.timeFormat)}$roomText',
-                                        style: TextStyle(fontSize: rs.font(10)),
-                                      ),
-                                      backgroundColor: subject.color.withAlpha(50),
-                                      padding: rs.insetsSymmetric(horizontal: 2),
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    );
-                                  }).toList(),
-                                ),
-                              ],
-                            ],
+                    return _SubjectCardItem(
+                      key: ValueKey(subject.id),
+                      subject: subject,
+                      sortedSchedule: sortedSchedule,
+                      isExpanded: isExpanded,
+                      onExpansionChanged: (expanded) {
+                        setState(() {
+                          if (expanded) {
+                            _collapsedSubjectIds.remove(subject.id);
+                          } else {
+                            _collapsedSubjectIds.add(subject.id);
+                          }
+                        });
+                      },
+                      semesterEnded: semesterEnded,
+                      onEdit: () {
+                        FocusScope.of(context).unfocus();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditSubjectScreen(subject: subject),
                           ),
-                        ),
-                      ),
+                        );
+                      },
+                      onDelete: () => _showDeleteConfirmation(context, subjectProvider, subject),
+                      timeFormatProvider: timeFormatProvider,
                     );
                   },
                 ),
@@ -559,3 +465,227 @@ class _SubjectScreenState extends State<SubjectScreen> {
     );
   }
 }
+
+class _SubjectCardItem extends StatefulWidget {
+  final Subject subject;
+  final List<TimeSlot> sortedSchedule;
+  final bool isExpanded;
+  final ValueChanged<bool> onExpansionChanged;
+  final bool semesterEnded;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final TimeFormatProvider timeFormatProvider;
+
+  const _SubjectCardItem({
+    super.key,
+    required this.subject,
+    required this.sortedSchedule,
+    required this.isExpanded,
+    required this.onExpansionChanged,
+    required this.semesterEnded,
+    required this.onEdit,
+    required this.onDelete,
+    required this.timeFormatProvider,
+  });
+
+  @override
+  State<_SubjectCardItem> createState() => _SubjectCardItemState();
+}
+
+class _SubjectCardItemState extends State<_SubjectCardItem>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _iconTurns;
+  late final Animation<double> _heightFactor;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+      value: widget.isExpanded ? 1.0 : 0.0,
+    );
+    _iconTurns = _controller.drive(
+      Tween<double>(begin: 0.0, end: 0.5).chain(
+        CurveTween(curve: Curves.easeInOut),
+      ),
+    );
+    _heightFactor = _controller.drive(
+      CurveTween(curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _SubjectCardItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isExpanded != oldWidget.isExpanded) {
+      if (widget.isExpanded) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    final newExpanded = !widget.isExpanded;
+    if (newExpanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+    widget.onExpansionChanged(newExpanded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rs = context.rs;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final subject = widget.subject;
+    final sortedSchedule = widget.sortedSchedule;
+
+    return Card(
+      elevation: isDarkMode ? 0 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(rs.scale(12)),
+        side: BorderSide(
+          color: Theme.of(context).dividerColor.withValues(alpha: isDarkMode ? 0.25 : 0.15),
+          width: 1,
+        ),
+      ),
+      margin: EdgeInsets.only(bottom: rs.height(10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(rs.scale(12)),
+            onTap: _handleTap,
+            child: Padding(
+              padding: rs.insetsSymmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: rs.scale(20.6),
+                    backgroundColor: subject.color,
+                    child: Center(
+                      child: Text(
+                        subject.acronym ?? '',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        softWrap: true,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: rs.font(11),
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: rs.width(12)),
+                  Expanded(
+                    child: Text(
+                      subject.name,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(15)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edit Subject',
+                    onPressed: widget.semesterEnded ? null : widget.onEdit,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Delete Subject',
+                    onPressed: widget.semesterEnded ? null : widget.onDelete,
+                  ),
+                  RotationTransition(
+                    turns: _iconTurns,
+                    child: Icon(
+                      Icons.expand_more,
+                      color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller.view,
+              builder: (context, child) {
+                return Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: _heightFactor.value,
+                  child: child,
+                );
+              },
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: rs.width(14),
+                  right: rs.width(14),
+                  bottom: rs.height(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Divider(
+                      height: rs.height(12),
+                      thickness: 1,
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.12),
+                    ),
+                    SizedBox(height: rs.height(4)),
+                    if (sortedSchedule.isNotEmpty)
+                      Wrap(
+                        spacing: rs.width(4),
+                        runSpacing: rs.height(3),
+                        children: sortedSchedule.map((timeSlot) {
+                          final dayLabel = timeSlot.specificDate == null
+                              ? timeSlot.day.name.capitalize().substring(0, 3)
+                              : '${timeSlot.day.name.capitalize().substring(0, 3)} ${timeSlot.specificDate!.day}/${timeSlot.specificDate!.month}';
+                          final room = subject.getEffectiveRoom(timeSlot);
+                          final roomText = room != null ? ' • $room' : '';
+                          return Chip(
+                            label: Text(
+                              '$dayLabel: ${timeSlot.formatTimeRange(widget.timeFormatProvider.timeFormat)}$roomText',
+                              style: TextStyle(fontSize: rs.font(10)),
+                            ),
+                            backgroundColor: subject.color.withAlpha(50),
+                            padding: rs.insetsSymmetric(horizontal: 2),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          );
+                        }).toList(),
+                      )
+                    else
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: rs.height(4)),
+                        child: Text(
+                          'No schedule configured for this subject.',
+                          style: TextStyle(
+                            fontSize: rs.font(11),
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
