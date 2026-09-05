@@ -1,11 +1,13 @@
 package com.ytfl.attendmate
 
+import android.content.Context
 import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -20,12 +22,14 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.attendmate.app/update"
     private val BUILD_CONFIG_CHANNEL = "com.attendmate.app/build_config"
     private val FILE_IMPORT_CHANNEL = "com.attendmate.app/file_import"
+    private val BATTERY_OPTIMIZATION_CHANNEL = "com.attendmate.app/battery_optimization"
     private val FILE_PICKER_REQUEST_CODE = 9101
     private val DIR_PICKER_REQUEST_CODE = 9102
     private var pendingFileImportResult: MethodChannel.Result? = null
     private var pendingDirImportResult: MethodChannel.Result? = null
     private var initialOpenedFilePayload: Map<String, Any>? = null
     private var fileChannel: MethodChannel? = null
+    private val backupIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -33,6 +37,33 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BUILD_CONFIG_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getGoogleClientId" -> result.success(BuildConfig.GOOGLE_CLIENT_ID)
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_OPTIMIZATION_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isIgnoringBatteryOptimizations" -> {
+                    try {
+                        result.success(isIgnoringBatteryOptimizations())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    try {
+                        result.success(requestIgnoreBatteryOptimizations())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "openBatteryOptimizationSettings" -> {
+                    try {
+                        result.success(openBatteryOptimizationSettings())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -56,7 +87,74 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        fileChannel = FileImportHandler.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext) { this }
+        fileChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILE_IMPORT_CHANNEL).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getInitialOpenedFile" -> {
+                        val payload = consumeInitialOpenedFilePayload()
+                        result.success(payload)
+                    }
+                    "pickImportFile" -> openImportFilePickerForResult(result)
+                    "pickDirectory" -> openDirectoryPickerForResult(result)
+                    "shareFile" -> {
+                        val fileName = call.argument<String>("fileName") ?: "export.json"
+                        val content = call.argument<String>("content") ?: ""
+                        val success = shareFileNative(fileName, content)
+                        result.success(success)
+                    }
+                    "writeBackupFile" -> {
+                        val dirUriStr = call.argument<String>("dirUri")
+                        val fileName = call.argument<String>("fileName")
+                        val content = call.argument<String>("content")
+                        if (dirUriStr != null && fileName != null && content != null) {
+                            backupIoExecutor.execute {
+                                try {
+                                    val success = writeBackupFileNative(dirUriStr, fileName, content)
+                                    runOnUiThread { result.success(success) }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("WRITE_ERROR", e.message, null) }
+                                }
+                            }
+                        } else {
+                            result.error("INVALID_ARGS", "dirUri, fileName, and content required", null)
+                        }
+                    }
+                    "getBackupFiles" -> {
+                        val dirUriStr = call.argument<String>("dirUri")
+                        val includeContent = call.argument<Boolean>("includeContent") ?: true
+                        if (dirUriStr != null) {
+                            backupIoExecutor.execute {
+                                try {
+                                    val list = getBackupFilesNative(dirUriStr, includeContent)
+                                    runOnUiThread { result.success(list) }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("READ_ERROR", e.message, null) }
+                                }
+                            }
+                        } else {
+                            result.error("INVALID_ARGS", "dirUri is required", null)
+                        }
+                    }
+                    "deleteBackupFile" -> {
+                        val dirUriStr = call.argument<String>("dirUri")
+                        val fileName = call.argument<String>("fileName")
+                        if (dirUriStr != null && fileName != null) {
+                            backupIoExecutor.execute {
+                                try {
+                                    val success = deleteBackupFileNative(dirUriStr, fileName)
+                                    runOnUiThread { result.success(success) }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("DELETE_ERROR", e.message, null) }
+                                }
+                            }
+                        } else {
+                            result.error("INVALID_ARGS", "dirUri and fileName required", null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
 
         // Process file VIEW/EDIT intent if app launched via clicking a file
         intent?.let { handleViewFileIntent(it) }
@@ -301,5 +399,181 @@ class MainActivity : FlutterActivity() {
             }
         }
         return null
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(packageName) ?: true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                val isRestricted = activityManager?.isBackgroundRestricted ?: false
+                return isIgnoring && !isRestricted
+            }
+            return isIgnoring
+        }
+        return true
+    }
+
+    private fun requestIgnoreBatteryOptimizations(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (isIgnoringBatteryOptimizations()) {
+                return true
+            }
+            return try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+                true
+            } catch (e: Exception) {
+                e.printStackTrace()
+                openBatteryOptimizationSettings()
+            }
+        }
+        return true
+    }
+
+    private fun openBatteryOptimizationSettings(): Boolean {
+        return try {
+            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+                true
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                false
+            }
+        }
+    }
+
+    private fun writeBackupFileNative(dirUriStr: String, fileName: String, content: String): Boolean {
+        if (dirUriStr.startsWith("content://")) {
+            val treeUri = Uri.parse(dirUriStr)
+            val dir = DocumentFile.fromTreeUri(applicationContext, treeUri) ?: return false
+            var existing = dir.findFile(fileName)
+            if (existing == null) {
+                for (f in dir.listFiles()) {
+                    val n = f.name ?: continue
+                    if (n == fileName || n == "$fileName.json" || "$n.json" == fileName) {
+                        existing = f
+                        break
+                    }
+                }
+            }
+            existing?.delete()
+
+            val newFile = dir.createFile("application/json", fileName) ?: return false
+            applicationContext.contentResolver.openOutputStream(newFile.uri)?.use { os ->
+                os.write(content.toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
+            return true
+        } else {
+            val dir = File(dirUriStr)
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            val file = File(dir, fileName)
+            file.writeText(content, Charsets.UTF_8)
+            return true
+        }
+    }
+
+    private fun getBackupFilesNative(dirUriStr: String, includeContent: Boolean = true): List<Map<String, Any>> {
+        val resultList = mutableListOf<Map<String, Any>>()
+        if (dirUriStr.startsWith("content://")) {
+            val treeUri = Uri.parse(dirUriStr)
+            val dir = DocumentFile.fromTreeUri(applicationContext, treeUri) ?: return resultList
+            val files = dir.listFiles()
+            for (i in files.indices) {
+                val file = files[i]
+                val name = file.name ?: continue
+                if (name.startsWith("attendmate_backup_") && name.endsWith(".json")) {
+                    val bytes = file.length()
+                    val lastMod = file.lastModified()
+                    var textContent = ""
+                    if (includeContent) {
+                        try {
+                            applicationContext.contentResolver.openInputStream(file.uri)?.use { isStream ->
+                                textContent = isStream.bufferedReader().use { it.readText() }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    resultList.add(
+                        mapOf(
+                            "fileName" to name,
+                            "fileSizeBytes" to bytes,
+                            "lastModified" to lastMod,
+                            "content" to textContent
+                        )
+                    )
+                }
+            }
+        } else {
+            val dir = File(dirUriStr)
+            if (dir.exists()) {
+                val files = dir.listFiles()
+                if (files != null) {
+                    for (file in files) {
+                        val name = file.name
+                        if (name.startsWith("attendmate_backup_") && name.endsWith(".json")) {
+                            var textContent = ""
+                            if (includeContent) {
+                                try {
+                                    textContent = file.readText(Charsets.UTF_8)
+                                } catch (_: Exception) {}
+                            }
+
+                            resultList.add(
+                                mapOf(
+                                    "fileName" to name,
+                                    "fileSizeBytes" to file.length(),
+                                    "lastModified" to file.lastModified(),
+                                    "content" to textContent
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        return resultList
+    }
+
+    private fun deleteBackupFileNative(dirUriStr: String, fileName: String): Boolean {
+        if (dirUriStr.startsWith("content://")) {
+            val treeUri = Uri.parse(dirUriStr)
+            val dir = DocumentFile.fromTreeUri(applicationContext, treeUri) ?: return false
+            var file = dir.findFile(fileName)
+            if (file == null) {
+                for (f in dir.listFiles()) {
+                    val n = f.name ?: continue
+                    if (n == fileName || n == "$fileName.json" || "$n.json" == fileName) {
+                        file = f
+                        break
+                    }
+                }
+            }
+            return file?.delete() ?: false
+        } else {
+            val file = File(dirUriStr, fileName)
+            if (file.exists()) {
+                return file.delete()
+            }
+            return false
+        }
     }
 }
