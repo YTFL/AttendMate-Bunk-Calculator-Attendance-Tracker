@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2026-09-01
+
+### Added
+- **Card Dropdown Animations for Bunk Meter & Subjects Screens**: Added smooth dropdown expansion/collapse and 180° chevron rotation animations for subject cards across both the Bunk Meter and Subjects screens, matching the dropdown animation behavior of the Semester Parameters card.
+- **Scrollable 15-Day Schedule (-7 / +7 Days) with Dynamic Titles & Direct Attendance Marking**: Transformed the main schedule screen into a horizontal swipeable 15-day schedule window (-7 days past, Today, and +7 days upcoming) featuring dynamic title adaptation, direct attendance marking for past days, and dedicated upcoming, leave, and holiday handling for future dates.
+- **Interactive Projected Attendance Popup in Semester Details**: Added a projected attendance clickable banner to open a detailed modal dialog displaying:
+  - Projected attendance percentage following planned leave.
+  - Total classes missed during the leave period.
+  - Upcoming classes assumed Present prior to the leave.
+  - Continuous classes required after leave: If projected attendance falls below the target percentage, dynamically calculates and displays the exact number of consecutive classes required after the leave to restore attendance to target level.
+- **Bunk Calculator (What-If Calculator Sheet) Enhancements**:
+  - Added a **Target Date Selector** (defaulting to the end of the semester).
+  - Added a **Consider Planned Leaves** toggle option.
+  - Dynamically recalculates remaining classes, Must Attend, Can Bunk, and Max simulation stats up to the chosen target date (factoring in planned leave absences when enabled).
+- **Unrestricted Background Battery Access Guidance**: Added permission requesting and settings guidance for unrestricted background access. To prevent aggressive Android battery optimization plans from killing background tasks, AttendMate now informs users and provides a direct shortcut to app battery settings to enable unrestricted execution.
+- **Manual Baseline Reset & Interactive Tooltip**: Moved manual baseline warning banner on Bunk Meter cards to an interactive, tapable tooltip. Tapping the tooltip displays baseline details and provides a direct option to reset the manual baseline back to auto-calculated values.
+- **Future Day Holiday Marking**: Added an option in the calendar view to mark any future date directly as a holiday.
+- **Next Immediate Planned Leave Projected Attendance**: Refined projected attendance calculations in Semester details to compute projections specifically for the next immediate upcoming planned leave rather than aggregating all future planned leaves across the semester. Upcoming classes up to the next leave date are assumed Present, while marked classes are dynamically factored in once logged.
+- **Class Location Support in Timetable JSON Import**: Updated the timetable JSON import format to include support for importing class-wise locations.
+
+### Fixed
+- **Backup Screen UI Refresh Fix**: Fixed an issue where creating, importing, or deleting a backup, or updating the backup folder, caused the entire screen to reload, flash a full-screen loading spinner, and reset the scroll position. The backup list now refreshes seamlessly in place without tearing down the UI.
+- **Short of Target Recovery Calculation**: Fixed short-of-target and negative bunkable class calculations to accurately compute and display the exact number of continuous classes that must be attended to recover back to the target attendance percentage.
+- **Future Holiday Absence Pre-Marking**: Automatically marks all class sessions as absent in advance for dates designated as holidays, rather than delaying until the holiday date arrives.
+- **Removed End-of-Day Automatic Attendance Marking**: Removed automatic end-of-day attendance marking and next app open auto-marking so users retain full manual control over unattended logs.
+- **Locked Status Display on Today's Schedule**: Fixed schedule items to properly display locked status when classes fall under a manual baseline or locked state.
+- **Aggressive Background Location Fetch Fix**: Resolved aggressive background location polling that caused screen flickering over extended app usage sessions.
+- **Calendar Baseline Status & Lock Icon Display**: Fixed calendar view erroneously displaying days prior to a set manual baseline as "Not Marked". Dates prior to baseline now accurately show a locked icon when all classes fall under the baseline, or a mixed status indicator for combination days, displaying "Not Marked" exclusively when a class is genuinely unlogged.
+- **Bunk Calculator Manual Baseline Calculation**: Fixed the Bunk Calculator to properly calculate attendance from manual baseline values when set instead of falling back to default values.
+- **Bunk Calculator Max Class Increment Guard**: Disabled the `+` increment button in the Bunk Calculator when reaching maximum available classes to prevent calculating beyond total semester class bounds.
+- **Pre-Marked Class Notification Suppression**: Prevented sending attendance or class-related notifications if a class session has already been marked as Present, Absent, or Holiday.
+- **Mid-Semester Timetable Update**: Fixed mid-semester timetable updating to properly overwrite and clean up old records from the effective date forward.
+- **Automatic Backup**: Fixed automatic backup not working in the latest version.
+- **Location Registration Logging**: Fixed location registered log showing up for all classes associated with a location whenever location is accessed.
+- **Screen Flickering on Location Read**: Fixed screen flickering when trying to read location over extended periods.
+
+---
+
 ## [2.0.2] - 2026-08-11
 
 ### Added
@@ -685,6 +723,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **2.1.0** (2026-09-01) - Scrollable 15-day schedule window (-7/+7 days) with dynamic titles & direct attendance marking, short of target continuous recovery calculation fix, future holiday absence pre-marking, removal of auto end-of-day attendance marking, locked status display on today's schedule, background location fetch optimization, interactive projected attendance popup, bunk calculator target date selector & planned leave toggle, calendar baseline status & lock icon display fix, bunk calculator manual baseline calculation fix & max class increment guard, unrestricted background battery access prompt, bunk meter manual baseline reset & interactive tooltip, future day holiday marking in calendar, next immediate planned leave projected attendance calculation, class location JSON import support, pre-marked class notification suppression, mid-semester timetable update overwrite fix, automatic backup fix
 - **2.0.2** (2026-08-11) - Native Android .json file handler ("Open with AttendMate"), smart auto-restore & conditional backup on folder selection, auto-backup semester safeguard, direct classmate data sharing, backup storage location fix, location & planned holiday backup fixes, database clear fixes, setup guide auto-scroll navigation fix
 - **2.0.1** (2026-08-10) - Class-wise location selection, classroom details in notifications, diagnostics log & GitHub issue reporting, timetable JSON import default, text field keyboard focus fixes, pre-semester calendar access fix
 - **2.0.0** (2026-07-22) - Major release with Geofenced Auto-Attendance & Interactive Google Maps, "What-If" Bunk Calculator, Leave Planner, Rolling Semester Backup System, Interactive Calendar Filtering, Guided Spotlight Tour, and UI modernizations
