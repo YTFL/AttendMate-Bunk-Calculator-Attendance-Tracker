@@ -750,6 +750,50 @@ class NotificationService {
     }
   }
 
+  /// Displays a notification when a background backup is scheduled (e.g. 5-minute exit backup).
+  Future<void> showScheduledBackupNotification({
+    required String title,
+    required String body,
+  }) async {
+    try {
+      final bgPlugin = FlutterLocalNotificationsPlugin();
+      const androidSettings = AndroidInitializationSettings('icon_noti');
+      const initSettings = InitializationSettings(android: androidSettings);
+      await bgPlugin.initialize(settings: initSettings);
+
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'semester_backups',
+          'Semester Backups',
+          channelDescription: 'Notifications for automatic and manual semester backups',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          icon: 'icon_noti',
+          autoCancel: true,
+        ),
+      );
+
+      await bgPlugin.show(
+        id: 99998,
+        title: title,
+        body: body,
+        notificationDetails: details,
+      );
+    } catch (e) {
+      debugPrint('Error showing scheduled backup notification: $e');
+    }
+  }
+
+  /// Dismisses the scheduled countdown notification (id: 99998)
+  Future<void> cancelScheduledBackupNotification() async {
+    try {
+      final bgPlugin = FlutterLocalNotificationsPlugin();
+      await bgPlugin.cancel(id: 99998);
+    } catch (e) {
+      debugPrint('Error canceling scheduled backup notification: $e');
+    }
+  }
+
   /// Finds the most recent unmarked class attendance of today, and schedules a notification
   /// to fire exactly 15 seconds from now.
   /// Returns the name/acronym of the subject if scheduled, or null if no unmarked classes exist.

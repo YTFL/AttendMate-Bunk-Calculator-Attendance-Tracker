@@ -47,28 +47,86 @@ class BackupService {
   static const String _prefBackupDirPathKey = 'backup_directory_path';
   static const String _prefHasUnbackedChangesKey = 'has_unbacked_data_changes';
   static const String _prefBackupEnabledKey = 'semester_backup_enabled';
+  static const String _prefScheduledBackupTargetTimeKey = 'backup_scheduled_target_time_ms';
+  static const String _prefScheduledBackupReasonKey = 'backup_scheduled_trigger_reason';
   static const int maxRollingBackups = 3;
   static const MethodChannel _fileChannel = MethodChannel('com.attendmate.app/file_import');
 
   Timer? _autoBackupDebounceTimer;
+  bool _hasChangesInCurrentSession = false;
+
+  /// Whether data has been modified in the current app session
+  bool get hasChangesInCurrentSession => _hasChangesInCurrentSession;
+
+  /// Reset the session changes flag
+  void resetSessionChangeFlag() {
+    _hasChangesInCurrentSession = false;
+  }
+
+  /// Get the scheduled target time for a pending 5-minute backup (if any)
+  Future<DateTime?> getScheduledBackupTargetTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ms = prefs.getInt(_prefScheduledBackupTargetTimeKey);
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Record or update the scheduled target time
+  Future<void> setScheduledBackupTargetTime(DateTime targetTime, {String? reason}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefScheduledBackupTargetTimeKey, targetTime.millisecondsSinceEpoch);
+    if (reason != null) {
+      await prefs.setString(_prefScheduledBackupReasonKey, reason);
+    }
+  }
+
+  /// Clear the scheduled target time when backup completes or is cancelled
+  Future<void> clearScheduledBackupTargetTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefScheduledBackupTargetTimeKey);
+    await prefs.remove(_prefScheduledBackupReasonKey);
+  }
+
+  static bool? _cachedIsBackupEnabled;
+  /// Fast synchronous getter for in-memory cached state
+  static bool get isBackupEnabledSync => _cachedIsBackupEnabled ?? true;
 
   /// Check if automatic backups are enabled by user
   Future<bool> isBackupEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefBackupEnabledKey) ?? true;
+    final val = prefs.getBool(_prefBackupEnabledKey) ?? true;
+    _cachedIsBackupEnabled = val;
+    return val;
   }
 
   /// Enable or disable automatic backups
   Future<void> setBackupEnabled(bool enabled) async {
+    _cachedIsBackupEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefBackupEnabledKey, enabled);
   }
 
   /// Call whenever app state / database data changes
   Future<void> notifyDataChanged() async {
+    _hasChangesInCurrentSession = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefHasUnbackedChangesKey, true);
-    scheduleDebouncedAutoBackup();
+
+    // If an existing 5-minute backup was scheduled and is currently running,
+    // log that the timer is marked for reset upon exit
+    final targetMs = prefs.getInt(_prefScheduledBackupTargetTimeKey);
+    if (targetMs != null) {
+      final target = DateTime.fromMillisecondsSinceEpoch(targetMs);
+      if (target.isAfter(DateTime.now())) {
+        final remainingSec = target.difference(DateTime.now()).inSeconds;
+        final remainingStr = '${remainingSec ~/ 60}m ${(remainingSec % 60).toString().padLeft(2, '0')}s';
+        await DatabaseService().logAppEvent(
+          tag: 'BackupService',
+          message: 'Data modified while 5-minute backup is pending (Target was: ${DateFormat('hh:mm:ss a').format(target)}, $remainingStr remaining). Timer will be reset to 5m upon app exit.',
+          level: 'INFO',
+        );
+      }
+    }
   }
 
   /// Schedule a debounced auto-backup 3 seconds after data changes
@@ -102,6 +160,7 @@ class BackupService {
 
   /// Clear the dirty flag after a successful backup
   Future<void> clearUnbackedDataChanges() async {
+    _hasChangesInCurrentSession = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefHasUnbackedChangesKey, false);
   }
@@ -186,12 +245,26 @@ class BackupService {
     try {
       if (!force && !await isBackupEnabled()) {
         debugPrint('BackupService: Auto-backup skipped because backups are turned off by user.');
+        await DatabaseService().logAppEvent(
+          tag: 'BackupService',
+          message: 'Auto-backup skipped: Backups are turned off in settings.',
+          level: 'WARNING',
+        );
+        await NotificationService().cancelScheduledBackupNotification();
+        await clearScheduledBackupTargetTime();
         return null;
       }
 
       final dirPath = await getBackupDirectoryPath();
       if (dirPath == null || dirPath.trim().isEmpty) {
         debugPrint('BackupService: Auto-backup skipped because no backup directory is specified by user.');
+        await DatabaseService().logAppEvent(
+          tag: 'BackupService',
+          message: 'Auto-backup skipped: No backup directory selected by user.',
+          level: 'WARNING',
+        );
+        await NotificationService().cancelScheduledBackupNotification();
+        await clearScheduledBackupTargetTime();
         return null;
       }
 
@@ -199,12 +272,26 @@ class BackupService {
         final semester = await DatabaseService().loadSemester();
         if (semester == null) {
           debugPrint('BackupService: Auto-backup skipped because no active semester exists.');
+          await DatabaseService().logAppEvent(
+            tag: 'BackupService',
+            message: 'Auto-backup skipped: No active semester exists.',
+            level: 'WARNING',
+          );
+          await NotificationService().cancelScheduledBackupNotification();
+          await clearScheduledBackupTargetTime();
           return null;
         }
 
         final hasChanges = await hasUnbackedDataChanges();
         if (!hasChanges) {
           debugPrint('BackupService: Auto-backup skipped because no data changes occurred since last backup.');
+          await DatabaseService().logAppEvent(
+            tag: 'BackupService',
+            message: 'Auto-backup skipped: No new data changes occurred since last backup.',
+            level: 'INFO',
+          );
+          await NotificationService().cancelScheduledBackupNotification();
+          await clearScheduledBackupTargetTime();
           return null;
         }
       }
@@ -242,8 +329,10 @@ class BackupService {
         return null;
       }
 
-      // Clear the dirty flag since backup was successfully created
+      // Clear the dirty flag and scheduled target time since backup was successfully created
       await clearUnbackedDataChanges();
+      await clearScheduledBackupTargetTime();
+      await NotificationService().cancelScheduledBackupNotification();
 
       // Enforce the 3 rolling backups limit immediately
       await enforceRollingLimit();
@@ -259,7 +348,7 @@ class BackupService {
         try {
           await NotificationService().showBackupNotification(
             title: 'Semester Backup Created',
-            body: 'Your attendance data & settings have been backed up.',
+            body: 'Your attendance data & settings have been backed up ($filename).',
           );
         } catch (e) {
           debugPrint('BackupService: Suppressed notification error in background: $e');

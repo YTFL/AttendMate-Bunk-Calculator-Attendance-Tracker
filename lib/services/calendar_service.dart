@@ -8,11 +8,10 @@ import '../features/subject/subject_model.dart';
 import '../features/semester/semester_model.dart';
 import '../features/attendance/attendance_model.dart';
 import 'database_service.dart';
+import 'google_auth_service.dart';
 
 class CalendarService {
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: [cal.CalendarApi.calendarEventsScope],
-  );
+  static GoogleSignIn get _googleSignIn => GoogleAuthService.instance.googleSignIn;
 
   /// Map of Google Calendar event color IDs (1-11) to their RGB values
   static const Map<String, Color> _googleCalendarColors = {
@@ -72,18 +71,40 @@ class CalendarService {
 
   /// Checks if the user is currently signed in
   static Future<bool> isUserSignedIn() async {
-    return await _googleSignIn.isSignedIn();
+    return await GoogleAuthService.instance.isSignedIn();
+  }
+
+  /// Preference key for Google Calendar sync toggle
+  static const String prefGoogleCalendarSyncEnabledKey = 'google_calendar_sync_enabled';
+
+  static bool? _cachedIsSyncEnabled;
+  /// Fast synchronous getter for in-memory cached state
+  static bool get isGoogleCalendarSyncEnabledSync => _cachedIsSyncEnabled ?? false;
+
+  /// Checks if Google Calendar synchronization is enabled by the user
+  static Future<bool> isGoogleCalendarSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isSignedIn = await isUserSignedIn();
+    final val = prefs.getBool(prefGoogleCalendarSyncEnabledKey) ?? isSignedIn;
+    _cachedIsSyncEnabled = val;
+    return val;
+  }
+
+  /// Sets Google Calendar synchronization preference
+  static Future<void> setGoogleCalendarSyncEnabled(bool enabled) async {
+    _cachedIsSyncEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(prefGoogleCalendarSyncEnabledKey, enabled);
   }
 
   /// Get the current signed-in user's email
   static Future<String?> getSignedInUserEmail() async {
-    final account = _googleSignIn.currentUser ?? await _googleSignIn.signInSilently();
-    return account?.email;
+    return await GoogleAuthService.instance.getSignedInUserEmail();
   }
 
   /// Sign out from Google Account
   static Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    await GoogleAuthService.instance.signOut();
   }
 
   /// Deletes all events synced by AttendMate from Google Calendar for the active semester

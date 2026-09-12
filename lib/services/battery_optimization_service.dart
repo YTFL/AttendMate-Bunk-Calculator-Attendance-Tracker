@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/snackbar_utils.dart';
+import '../utils/url_launcher_utils.dart';
 
 class BatteryOptimizationService {
   static const MethodChannel _channel =
@@ -107,14 +108,94 @@ class BatteryOptimizationService {
                   ),
                 ],
               ),
-              content: Text(
-                isAlreadyUnrestricted
-                    ? 'AttendMate has unrestricted background access. Class reminders, location triggers, and backups run reliably.'
-                    : 'Allow AttendMate to run in the background without battery restrictions so class reminders and backups aren\'t stopped.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).textTheme.bodyMedium?.color,
-                  height: 1.4,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isAlreadyUnrestricted
+                          ? 'AttendMate has unrestricted background access. Class reminders, location triggers, and backups run reliably.'
+                          : 'Allow AttendMate to run in the background without battery restrictions so class reminders and backups aren\'t stopped.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDarkMode
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.black.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDarkMode ? Colors.white24 : Colors.black12,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone_android_rounded,
+                                size: 18,
+                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Manufacturer Restrictions',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: isDarkMode ? Colors.white : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Brands like Samsung, Xiaomi, OnePlus, and Huawei kill background apps aggressively even with standard settings.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDarkMode ? Colors.white60 : Colors.black54,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                UrlLauncherUtils.launchExternalUrl(
+                                  'https://dontkillmyapp.com',
+                                  context: context,
+                                );
+                              },
+                              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                              label: const Text('dontkillmyapp.com Guide'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: isDarkMode ? Colors.white : Colors.black87,
+                                side: BorderSide(
+                                  color: isDarkMode ? Colors.white38 : Colors.black26,
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -144,7 +225,7 @@ class BatteryOptimizationService {
                         }
                       }
                     },
-                    child: const Text('Allow'),
+                    child: const Text('Get Access'),
                   ),
               ],
             );

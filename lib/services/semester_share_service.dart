@@ -11,7 +11,7 @@ import '../features/semester/semester_provider.dart';
 import '../features/semester/semester_share_preview_dialog.dart';
 import '../features/settings/swipe_action_provider.dart';
 import '../features/settings/time_format_provider.dart';
-import '../features/subject/import_timetable_screen.dart';
+import '../features/import/unified_import_screen.dart';
 import '../features/subject/subject_model.dart';
 import '../features/subject/subject_provider.dart';
 import '../utils/error_utils.dart';
@@ -114,6 +114,32 @@ class SemesterShareService {
     }
   }
 
+  /// Share AttendMate app with others via native share sheet or clipboard fallback
+  Future<void> shareAppWithOthers(BuildContext context) async {
+    const shareText =
+        'Check out AttendMate - the smart, open-source attendance tracking & timetable planner for students!\n\nDownload: https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker';
+    bool sharedNatively = false;
+    try {
+      sharedNatively = await _fileChannel.invokeMethod<bool>('shareText', {
+        'title': 'Share AttendMate',
+        'text': shareText,
+      }) ?? false;
+    } catch (_) {}
+
+    if (!sharedNatively) {
+      await Clipboard.setData(const ClipboardData(text: shareText));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(
+            content: Text('App link copied to clipboard! Share it with your friends.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
   /// Auto-detect the type of JSON file content
   ImportFileType detectFileType(Map<String, dynamic> jsonMap) {
     // Check for explicit semester share type first
@@ -172,7 +198,7 @@ class SemesterShareService {
           if (context.mounted) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => ImportTimetableScreen(initialText: content),
+                builder: (_) => UnifiedImportScreen(initialTabIndex: 0, initialText: content),
               ),
             );
           }
@@ -221,7 +247,7 @@ class SemesterShareService {
           if (context.mounted) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => ImportTimetableScreen(initialText: content),
+                builder: (_) => UnifiedImportScreen(initialTabIndex: 0, initialText: content),
               ),
             );
           }
