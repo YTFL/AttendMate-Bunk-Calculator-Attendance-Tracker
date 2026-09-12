@@ -24,6 +24,9 @@ import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/update_service.dart';
 import 'services/backup_service.dart';
+import 'services/google_drive_backup_service.dart';
+import 'services/live_timetable_sync_service.dart';
+import 'services/calendar_service.dart';
 import 'utils/github_issue_helper.dart';
 import 'features/settings/diagnostics_log_screen.dart';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
@@ -72,15 +75,82 @@ void callbackDispatcher() {
             level: 'WARNING',
           );
         }
-      } else if (task == 'dailySemesterBackup' || task == 'testBackgroundBackup' || task == 'appCloseBackupTask') {
+      } else if (task == 'appCloseBackupTask') {
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: '5-minute background backup task triggered by Android WorkManager. Starting backup execution...',
+          level: 'INFO',
+        );
+        final file = await BackupService().createBackup(
+          showNotification: true,
+          triggerReason: '5-minute app exit auto-backup',
+          force: false,
+        );
+        if (file != null) {
+          await DatabaseService().logAppEvent(
+            tag: 'Workmanager',
+            message: '5-minute background backup task completed successfully (${file.path}).',
+            level: 'INFO',
+          );
+        } else {
+          await DatabaseService().logAppEvent(
+            tag: 'Workmanager',
+            message: '5-minute background backup task finished (backup was skipped or returned null; see BackupService logs).',
+            level: 'WARNING',
+          );
+        }
+      } else if (task == 'dailySemesterBackup') {
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: 'Daily scheduled background backup task triggered by Android WorkManager.',
+          level: 'INFO',
+        );
+        // 1. Local backup
         await BackupService().createBackup(
           showNotification: true,
-          triggerReason: task == 'appCloseBackupTask'
-              ? '15-minute app exit auto-backup'
-              : task == 'testBackgroundBackup'
-                  ? '30s Debug Test Backup'
-                  : 'Daily 10 PM background backup',
-          force: task == 'testBackgroundBackup',
+          triggerReason: 'Daily midnight background backup',
+          force: false,
+        );
+        // 2. Google Drive cloud backup
+        await GoogleDriveBackupService().executeMidnightBackup();
+      } else if (task == 'testBackgroundBackup') {
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: '30s test background backup task triggered by Android WorkManager.',
+          level: 'INFO',
+        );
+        final file = await BackupService().createBackup(
+          showNotification: true,
+          triggerReason: '30s Debug Test Backup',
+          force: true,
+        );
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: 'Test background backup completed: ${file?.path ?? "null"}',
+          level: 'INFO',
+        );
+      } else if (task == 'testGoogleDriveBackup') {
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: '30s test Google Drive background backup task triggered by Android WorkManager.',
+          level: 'INFO',
+        );
+        final success = await GoogleDriveBackupService().uploadBackup(
+          force: true,
+          interactive: false,
+        );
+        if (success) {
+          try {
+            await NotificationService().showBackupNotification(
+              title: 'Google Drive Backup Synced',
+              body: 'Test background backup completed successfully.',
+            );
+          } catch (_) {}
+        }
+        await DatabaseService().logAppEvent(
+          tag: 'Workmanager',
+          message: 'Test Google Drive background backup completed (success: $success).',
+          level: success ? 'INFO' : 'ERROR',
         );
       }
       return true;
@@ -461,6 +531,18 @@ Future<void> main() async {
   try {
     await DatabaseService().init();
     databaseInitialized = true;
+    
+    // Prime integration preference caches into memory for instantaneous screen rendering
+    unawaited(Future.wait([
+      GoogleDriveBackupService().isBackupEnabled(),
+      GoogleDriveBackupService().getLastBackupTime(),
+      CalendarService.isGoogleCalendarSyncEnabled(),
+      BackupService().isBackupEnabled(),
+      LiveTimetableSyncService().init(),
+    ]).catchError((e) {
+      debugPrint('Failed to prime settings caches: $e');
+      return <dynamic>[];
+    }));
   } catch (e) {
     debugPrint('Database initialization failed: $e');
     databaseErrorMessage = e.toString();
@@ -492,10 +574,10 @@ Future<void> main() async {
       await Workmanager().cancelByUniqueName('end_of_day_attendance_check');
     } catch (_) {}
 
-    // Register periodic task: daily semester backup at 10:00 PM
+    // Register periodic task: daily semester & cloud backup at midnight (12:00 AM)
     final now = DateTime.now();
-    var backupTargetTime = DateTime(now.year, now.month, now.day, 22, 0, 0);
-    if (now.isAfter(backupTargetTime)) {
+    var backupTargetTime = DateTime(now.year, now.month, now.day, 0, 0, 0);
+    if (!backupTargetTime.isAfter(now)) {
       backupTargetTime = backupTargetTime.add(const Duration(days: 1));
     }
     final backupInitialDelay = backupTargetTime.difference(now);
@@ -510,6 +592,7 @@ Future<void> main() async {
         requiresBatteryNotLow: false,
         requiresCharging: false,
         requiresDeviceIdle: false,
+        requiresStorageNotLow: false,
         networkType: NetworkType.notRequired,
       ),
     );
