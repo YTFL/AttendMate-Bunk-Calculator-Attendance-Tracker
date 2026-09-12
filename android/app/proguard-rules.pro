@@ -50,8 +50,22 @@
 -keep class io.flutter.plugins.localnotifications.** { *; }
 -keep class io.flutter.plugins.timezone.** { *; }
 -keep class io.flutter.plugins.workmanager.** { *; }
+-keep class io.flutter.plugins.googlesignin.** { *; }
+
+# Google Play Services & Google Sign-In
+-keep class com.google.android.gms.auth.api.signin.** { *; }
+-keep class com.google.android.gms.common.api.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+
+# FreeDroidWarn library
+-keep class org.woheller69.freeDroidWarn.** { *; }
+-dontwarn org.woheller69.freeDroidWarn.**
+-keep class org.woheller69.freedroidwarn.** { *; }
+-dontwarn org.woheller69.freedroidwarn.**
 
 # Optimization settings
 -optimizationpasses 5
 -dontusemixedcaseclassnames
 -verbose
+
+

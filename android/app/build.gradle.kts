@@ -21,10 +21,24 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun readGoogleClientId(jsonFileName: String): String {
+    val jsonFile = rootProject.file("../$jsonFileName")
+    val localJsonFile = rootProject.file(jsonFileName)
+    val targetFile = if (jsonFile.exists()) jsonFile else if (localJsonFile.exists()) localJsonFile else null
+    if (targetFile == null || !targetFile.exists()) return ""
+    val jsonText = targetFile.readText()
+    val clientIdMatch = Regex("\"client_id\"\\s*:\\s*\"([^\"]+)\"").find(jsonText)
+    return clientIdMatch?.groupValues?.get(1) ?: ""
+}
+
 android {
     namespace = "com.ytfl.attendmate"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -37,17 +51,11 @@ android {
         applicationId = "com.ytfl.attendmate"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // Set explicit minimum SDK to ensure plugin compatibility and predictable builds
         minSdk = 24 // Android 7.0 (Nougat) and above required for update system
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36 // Android 16 (API 36)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
-        // Only build for 64-bit ARM devices globally
-        ndk {
-            abiFilters.addAll(listOf("arm64-v8a"))
-        }
-
         manifestPlaceholders["appName"] = "AttendMate"
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
@@ -55,12 +63,10 @@ android {
     signingConfigs {
         create("release") {
             val keystoreFile = rootProject.file("app-release-key.jks")
-            if (keystoreFile.exists()) {
-                storeFile = keystoreFile
-                storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: "flutter123"
-                keyAlias = project.findProperty("KEY_ALIAS") as String? ?: "app-key"
-                keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: "flutter123"
-            }
+            storeFile = keystoreFile
+            storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: "flutter123"
+            keyAlias = project.findProperty("KEY_ALIAS") as String? ?: "app-key"
+            keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: "flutter123"
         }
     }
 
@@ -68,13 +74,14 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".debug"
             manifestPlaceholders["appName"] = "AttendMate - Debug"
+            val googleClientId = readGoogleClientId("client_secret_debug.json")
+            buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
         }
         release {
-            signingConfig = if (rootProject.file("app-release-key.jks").exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
+            
+            val googleClientId = readGoogleClientId("client_secret_release.json")
+            buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
             
             // Enable optimization flags for smaller APK size
             isMinifyEnabled = true
@@ -92,6 +99,7 @@ android {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("com.github.woheller69:FreeDroidWarn:V1.14")
 }
 
 flutter {
