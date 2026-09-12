@@ -7,13 +7,18 @@ import '../../utils/snackbar_utils.dart';
 import '../calendar/calendar_screen.dart';
 import '../home/home_screen.dart';
 import '../subject/add_subject_screen.dart';
-import '../subject/import_timetable_screen.dart';
 import 'calendar_sync_selection_screen.dart';
 import 'swipe_actions_settings_screen.dart';
+import '../import/unified_import_screen.dart';
 import '../location/location_manager_screen.dart';
 import '../planner/leave_planner_screen.dart';
 import 'semester_backup_screen.dart';
+import 'google_integrations_screen.dart';
+import 'github_discussions_screen.dart';
+import 'keep_android_open_screen.dart';
 import '../../services/battery_optimization_service.dart';
+import '../../utils/attendance_import_utils.dart';
+import '../../utils/markdown_link_helper.dart';
 
 class SetupGuideScreen extends StatefulWidget {
   final int initialPage;
@@ -26,6 +31,8 @@ class SetupGuideScreen extends StatefulWidget {
 class _SetupGuideScreenState extends State<SetupGuideScreen> {
   late final PageController _pageController;
   int _currentPage = 0;
+
+  static const String _attendanceAiPrompt = AttendanceImportUtils.attendanceAiPrompt;
 
   static const String _aiPrompt = '''I have attached an image/screenshot of my college timetable. Convert it into the following JSON format exactly:
 
@@ -94,22 +101,23 @@ Add subjects one by one with name, acronym, color, and time slots.
 ## Steps
 1. Open the **Subjects** tab.
 2. Tap the **+** button.
-  3. Choose class type:
-    - Keep **Special One-Day Class** OFF for regular weekly classes.
-    - Turn **Special One-Day Class** ON for one-off classes.
-  4. Fill subject name, optional acronym, and color.
-  5. Add schedule:
-    - Weekly class: tap **Add Slot** and pick weekdays/time.
-    - Special class: pick a date first, then add time slot(s) for that date.
-  6. Tap **Add Subject**.
+3. Choose class type:
+   - Keep **Special Multi-Day Class** OFF for regular weekly classes.
+   - Turn **Special Multi-Day Class** ON for non-repeating classes.
+4. Fill subject name, optional acronym, and color.
+5. Add schedule:
+   - Weekly class: tap **Add Slot** and pick weekdays/time.
+   - Special class: pick one or multiple dates (with or without gaps in between them) using the calendar or date chips, then assign time slot(s) across those dates.
+6. Tap **Add Subject**.
 
-  ---
+---
 
-  ## Special One-Day Class Rules
-  - Special classes are counted in attendance just like regular classes.
-  - Special classes do **not** repeat weekly.
-  - For special classes, duplicate colors are not allowed on the same date.
-  - The same special-class color can be reused on a different date.
+## Special Multi-Day Class Rules
+- Special classes are counted in attendance just like regular classes.
+- Special classes do **not** repeat weekly.
+- You can select single or multiple dates with or without gaps (e.g. weekend bootcamps, guest lectures, makeup labs).
+- Duplicate subject colors are not allowed on the same date, but can be reused across different dates.
+- Time slots added apply across all selected dates, and can be adjusted anytime.
 
 ---
 
@@ -443,41 +451,103 @@ The **Leave Planner** allows you to schedule fests, medical leaves, or personal 
 Once the leave period passes, a dialog prompt will ask you to confirm your absences to automatically record them in your attendance logs.
 ''',
   ),
-  _GuideSection(
-      title: '14. More',
-      openInAppLabel: 'Open More Page',
-      openTarget: _GuideOpenTarget.moreTab,
+    _GuideSection(
+      title: '14. Google Integrations & Cloud Backup',
+      openInAppLabel: 'Open Google Integrations',
+      openTarget: _GuideOpenTarget.googleIntegrations,
       markdown: '''
 ## Overview
-The **More** page contains app info, update tools, guide access, and support links.
+AttendMate provides a unified Google account hub under **More > Google Integrations** for Google Calendar synchronization and Google Drive cloud backups.
 
 ---
 
-## Available Items
-- **Use 24-hour format** toggle
-- **App version**
-- **Build number**
-- **App updates**
-- **What's New**
-- **Current version release date**
-- **Setup Guide**
-- **Support me**
-- **Request feature / Report bug**
+## Google Drive Cloud Backup
+- **Daily Midnight Backup**: When enabled, AttendMate automatically creates an encrypted, single JSON cloud backup (`attendmate_cloud_backup.json`) in your Google Drive every night at midnight.
+- **No Rapid Rolling Sync**: Unlike local backups, cloud backup strictly avoids high-frequency rolling syncs to preserve battery and respect API quotas.
+- **Smart Restore on Login**: When signing in to Google Drive (from Google Integrations, Calendar Sync, or Semester Backup), AttendMate automatically detects if an existing cloud backup exists and prompts you to restore your data immediately.
+- **Force Cloud Backup**: Tap **Force Backup to Drive Now** anytime to create an immediate backup.
 
 ---
 
-## Notes
-- **App updates** opens the install/update flow directly when an update is available.
-- **What's New** opens the in-app release notes page.
+## Google Calendar Sync
+- Keep your class schedule synchronized directly to Google Calendar.
+- Clean one-tap toggle for easy enabling and disabling without cluttering secondary screens.
+
+> Privacy First: Cloud backups are stored in your private Google Drive app storage and are never shared or accessible by third parties.
 ''',
     ),
-  _GuideSection(
-      title: '15. Semester Backup & Restore',
+    _GuideSection(
+      title: '15. Historical Attendance Import (CSV & JSON)',
+      openInAppLabel: 'Open Attendance Import',
+      openTarget: _GuideOpenTarget.importAttendance,
+      markdown: '''
+## Overview
+Switching to AttendMate mid-semester or have existing attendance records from your college ERP portal, spreadsheet, or attendance app? You can import all your past attendance history or update your attendance counts in one go using JSON or CSV!
+
+---
+
+## ⚡ Fast AI Import (Screenshot to Attendance in Seconds)
+1. Take a screenshot or copy the text table of your attendance records from your college portal, website, or app.
+2. Tap **Copy AI Prompt** below to copy our prepared attendance conversion prompt.
+3. Paste the prompt along with your screenshot or text into any AI (ChatGPT, Claude, or Gemini).
+4. Copy the JSON array returned by the AI.
+5. In AttendMate, tap the download/import icon in the **Semester** or **Bunk Meter** header (or tap **Open Attendance Import** above).
+6. Paste the JSON into the box (or tap **Paste** inside the text box), then tap **Parse & Preview**.
+7. Confirm the matched subjects and before-and-after comparison, then tap **Apply Import** to update your attendance!
+
+---
+
+## How to Import Manually
+1. Open **Import Attendance** from the header in the **Semester** or **Bunk Meter** screen.
+2. Paste your attendance JSON or CSV directly into the text box, or tap **Upload File** to select a `.json` or `.csv` file.
+3. Tap **Parse & Preview**.
+4. Review the comparison showing matched subjects, previous held/attended counts vs new counts, and percentage differences.
+5. Tap **Apply Import** to save!
+
+---
+
+## Supported Formats & Rules
+- **Date Range**: Dates must fall within your configured semester bounds.
+- **Subject Matching**: Subject names or acronyms are matched against your existing subjects (fuzzy matching supported).
+- **Status Codes**: 
+  - `P` / `Present` / `Attended` / `1`
+  - `A` / `Absent` / `Bunk` / `0`
+  - `H` / `Holiday` / `Cancelled`
+- **JSON Format**:
+```json
+[
+  {
+    "date": "2026-08-10",
+    "subject": "Mathematics",
+    "status": "Present",
+    "slot": "09:00 - 10:00"
+  },
+  {
+    "date": "2026-08-10",
+    "subject": "Physics",
+    "status": "Absent"
+  }
+]
+```
+- **CSV Format**:
+```csv
+Date,Subject,Status,Slot
+2026-08-10,Mathematics,Present,09:00 - 10:00
+2026-08-10,Physics,Absent,10:00 - 11:00
+2026-08-11,Chemistry,Present,
+```
+
+> **Tip:** Tap **Copy AI Prompt** below to copy the prompt and feed your previous attendance data to AI!
+''',
+      aiPromptCopyText: _attendanceAiPrompt,
+    ),
+    _GuideSection(
+      title: '16. Semester Backup & 5-Minute Smart Auto-Backup',
       openInAppLabel: 'Open Semester Backup',
       openTarget: _GuideOpenTarget.semesterBackup,
       markdown: '''
 ## Overview
-Semester Backup allows you to protect your attendance records, timetable schedules, subject details, location geofences, and app settings against accidental deletion or app uninstallation.
+Semester Backup protects your attendance records, timetable schedules, subject details, location geofences, and app settings against accidental loss.
 
 ---
 
@@ -490,12 +560,11 @@ Semester Backup allows you to protect your attendance records, timetable schedul
 
 ---
 
-## Automatic Backups & Notifications
-AttendMate automatically creates a fresh backup and sends a system notification in two scenarios:
-1. **App Close / Exit**: When you finish using the app and minimize/close it.
-2. **Daily 10:00 PM Backup**: Background task running every night at 10:00 PM.
-
-> AttendMate keeps at most **3 latest backups** in your selected directory, automatically deleting older ones.
+## Automatic Backups & Smart 5-Minute App Exit
+AttendMate creates backups in three scenarios:
+1. **5-Minute Smart App-Close Backup**: When you exit the app, a backup is scheduled 5 minutes later **only if you made changes in that session**. Reopening the app without making changes preserves the pending timer without resetting it.
+2. **Daily 10:00 PM Local Backup**: Background task running every night at 10:00 PM for up to 3 rolling backups.
+3. **Daily Midnight Cloud Backup**: Backs up to Google Drive at midnight when Google Drive backup is enabled.
 
 ---
 
@@ -506,7 +575,7 @@ AttendMate automatically creates a fresh backup and sends a system notification 
 ''',
     ),
     _GuideSection(
-      title: '15. Sharing & Importing Semester Templates',
+      title: '17. Sharing & Importing Semester Templates',
       openInAppLabel: 'Open Semester Page',
       openTarget: _GuideOpenTarget.semesterTab,
       markdown: '''
@@ -558,7 +627,55 @@ When previewing the shared semester, you can choose between two import modes:
 ''',
     ),
     _GuideSection(
-      title: '16. Background Access',
+      title: '18. GitHub Discussions & Announcements',
+      openInAppLabel: 'Open Discussions',
+      openTarget: _GuideOpenTarget.githubDiscussions,
+      markdown: '''
+## Overview
+Stay connected with the AttendMate community, read official announcements, ask questions, and share ideas directly from the app.
+
+---
+
+## In-App Discussion Browser
+1. Go to **More > Help & Support > GitHub Discussions**.
+2. Filter discussions by category chips: **All**, **Announcements**, **General**, **Ideas**, **Q&A**, etc.
+3. Tap any discussion card to read the full post formatted in clean markdown.
+4. Tap the **Open in GitHub** icon in the header to jump to the official discussion page on GitHub to join the conversation.
+
+---
+
+## Launch Announcement Popups
+- When a new official announcement is posted on GitHub, AttendMate automatically notifies you on app launch with an interactive popup dialog.
+- Only posts categorized as **Announcements** trigger launch notifications.
+- All fetched posts are cached offline so you can read them even without an active internet connection.
+''',
+    ),
+    _GuideSection(
+      title: '19. Keep Android Open & Sideloading',
+      openInAppLabel: 'Open Keep Android Open',
+      openTarget: _GuideOpenTarget.keepAndroidOpen,
+      markdown: '''
+## Overview
+Open platforms allow apps like AttendMate to exist freely without walled gardens, advertising requirements, or platform restrictions.
+
+---
+
+## The Threat to Android Sideloading (Jan 2027)
+Starting in January 2027, major platform restrictions are planned that could heavily restrict sideloading apps from outside official app stores, impacting open-source projects, independent developers, and student tools.
+
+---
+
+## Take Action
+Learn about the movement to preserve open ecosystems and support developers:
+1. Go to **More > Help & Support > Keep Android Open**.
+2. **Sign the Petition**: Add your voice to the Change.org petition advocating for user device freedom.
+3. **Visit KeepAndroidOpen.org**: Read documentation, analyses, and news on platform openness.
+4. **Explore F-Droid**: Discover alternative open-source repositories and free software ecosystems.
+5. **FreeDroidWarn**: AttendMate integrates FreeDroidWarn to alert users when OS upgrades threaten sideloading capabilities.
+''',
+    ),
+    _GuideSection(
+      title: '20. Background Access',
       openInAppLabel: 'Configure Background Access',
       openTarget: _GuideOpenTarget.batteryOptimization,
       markdown: '''
@@ -575,25 +692,53 @@ Android battery saver optimization can kill AttendMate when running in the backg
 ---
 
 ## How to Grant Exemption
-1. Open the **More** tab and scroll to **Background Access**.
+1. Open the **More** tab and scroll to **System > Background Access**.
 2. Tap **Fix Access** or the tile to open the prompt.
-3. Tap **Allow** to grant exemption from Android battery optimization.
+3. Tap **Get Access** to grant exemption from Android battery optimization.
+4. For device-specific guidance (Xiaomi, Samsung, OnePlus, etc.), tap **dontkillmyapp.com Guide**.
 ''',
     ),
     _GuideSection(
-      title: '17. Tips & Tricks',
+      title: '21. More & App Settings',
+      openInAppLabel: 'Open More Page',
+      openTarget: _GuideOpenTarget.moreTab,
+      markdown: '''
+## Overview
+The **More** page contains app preferences, integrations, diagnostics, update tools, guide access, and support links.
+
+---
+
+## Available Items
+- **Swipe Actions**: Configure left and right swipe actions for attendance cards.
+- **Google Integrations**: Centralized Google Account management for Calendar and Drive.
+- **Location Manager**: Set up classroom coordinates and auto-attendance geofences.
+- **Calendar Sync**: Synchronize schedules to Google or device calendars.
+- **Semester Backup**: Rolling local backups, Google Drive backups, and historical attendance import.
+- **Diagnostics Log**: In-app operational and error logs.
+- **GitHub Discussions**: Community discussions and announcements.
+- **Keep Android Open**: Sideloading awareness and petition links.
+- **Use 24-hour format** toggle
+- **App version & build number**
+- **App updates & What's New**
+- **Setup Guide & Interactive Tour**
+- **Legal**: Privacy Policy and Terms of Service
+''',
+    ),
+    _GuideSection(
+      title: '22. Tips & Tricks',
       openInAppLabel: 'Open Today Page',
       openTarget: _GuideOpenTarget.todayTab,
       markdown: '''
 ## Tips
 - Color-code subjects for faster recognition.
-- Use **Special One-Day Class** for makeup classes, extra labs, or one-time events.
+- Use **Special Multi-Day Class** for workshops, extra labs, or multi-day guest lectures.
 - Use JSON import to save setup time.
 - Keep notifications and background permissions enabled for quick marking.
 - Use Calendar to fix past mistakes.
 - Use **Holiday** when classes are officially cancelled.
+- Set up **Google Drive Backup** under Google Integrations to keep your data safe in the cloud.
 
-> All attendance data is stored locally on your device.
+> All attendance data is stored locally on your device unless you explicitly connect Google Drive.
 ''',
     ),
   ];
@@ -619,8 +764,8 @@ Android battery saver optimization can kill AttendMate when running in the backg
     );
   }
 
-  Future<void> _copyAiPrompt() async {
-    await Clipboard.setData(const ClipboardData(text: _aiPrompt));
+  Future<void> _copyAiPrompt([String? promptText]) async {
+    await Clipboard.setData(ClipboardData(text: promptText ?? _aiPrompt));
     if (!mounted) {
       return;
     }
@@ -644,7 +789,7 @@ Android battery saver optimization can kill AttendMate when running in the backg
       case _GuideOpenTarget.addSubject:
         return _openHomeTab(1, subLevelBuilder: (context) => const AddSubjectScreen());
       case _GuideOpenTarget.importTimetable:
-        return _openHomeTab(1, subLevelBuilder: (context) => const ImportTimetableScreen());
+        return _openHomeTab(1, subLevelBuilder: (context) => const UnifiedImportScreen(initialTabIndex: 0));
       case _GuideOpenTarget.calendar:
         return _openHomeTab(0, subLevelBuilder: (context) => const CalendarScreen());
       case _GuideOpenTarget.googleCalendarSync:
@@ -657,6 +802,14 @@ Android battery saver optimization can kill AttendMate when running in the backg
         return _openHomeTab(3, subLevelBuilder: (context) => const LeavePlannerScreen());
       case _GuideOpenTarget.semesterBackup:
         return _openHomeTab(4, subLevelBuilder: (context) => const SemesterBackupScreen());
+      case _GuideOpenTarget.importAttendance:
+        return _openHomeTab(2, subLevelBuilder: (context) => const UnifiedImportScreen(initialTabIndex: 1));
+      case _GuideOpenTarget.googleIntegrations:
+        return _openHomeTab(4, subLevelBuilder: (context) => const GoogleIntegrationsScreen());
+      case _GuideOpenTarget.githubDiscussions:
+        return _openHomeTab(4, subLevelBuilder: (context) => const GitHubDiscussionsScreen());
+      case _GuideOpenTarget.keepAndroidOpen:
+        return _openHomeTab(4, subLevelBuilder: (context) => const KeepAndroidOpenScreen());
       case _GuideOpenTarget.batteryOptimization:
         BatteryOptimizationService().showBatteryOptimizationDialog(context);
         return;
@@ -748,7 +901,7 @@ Android battery saver optimization can kill AttendMate when running in the backg
                     markdown: section.markdown,
                     markdownStyle: markdownStyle,
                     aiPromptCopyText: section.aiPromptCopyText,
-                    onCopyPrompt: _copyAiPrompt,
+                    onCopyPrompt: () => _copyAiPrompt(section.aiPromptCopyText),
                     openInAppLabel: section.openInAppLabel,
                     onOpenInApp: section.openTarget == null
                         ? null
@@ -818,6 +971,10 @@ enum _GuideOpenTarget {
   locationManager,
   leavePlanner,
   semesterBackup,
+  importAttendance,
+  googleIntegrations,
+  githubDiscussions,
+  keepAndroidOpen,
   batteryOptimization,
 }
 
@@ -899,6 +1056,9 @@ class _GuideSectionPage extends StatelessWidget {
                 data: markdown,
                 styleSheet: markdownStyle,
                 selectable: true,
+                onTapLink: (text, href, title) {
+                  MarkdownLinkHelper.openLink(context, href);
+                },
               ),
               if (aiPromptCopyText != null && aiPromptCopyText!.trim().isNotEmpty)
                 Padding(

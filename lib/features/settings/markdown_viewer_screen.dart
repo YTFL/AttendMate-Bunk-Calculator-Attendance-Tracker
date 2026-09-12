@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../utils/markdown_link_helper.dart';
+
 class MarkdownViewerScreen extends StatefulWidget {
   final String title;
   final String assetPath;
@@ -56,6 +58,9 @@ class _MarkdownViewerScreenState extends State<MarkdownViewerScreen> {
             softLineBreak: true,
             padding: const EdgeInsets.all(16),
             styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+            onTapLink: (text, href, title) {
+              MarkdownLinkHelper.openLink(context, href);
+            },
           );
         },
       ),

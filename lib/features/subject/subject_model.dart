@@ -128,11 +128,25 @@ class Subject {
   }
 
   DateTime? get specialClassDate {
-
     if (!isSpecialClass) {
       return null;
     }
-    return schedule.first.specificDate;
+    return schedule.firstOrNull?.specificDate;
+  }
+
+  List<DateTime> get specialClassDates {
+    if (!isSpecialClass) {
+      return const [];
+    }
+    final dates = <DateTime>{};
+    for (final slot in schedule) {
+      if (slot.specificDate != null) {
+        final norm = normalizeDate(slot.specificDate);
+        if (norm != null) dates.add(norm);
+      }
+    }
+    final sorted = dates.toList()..sort();
+    return sorted;
   }
 
   int getTotalScheduledClasses(DateTime startDate, DateTime endDate) {

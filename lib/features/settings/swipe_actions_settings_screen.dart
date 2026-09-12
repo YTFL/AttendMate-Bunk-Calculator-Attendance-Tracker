@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../attendance/attendance_model.dart';
 import '../../utils/responsive_scale.dart';
@@ -96,6 +97,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           tooltip: 'Unmark Holiday',
           color: Colors.grey,
           onPressed: () {
+            HapticFeedback.vibrate();
             setState(() {
               _mockStatus = null;
             });
@@ -111,6 +113,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           tooltip: 'Mark Holiday',
           color: Colors.purple,
           onPressed: () {
+            HapticFeedback.vibrate();
             setState(() {
               _mockStatus = AttendanceStatus.cancelled;
             });
@@ -144,6 +147,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           isUnmarking: isUnmarkingLeft,
         ),
         onSwipeRight: () {
+          HapticFeedback.vibrate();
           setState(() {
             if (isUnmarkingRight) {
               _mockStatus = null;
@@ -167,6 +171,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           );
         },
         onSwipeLeft: () {
+          HapticFeedback.vibrate();
           setState(() {
             if (isUnmarkingLeft) {
               _mockStatus = null;

@@ -23,13 +23,17 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
     _refreshLogs();
   }
 
-  Future<void> _refreshLogs() async {
-    setState(() => _isLoading = true);
+  Future<void> _refreshLogs({bool showLoading = false}) async {
+    if (showLoading || _logs.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final logs = await _databaseService.loadAppLogs();
-    setState(() {
-      _logs = logs;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _logs = logs;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _clearLogs() async {
@@ -93,6 +97,12 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
 
   List<Map<String, dynamic>> get _filteredLogs {
     if (_selectedFilter == 'ALL') return _logs;
+    if (_selectedFilter == 'BACKUP') {
+      return _logs.where((l) {
+        final tag = l['tag'] as String? ?? '';
+        return tag == 'BackupService' || tag == 'Workmanager' || tag == 'GoogleDriveBackup';
+      }).toList();
+    }
     return _logs.where((l) => l['level'] == _selectedFilter).toList();
   }
 
@@ -162,6 +172,8 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
                 children: [
                   _buildFilterChip('ALL', 'All Logs'),
                   const SizedBox(width: 8),
+                  _buildFilterChip('BACKUP', 'Backups'),
+                  const SizedBox(width: 8),
                   _buildFilterChip('INFO', 'Info'),
                   const SizedBox(width: 8),
                   _buildFilterChip('WARNING', 'Warnings'),
@@ -172,10 +184,10 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
             ),
           ),
           const Divider(height: 1),
-
+          if (_isLoading && _logs.isNotEmpty) const LinearProgressIndicator(minHeight: 2),
           // Logs List
           Expanded(
-            child: _isLoading
+            child: (_isLoading && _logs.isEmpty)
                 ? const Center(child: CircularProgressIndicator())
                 : filtered.isEmpty
                     ? Center(

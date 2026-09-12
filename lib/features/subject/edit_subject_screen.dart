@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -32,7 +33,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
   late Color _selectedColor;
   late bool _isSpecialClass;
   late int _targetAttendance;
-  DateTime? _specialClassDate;
+  final Set<DateTime> _specialClassDates = <DateTime>{};
   final List<TimeSlot> _schedule = [];
   List<LocationConfig> _locations = [];
   LocationConfig? _selectedLocation;
@@ -46,7 +47,10 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     _selectedColor = widget.subject.color;
     _isSpecialClass = widget.subject.isSpecialClass;
     _targetAttendance = widget.subject.targetAttendance;
-    _specialClassDate = widget.subject.specialClassDate;
+    _specialClassDates.addAll(widget.subject.specialClassDates);
+    if (_specialClassDates.isEmpty && widget.subject.specialClassDate != null) {
+      _specialClassDates.add(widget.subject.specialClassDate!);
+    }
     _schedule.addAll(widget.subject.activeSchedule);
     _sortSchedule();
 
@@ -99,16 +103,22 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     final subjectProvider =
         Provider.of<SubjectProvider>(context, listen: false);
     return subjectProvider.subjects
-        .where((s) => s.id != widget.subject.id && s.isSpecialClass && s.specialClassDate != null)
-        .where((s) => isSameDay(s.specialClassDate!, normalizedDate))
+        .where((s) => s.id != widget.subject.id && s.isSpecialClass)
+        .where((s) =>
+            s.specialClassDates.any((d) => isSameDay(d, normalizedDate)) ||
+            (s.specialClassDate != null && isSameDay(s.specialClassDate!, normalizedDate)))
         .map((s) => s.color.toARGB32())
         .toSet();
   }
 
   Set<int> _getUsedColorValuesForCurrentMode() {
     if (_isSpecialClass) {
-      if (_specialClassDate == null) return <int>{};
-      return _getUsedSpecialColorValuesForDate(_specialClassDate!);
+      if (_specialClassDates.isEmpty) return <int>{};
+      final used = <int>{};
+      for (final d in _specialClassDates) {
+        used.addAll(_getUsedSpecialColorValuesForDate(d));
+      }
+      return used;
     }
     return _getUsedWeeklyColorValues();
   }
@@ -187,6 +197,13 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
   Future<void> _showAddSlotSheet({int? editIndex}) async {
     FocusScope.of(context).unfocus();
 
+    if (_isSpecialClass && _specialClassDates.isEmpty) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(content: Text('Please add at least one date under "Class Dates" before adding time slots.')),
+      );
+      return;
+    }
+
     final timeFormat =
         Provider.of<TimeFormatProvider>(context, listen: false).timeFormat;
 
@@ -195,9 +212,12 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     // State for the bottom sheet
     TimeOfDay startTime = existing?.startTime ?? TimeOfDay.now();
     TimeOfDay endTime = existing?.endTime ?? _defaultEndTime(startTime);
-    final Set<DayOfWeek> selectedDays = existing != null
+    final Set<DayOfWeek> selectedDays = existing != null && existing.specificDate == null
         ? {existing.day}
         : {};
+    final Set<DateTime> selectedSpecialDates = existing != null && existing.specificDate != null
+        ? {existing.specificDate!}
+        : Set<DateTime>.from(_specialClassDates);
 
     LocationConfig? slotLocation;
     if (existing != null && existing.locationId != null) {
@@ -489,6 +509,90 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                           ],
                         ),
                       ),
+                  ] else ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Dates for this class',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        if (editIndex == null && _specialClassDates.length > 1)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () {
+                              setSheetState(() {
+                                if (selectedSpecialDates.length == _specialClassDates.length) {
+                                  selectedSpecialDates.clear();
+                                } else {
+                                  selectedSpecialDates.addAll(_specialClassDates);
+                                }
+                              });
+                            },
+                            child: Text(selectedSpecialDates.length == _specialClassDates.length ? 'Deselect All' : 'Select All'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: (_specialClassDates.toList()..sort()).map((date) {
+                        final selected = selectedSpecialDates.any((d) => isSameDay(d, date));
+                        return FilterChip(
+                          label: Text(
+                            DateFormat('MMM d (EEE)').format(date),
+                            style: TextStyle(
+                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                              color: selected ? Colors.white : colorScheme.onSurface,
+                            ),
+                          ),
+                          selected: selected,
+                          onSelected: (val) {
+                            setSheetState(() {
+                              if (val) {
+                                if (editIndex != null) {
+                                  selectedSpecialDates.clear();
+                                }
+                                selectedSpecialDates.add(date);
+                              } else {
+                                selectedSpecialDates.removeWhere((d) => isSameDay(d, date));
+                              }
+                            });
+                          },
+                          selectedColor: _selectedColor,
+                          backgroundColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                          checkmarkColor: Colors.white,
+                          showCheckmark: false,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: selected ? _selectedColor : colorScheme.outlineVariant.withValues(alpha: 0.5),
+                              width: 1,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    if (selectedSpecialDates.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: colorScheme.error, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Select at least one date',
+                              style: TextStyle(
+                                  color: colorScheme.error, fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
 
                   // Class specific location
@@ -552,63 +656,16 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                         ),
                       ),
                       onPressed: (timeError ||
-                              (isWeekly && selectedDays.isEmpty))
+                              (isWeekly && selectedDays.isEmpty) ||
+                              (!isWeekly && selectedSpecialDates.isEmpty))
                           ? null
                           : () {
-                              // Build slots
                               if (_isSpecialClass) {
-                                if (_specialClassDate == null) {
-                                  Navigator.pop(ctx);
-                                  _pickSpecialClassDate().then((_) {
-                                    if (!mounted ||
-                                        _specialClassDate == null) {
-                                      return;
-                                    }
-                                    final date = _specialClassDate!;
-                                    setState(() {
-                                      if (editIndex != null) {
-                                        _schedule[editIndex] = TimeSlot(
-                                          day: DayOfWeek.values[
-                                              date.weekday - 1],
-                                          startTime: startTime,
-                                          endTime: endTime,
-                                          specificDate: date,
-                                          locationId: slotLocation?.id,
-                                          room: slotLocation?.name,
-                                          block: slotLocation?.block,
-                                        );
-                                      } else {
-                                        _schedule.add(TimeSlot(
-                                          day: DayOfWeek.values[
-                                              date.weekday - 1],
-                                          startTime: startTime,
-                                          endTime: endTime,
-                                          specificDate: date,
-                                          locationId: slotLocation?.id,
-                                          room: slotLocation?.name,
-                                          block: slotLocation?.block,
-                                        ));
-                                      }
-                                      _sortSchedule();
-                                    });
-                                  });
-                                  return;
-                                }
-
-                                final date = _specialClassDate!;
                                 setState(() {
                                   if (editIndex != null) {
-                                    _schedule[editIndex] = TimeSlot(
-                                      day: DayOfWeek.values[
-                                          date.weekday - 1],
-                                      startTime: startTime,
-                                      endTime: endTime,
-                                      specificDate: date,
-                                      locationId: slotLocation?.id,
-                                      room: slotLocation?.name,
-                                      block: slotLocation?.block,
-                                    );
-                                  } else {
+                                    _schedule.removeAt(editIndex);
+                                  }
+                                  for (final date in selectedSpecialDates) {
                                     _schedule.add(TimeSlot(
                                       day: DayOfWeek.values[
                                           date.weekday - 1],
@@ -666,28 +723,15 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     final now = DateTime.now();
     final selected = await showDatePicker(
       context: context,
-      initialDate: _specialClassDate ?? now,
+      initialDate: _specialClassDates.isEmpty ? now : _specialClassDates.last,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 5),
     );
     if (!mounted || selected == null) return;
     final normalized = DateTime(selected.year, selected.month, selected.day);
     setState(() {
-      _specialClassDate = normalized;
-      final updated = _schedule.map((slot) => TimeSlot(
-            day: DayOfWeek.values[normalized.weekday - 1],
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            specificDate: normalized,
-            locationId: slot.locationId,
-            room: slot.room,
-            block: slot.block,
-          )).toList();
-      _schedule
-        ..clear()
-        ..addAll(updated);
+      _specialClassDates.add(normalized);
       _selectedColor = _pickRandomAvailableColor();
-      _sortSchedule();
     });
   }
 
@@ -818,7 +862,7 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     setState(() {
       _isSpecialClass = enabled;
       _schedule.clear();
-      _specialClassDate = null;
+      _specialClassDates.clear();
       _selectedColor = _pickRandomAvailableColor();
     });
   }
@@ -844,10 +888,10 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
       return;
     }
 
-    if (_isSpecialClass && _specialClassDate == null) {
+    if (_isSpecialClass && _specialClassDates.isEmpty) {
       ScaffoldMessenger.of(context).showReplacingSnackBar(
         const SnackBar(
-          content: Text('Please select a date for the special class.'),
+          content: Text('Please select at least one date for the special class.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -855,13 +899,12 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     }
 
     if (_isSpecialClass) {
-      final usedSpecialColors =
-          _getUsedSpecialColorValuesForDate(_specialClassDate!);
+      final usedSpecialColors = _getUsedColorValuesForCurrentMode();
       if (usedSpecialColors.contains(_selectedColor.toARGB32())) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(
           const SnackBar(
             content: Text(
-                'This color is already used by another special class on this day.'),
+                'This color is already used by another special class on one of these days.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1256,10 +1299,10 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
           SwitchListTile.adaptive(
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            title: const Text('Special One-Day Class',
+            title: const Text('Special Class (One-Day or Multi-Day)',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             subtitle: Text(
-              'Does not repeat weekly — for make-up or extra classes',
+              'Does not repeat weekly — select arbitrary dates with or without gaps',
               style: TextStyle(
                   fontSize: 12,
                   color: colorScheme.onSurface.withValues(alpha: 0.5)),
@@ -1273,34 +1316,92 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
             Divider(
                 height: 1,
                 color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              leading: Icon(Icons.calendar_today_rounded, color: _selectedColor),
-              title: Text(
-                _specialClassDate == null
-                    ? 'Tap to select date'
-                    : _formatDate(_specialClassDate!),
-                style: TextStyle(
-                  color: _specialClassDate == null
-                      ? colorScheme.onSurface.withValues(alpha: 0.5)
-                      : colorScheme.onSurface,
-                  fontWeight: _specialClassDate != null
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-              subtitle: _specialClassDate != null
-                  ? Text(
-                      const ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][_specialClassDate!.weekday - 1],
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: colorScheme.onSurface
-                              .withValues(alpha: 0.5)),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Class Dates (${_specialClassDates.length})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickSpecialClassDate,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add Date'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (_specialClassDates.isEmpty)
+                    InkWell(
+                      onTap: _pickSpecialClassDate,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.calendar_today_rounded, size: 16, color: colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Tap "+ Add Date" to select dates',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colorScheme.onSurface.withValues(alpha: 0.7),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     )
-                  : null,
-              trailing: Icon(Icons.chevron_right_rounded, color: _selectedColor),
-              onTap: _pickSpecialClassDate,
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: (_specialClassDates.toList()..sort()).map((date) {
+                        return InputChip(
+                          avatar: Icon(Icons.calendar_today_rounded, size: 14, color: _selectedColor),
+                          label: Text(
+                            DateFormat('MMM d, y (EEE)').format(date),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          onDeleted: () {
+                            setState(() {
+                              _specialClassDates.remove(date);
+                              _schedule.removeWhere((s) => s.specificDate != null && isSameDay(s.specificDate!, date));
+                              _sortSchedule();
+                            });
+                          },
+                          deleteIconColor: colorScheme.error,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
             ),
           ],
         ],

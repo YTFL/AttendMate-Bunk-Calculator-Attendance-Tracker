@@ -12,6 +12,8 @@ class SubjectProjectedAttendance {
   final double projectedPercentage;
   final bool hasActivePlannedLeave;
   final DateTime? latestLeaveEndDate;
+  final DateTime? leaveStartDate;
+  final String? leaveName;
 
   const SubjectProjectedAttendance({
     required this.totalAttended,
@@ -21,6 +23,8 @@ class SubjectProjectedAttendance {
     required this.projectedPercentage,
     required this.hasActivePlannedLeave,
     this.latestLeaveEndDate,
+    this.leaveStartDate,
+    this.leaveName,
   });
 }
 
@@ -33,6 +37,8 @@ class SemesterProjectedAttendance {
   final double projectedSlack;
   final bool hasActivePlannedLeave;
   final DateTime? latestLeaveEndDate;
+  final DateTime? leaveStartDate;
+  final String? leaveName;
 
   const SemesterProjectedAttendance({
     required this.totalAttended,
@@ -43,6 +49,8 @@ class SemesterProjectedAttendance {
     required this.projectedSlack,
     required this.hasActivePlannedLeave,
     this.latestLeaveEndDate,
+    this.leaveStartDate,
+    this.leaveName,
   });
 }
 
@@ -51,12 +59,14 @@ class PostLeaveRecoveryResult {
   final bool isAchievable;
   final int remainingAfterLeave;
   final double maxAchievablePercentage;
+  final DateTime? targetRecoveryDate;
 
   const PostLeaveRecoveryResult({
     required this.classesNeeded,
     required this.isAchievable,
     required this.remainingAfterLeave,
     required this.maxAchievablePercentage,
+    this.targetRecoveryDate,
   });
 }
 
@@ -193,6 +203,8 @@ class ProjectedAttendanceCalculator {
       projectedPercentage: percentage,
       hasActivePlannedLeave: true,
       latestLeaveEndDate: maxHorizonDate,
+      leaveStartDate: immediateLeave.startDate,
+      leaveName: immediateLeave.name,
     );
   }
 
@@ -330,6 +342,8 @@ class ProjectedAttendanceCalculator {
       projectedSlack: projectedSlack,
       hasActivePlannedLeave: true,
       latestLeaveEndDate: maxHorizonDate,
+      leaveStartDate: immediateLeave.startDate,
+      leaveName: immediateLeave.name,
     );
   }
 
@@ -346,8 +360,16 @@ class ProjectedAttendanceCalculator {
     final double targetRatio = targetPercentage / 100.0;
     final currentRatio = projectedMarked > 0 ? (projectedAttended / projectedMarked) : 1.0;
 
+    // Solve for N continuous classes needed to reach target percentage
+    final needed = AttendanceMath.calculateClassesNeededToReachTarget(
+      attended: projectedAttended,
+      marked: projectedMarked,
+      targetPercentage: targetPercentage,
+    );
+
     // Count remaining scheduled classes across all subjects strictly AFTER leaveEndDate
     int remainingAfterLeave = 0;
+    DateTime? recoveryDate;
     final semesterEndDay = DateTime(semester.endDate.year, semester.endDate.month, semester.endDate.day, 23, 59, 59);
 
     DateTime curDate = DateTime(leaveEndDate.year, leaveEndDate.month, leaveEndDate.day).add(const Duration(days: 1));
@@ -358,6 +380,9 @@ class ProjectedAttendanceCalculator {
             final slotStart = DateTime(curDate.year, curDate.month, curDate.day, slot.startTime.hour, slot.startTime.minute);
             if (slotStart.isAfter(leaveEndDate)) {
               remainingAfterLeave++;
+              if (needed != -1 && remainingAfterLeave == needed && recoveryDate == null) {
+                recoveryDate = DateTime(curDate.year, curDate.month, curDate.day);
+              }
             }
           }
         }
@@ -374,13 +399,6 @@ class ProjectedAttendanceCalculator {
       );
     }
 
-    // Solve for N continuous classes needed to reach target percentage
-    final needed = AttendanceMath.calculateClassesNeededToReachTarget(
-      attended: projectedAttended,
-      marked: projectedMarked,
-      targetPercentage: targetPercentage,
-    );
-
     final isAchievable = needed != -1 && needed <= remainingAfterLeave;
     final maxAttainableAttended = projectedAttended + remainingAfterLeave;
     final maxAttainableMarked = projectedMarked + remainingAfterLeave;
@@ -393,6 +411,7 @@ class ProjectedAttendanceCalculator {
       isAchievable: isAchievable,
       remainingAfterLeave: remainingAfterLeave,
       maxAchievablePercentage: maxAchievablePercentage,
+      targetRecoveryDate: isAchievable ? recoveryDate : null,
     );
   }
 }

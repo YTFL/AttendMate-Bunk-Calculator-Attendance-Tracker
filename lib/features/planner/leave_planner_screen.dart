@@ -56,8 +56,10 @@ class _LeavePlannerScreenState extends State<LeavePlannerScreen> {
     super.dispose();
   }
 
-  Future<void> _loadLeaves() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadLeaves({bool showLoading = false}) async {
+    if (showLoading || _leaves.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final leaves = await _databaseService.loadPlannedLeaves();
     if (mounted) {
       setState(() {

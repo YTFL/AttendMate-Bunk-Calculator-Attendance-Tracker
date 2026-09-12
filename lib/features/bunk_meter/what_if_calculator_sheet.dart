@@ -95,6 +95,67 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
+  int _calculateClassesHeldForSubject({
+    required Subject subject,
+    required List<Attendance> subjectRecords,
+    required Semester semester,
+    required DateTime endDate,
+  }) {
+    final manualOverride = subject.manualAttendanceOverride;
+    DateTime countingStart = manualOverride?.effectiveFrom ?? semester.startDate;
+    if (countingStart.isBefore(semester.startDate)) {
+      countingStart = semester.startDate;
+    }
+
+    final recordsForSubject = subjectRecords.where((record) {
+      if (record.date.isAfter(endDate)) return false;
+      if (record.date.isBefore(countingStart)) return false;
+      return true;
+    }).toList();
+
+    final cancelledPostOverride = recordsForSubject
+        .where((record) => record.status == AttendanceStatus.cancelled)
+        .length;
+
+    final scheduledSoFarInWindow = countingStart.isAfter(endDate)
+        ? 0
+        : subject.getTotalScheduledClasses(countingStart, endDate);
+
+    int heldPostOverride = scheduledSoFarInWindow - cancelledPostOverride;
+    if (heldPostOverride < 0) {
+      heldPostOverride = 0;
+    }
+
+    final baselineHeld = manualOverride?.classesHeld ?? 0;
+    return baselineHeld + heldPostOverride;
+  }
+
+  int _calculateAttendedForSubject({
+    required Subject subject,
+    required List<Attendance> subjectRecords,
+    required Semester semester,
+    required DateTime endDate,
+  }) {
+    final manualOverride = subject.manualAttendanceOverride;
+    DateTime countingStart = manualOverride?.effectiveFrom ?? semester.startDate;
+    if (countingStart.isBefore(semester.startDate)) {
+      countingStart = semester.startDate;
+    }
+
+    final recordsForSubject = subjectRecords.where((record) {
+      if (record.date.isAfter(endDate)) return false;
+      if (record.date.isBefore(countingStart)) return false;
+      return true;
+    }).toList();
+
+    final attendedPostOverride = recordsForSubject
+        .where((record) => record.status == AttendanceStatus.attended)
+        .length;
+
+    final baselineAttended = manualOverride?.classesAttended ?? 0;
+    return baselineAttended + attendedPostOverride;
+  }
+
   _RemainingClassesResult _countClassesUpToDate(Subject subject, DateTime targetDate, bool considerLeave) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -112,7 +173,8 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     }
     final countingStartDay = DateTime(countingStart.year, countingStart.month, countingStart.day);
 
-    final startDay = today.isBefore(countingStartDay) ? countingStartDay : today;
+    final tomorrow = today.add(const Duration(days: 1));
+    final startDay = tomorrow.isBefore(countingStartDay) ? countingStartDay : tomorrow;
 
     final activeLeaves = considerLeave
         ? _plannedLeaves.where((leave) {
@@ -170,7 +232,11 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // Calculate current totals based on selection, respecting manual attendance overrides
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final endDate = today.isAfter(widget.semester.endDate) ? widget.semester.endDate : today;
+
+    // Calculate current totals matching the semester details screen
     int currentAttended = 0;
     int currentHeld = 0;
     int leaveMissedTotal = 0;
@@ -181,28 +247,20 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
 
     if (_selectedSubjectId == 'all') {
       for (final subject in widget.subjects) {
-        final manualOverride = subject.manualAttendanceOverride;
-        DateTime countingStart = manualOverride?.effectiveFrom ?? widget.semester.startDate;
-        if (countingStart.isBefore(widget.semester.startDate)) {
-          countingStart = widget.semester.startDate;
-        }
-        final countingStartDay = DateTime(countingStart.year, countingStart.month, countingStart.day);
-
-        currentAttended += manualOverride?.classesAttended ?? 0;
-        currentHeld += manualOverride?.classesHeld ?? 0;
-
         final records = widget.recordsBySubject[subject.id] ?? const [];
-        for (final r in records) {
-          final rDay = DateTime(r.date.year, r.date.month, r.date.day);
-          if (rDay.isBefore(countingStartDay)) continue;
+        currentHeld += _calculateClassesHeldForSubject(
+          subject: subject,
+          subjectRecords: records,
+          semester: widget.semester,
+          endDate: endDate,
+        );
+        currentAttended += _calculateAttendedForSubject(
+          subject: subject,
+          subjectRecords: records,
+          semester: widget.semester,
+          endDate: endDate,
+        );
 
-          if (r.status == AttendanceStatus.attended) {
-            currentAttended++;
-            currentHeld++;
-          } else if (r.status == AttendanceStatus.absent) {
-            currentHeld++;
-          }
-        }
         final res = _countClassesUpToDate(subject, targetHorizon, _considerPlannedLeave);
         totalRemaining += res.remainingClasses;
         leaveMissedTotal += res.leaveMissedClasses;
@@ -212,28 +270,20 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
         (s) => s.id == _selectedSubjectId,
         orElse: () => widget.subjects.first,
       );
-      final manualOverride = selectedSubject.manualAttendanceOverride;
-      DateTime countingStart = manualOverride?.effectiveFrom ?? widget.semester.startDate;
-      if (countingStart.isBefore(widget.semester.startDate)) {
-        countingStart = widget.semester.startDate;
-      }
-      final countingStartDay = DateTime(countingStart.year, countingStart.month, countingStart.day);
-
-      currentAttended += manualOverride?.classesAttended ?? 0;
-      currentHeld += manualOverride?.classesHeld ?? 0;
-
       final records = widget.recordsBySubject[selectedSubject.id] ?? const [];
-      for (final r in records) {
-        final rDay = DateTime(r.date.year, r.date.month, r.date.day);
-        if (rDay.isBefore(countingStartDay)) continue;
+      currentHeld = _calculateClassesHeldForSubject(
+        subject: selectedSubject,
+        subjectRecords: records,
+        semester: widget.semester,
+        endDate: endDate,
+      );
+      currentAttended = _calculateAttendedForSubject(
+        subject: selectedSubject,
+        subjectRecords: records,
+        semester: widget.semester,
+        endDate: endDate,
+      );
 
-        if (r.status == AttendanceStatus.attended) {
-          currentAttended++;
-          currentHeld++;
-        } else if (r.status == AttendanceStatus.absent) {
-          currentHeld++;
-        }
-      }
       final res = _countClassesUpToDate(selectedSubject, targetHorizon, _considerPlannedLeave);
       totalRemaining = res.remainingClasses;
       leaveMissedTotal = res.leaveMissedClasses;
@@ -578,15 +628,34 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _selectedTargetDate == null || _isSameDay(_selectedTargetDate!, widget.semester.endDate)
-                            ? 'Semester Remaining: $totalRemaining classes'
-                            : 'Remaining (Up to ${DateFormat.yMMMd().format(_selectedTargetDate!)}): $totalRemaining classes',
-                        style: TextStyle(
-                          fontSize: rs.font(12),
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white70 : Colors.black87,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Classes Conducted: $currentHeld',
+                              style: TextStyle(
+                                fontSize: rs.font(12),
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(width: rs.width(8)),
+                          Flexible(
+                            child: Text(
+                              'Remaining: $totalRemaining classes',
+                              style: TextStyle(
+                                fontSize: rs.font(12),
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
+                        ],
                       ),
                       if (_considerPlannedLeave && leaveMissedTotal > 0) ...[
                         SizedBox(height: rs.height(2)),

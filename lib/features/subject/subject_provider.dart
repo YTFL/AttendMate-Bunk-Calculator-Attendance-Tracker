@@ -50,13 +50,11 @@ class SubjectProvider with ChangeNotifier {
 
   SubjectProvider(this._attendanceProvider) {
     _loadSubjects();
-    _attendanceProvider.addListener(notifyListeners); // Listen for changes in attendance
     _attendanceProvider.addListener(_onAttendanceChanged);
   }
 
   @override
   void dispose() {
-    _attendanceProvider.removeListener(notifyListeners);
     _attendanceProvider.removeListener(_onAttendanceChanged);
     _autoSyncTimer?.cancel();
     super.dispose();
@@ -753,6 +751,7 @@ class SubjectProvider with ChangeNotifier {
   Timer? _autoSyncTimer;
 
   void _onAttendanceChanged() {
+    notifyListeners();
     scheduleAutoSync();
   }
 
@@ -783,7 +782,7 @@ class SubjectProvider with ChangeNotifier {
       }).toList();
 
       // 1. Google Calendar Auto-Sync
-      if (await CalendarService.isUserSignedIn()) {
+      if (await CalendarService.isUserSignedIn() && await CalendarService.isGoogleCalendarSyncEnabled()) {
         await CalendarService.syncFullTimetable(
           subjects: syncedSubjects,
           semester: semester,

@@ -11,6 +11,7 @@ import 'package:workmanager/workmanager.dart';
 import '../../services/backup_service.dart';
 import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
+import '../../services/semester_share_service.dart';
 import '../../models/app_update_model.dart';
 import '../../services/database_service.dart';
 import '../../services/update_service.dart';
@@ -23,9 +24,13 @@ import '../attendance/attendance_provider.dart';
 import '../home/update_dialog.dart';
 import '../semester/semester_model.dart';
 import '../semester/semester_provider.dart';
+import '../semester/live_timetable_sync_screen.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import 'calendar_sync_selection_screen.dart';
+import 'google_integrations_screen.dart';
+import 'github_discussions_screen.dart';
+import 'keep_android_open_screen.dart';
 import 'setup_guide_screen.dart';
 import '../tutorial/tutorial_controller.dart';
 import 'time_format_provider.dart';
@@ -657,6 +662,7 @@ class _MoreScreenState extends State<MoreScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListView(
+      padding: const EdgeInsets.only(bottom: 96),
       children: [
         _buildSectionHeader('Customization & Gestures', colorScheme),
         ListTile(
@@ -757,6 +763,18 @@ class _MoreScreenState extends State<MoreScreen> {
             },
           ),
         ),
+        ListTile(
+          leading: const Icon(Icons.hub_outlined),
+          title: const Text('Google Integrations'),
+          subtitle: const Text('Account connection, Drive cloud backup, & Calendar sync'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const GoogleIntegrationsScreen()),
+            );
+          },
+        ),
         KeyedSubtree(
           key: _calendarSyncKey,
           child: ListTile(
@@ -791,48 +809,17 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
         ),
         ListTile(
-          leading: Icon(
-            _isBatteryOptimizationIgnoring == true
-                ? Icons.battery_charging_full_rounded
-                : Icons.battery_alert_rounded,
-            color: _isBatteryOptimizationIgnoring == false
-                ? Colors.orange.shade800
-                : null,
-          ),
-          title: const Text('Background Access'),
-          subtitle: Text(
-            _isBatteryOptimizationIgnoring == null
-                ? 'Checking background access status...'
-                : _isBatteryOptimizationIgnoring!
-                    ? 'Granted (Optimal background execution)'
-                    : 'Restricted (Tap to allow)',
-          ),
-          trailing: _isBatteryOptimizationIgnoring == false
-              ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withAlpha(38),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.withAlpha(102)),
-                  ),
-                  child: const Text(
-                    'Fix Access',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange,
-                    ),
-                  ),
-                )
-              : const Icon(Icons.chevron_right),
+          leading: const Icon(Icons.cloud_sync_outlined),
+          title: const Text('Classroom Timetable & Sharing'),
+          subtitle: const Text('Live sync via Google Drive & one-time semester share'),
+          trailing: const Icon(Icons.chevron_right),
           onTap: () {
-            BatteryOptimizationService().showBatteryOptimizationDialog(
+            Navigator.push(
               context,
-              onStatusChanged: _checkBatteryOptimizationStatus,
+              MaterialPageRoute(builder: (context) => const LiveTimetableSyncScreen()),
             );
           },
         ),
-
 
         const Divider(),
         _buildSectionHeader('Help & Support', colorScheme),
@@ -887,9 +874,33 @@ class _MoreScreenState extends State<MoreScreen> {
           },
         ),
         ListTile(
+          leading: const Icon(Icons.forum_outlined),
+          title: const Text('GitHub Discussions'),
+          subtitle: const Text('Connect with the community, announcements, & Q&A'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const GitHubDiscussionsScreen()),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.shield_outlined),
+          title: const Text('Keep Android Open'),
+          subtitle: const Text('Sideloading restrictions alert, petition, & FreeDroidWarn'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const KeepAndroidOpenScreen()),
+            );
+          },
+        ),
+        ListTile(
           leading: const Icon(Icons.favorite_border_outlined),
           title: const Text('Support me'),
-          subtitle: const Text('Star the project repository on GitHub'),
+          subtitle: const Text('Star repo or share AttendMate with others'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -900,31 +911,49 @@ class _MoreScreenState extends State<MoreScreen> {
                   : null,
               builder: (dialogContext) {
                 return AlertDialog(
-                  title: const Text('Support Me'),
-                  content: Column(
+                  title: const Text('Support AttendMate'),
+                  content: const Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Please consider starring my GitHub repository to support me.'),
+                      Text(
+                        'AttendMate is 100% free and open-source. Help support the project by starring the repository or sharing the app with classmates and friends!',
+                        style: TextStyle(fontSize: 14, height: 1.4),
+                      ),
                     ],
                   ),
                   actions: [
-                    TextButton(
-                      onPressed: () async {
-                        Navigator.of(dialogContext).pop();
-                        final launched = await UrlLauncherUtils.launchExternalUrl(_repoUrl);
-                        if (!context.mounted) return;
-                        if (!launched) {
-                          ScaffoldMessenger.of(context).showReplacingSnackBar(
-                            const SnackBar(content: Text('Could not open the repository page.')),
-                          );
-                        }
-                      },
-                      child: const Text('Open GitHub Repo'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text('Close'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            icon: const Icon(Icons.star_rounded, size: 20),
+                            label: const Text('Star My Repo'),
+                            onPressed: () async {
+                              Navigator.of(dialogContext).pop();
+                              final result = await UrlLauncherUtils.launchExternalUrl(
+                                _repoUrl,
+                                context: context,
+                              );
+                              if (!context.mounted) return;
+                              if (result == LaunchResult.failed) {
+                                ScaffoldMessenger.of(context).showReplacingSnackBar(
+                                  const SnackBar(content: Text('Could not open the repository page.')),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.share_rounded, size: 20),
+                          tooltip: 'Share App',
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            SemesterShareService().shareAppWithOthers(context);
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 );
@@ -958,9 +987,12 @@ class _MoreScreenState extends State<MoreScreen> {
                     TextButton(
                       onPressed: () async {
                         Navigator.of(dialogContext).pop();
-                        final launched = await UrlLauncherUtils.launchExternalUrl(_issuesUrl);
+                        final result = await UrlLauncherUtils.launchExternalUrl(
+                          _issuesUrl,
+                          context: context,
+                        );
                         if (!context.mounted) return;
-                        if (!launched) {
+                        if (result == LaunchResult.failed) {
                           ScaffoldMessenger.of(context).showReplacingSnackBar(
                             const SnackBar(content: Text('Could not open the issues page.')),
                           );
@@ -979,44 +1011,49 @@ class _MoreScreenState extends State<MoreScreen> {
           },
         ),
         const Divider(),
-        _buildSectionHeader('Privacy & Terms', colorScheme),
-        ListTile(
-          leading: const Icon(Icons.privacy_tip_outlined),
-          title: const Text('Privacy Policy'),
-          subtitle: const Text('Read how your data and location permissions are protected'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MarkdownViewerScreen(
-                  title: 'Privacy Policy',
-                  assetPath: 'git_public/privacy.md',
-                ),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.gavel_outlined),
-          title: const Text('Terms of Service'),
-          subtitle: const Text('Terms and conditions for using AttendMate'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const MarkdownViewerScreen(
-                  title: 'Terms of Service',
-                  assetPath: 'git_public/terms.md',
-                ),
-              ),
-            );
-          },
-        ),
-
-        const Divider(),
         _buildSectionHeader('System', colorScheme),
+        ListTile(
+          leading: Icon(
+            _isBatteryOptimizationIgnoring == true
+                ? Icons.battery_charging_full_rounded
+                : Icons.battery_alert_rounded,
+            color: _isBatteryOptimizationIgnoring == false
+                ? Colors.orange.shade800
+                : null,
+          ),
+          title: const Text('Background Access'),
+          subtitle: Text(
+            _isBatteryOptimizationIgnoring == null
+                ? 'Checking background access status...'
+                : _isBatteryOptimizationIgnoring!
+                    ? 'Granted (Optimal background execution)'
+                    : 'Restricted (Tap to allow & view device guides)',
+          ),
+          trailing: _isBatteryOptimizationIgnoring == false
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withAlpha(38),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withAlpha(102)),
+                  ),
+                  child: const Text(
+                    'Fix Access',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                )
+              : const Icon(Icons.chevron_right),
+          onTap: () {
+            BatteryOptimizationService().showBatteryOptimizationDialog(
+              context,
+              onStatusChanged: _checkBatteryOptimizationStatus,
+            );
+          },
+        ),
         ListTile(
           leading: Icon(
             _availableUpdate != null
@@ -1087,6 +1124,43 @@ class _MoreScreenState extends State<MoreScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const DiagnosticsLogScreen()),
+            );
+          },
+        ),
+
+        const Divider(),
+        _buildSectionHeader('Privacy & Terms', colorScheme),
+        ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Privacy Policy'),
+          subtitle: const Text('Read how your data and location permissions are protected'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Privacy Policy',
+                  assetPath: 'git_public/privacy.md',
+                ),
+              ),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.gavel_outlined),
+          title: const Text('Terms of Service'),
+          subtitle: const Text('Terms and conditions for using AttendMate'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MarkdownViewerScreen(
+                  title: 'Terms of Service',
+                  assetPath: 'git_public/terms.md',
+                ),
+              ),
             );
           },
         ),

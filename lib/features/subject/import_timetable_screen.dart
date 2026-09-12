@@ -18,8 +18,13 @@ import '../tutorial/tutorial_overlay.dart';
 
 class ImportTimetableScreen extends StatefulWidget {
   final String? initialText;
+  final bool embedInUnifiedImport;
 
-  const ImportTimetableScreen({super.key, this.initialText});
+  const ImportTimetableScreen({
+    super.key,
+    this.initialText,
+    this.embedInUnifiedImport = false,
+  });
 
   @override
   State<ImportTimetableScreen> createState() => _ImportTimetableScreenState();
@@ -185,6 +190,108 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _editImportedSubject(Subject subject) async {
+    final nameCtrl = TextEditingController(text: subject.name);
+    final acronymCtrl = TextEditingController(text: subject.acronym ?? '');
+    final targetCtrl = TextEditingController(text: '${subject.targetAttendance}');
+    final colorScheme = Theme.of(context).colorScheme;
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 20, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Edit Subject Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: acronymCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Acronym / Code (Optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: targetCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Target Attendance (%)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (nameCtrl.text.trim().isNotEmpty) {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (updated == true && mounted) {
+      final newName = nameCtrl.text.trim();
+      final newAcronym = acronymCtrl.text.trim().isEmpty ? null : acronymCtrl.text.trim();
+      final newTarget = int.tryParse(targetCtrl.text.trim()) ?? subject.targetAttendance;
+
+      setState(() {
+        if (_importedSubjects != null) {
+          final index = _importedSubjects!.indexWhere((s) => s.id == subject.id);
+          if (index != -1) {
+            _importedSubjects![index] = _importedSubjects![index].copyWith(
+              name: newName,
+              acronym: newAcronym,
+              targetAttendance: newTarget,
+            );
+          } else {
+            // Match by name
+            final nameIdx = _importedSubjects!.indexWhere((s) => s.name == subject.name);
+            if (nameIdx != -1) {
+              _importedSubjects![nameIdx] = _importedSubjects![nameIdx].copyWith(
+                name: newName,
+                acronym: newAcronym,
+                targetAttendance: newTarget,
+              );
+            }
+          }
+          if (_isMidSemesterUpdate) {
+            _midSemesterChanges = _buildMidSemesterChangePreview(_importedSubjects!);
+          }
+        }
+      });
+    }
+  }
+
   Future<void> _pickEffectiveFromDate() async {
     final now = DateTime.now();
     final selected = await showDatePicker(
@@ -237,6 +344,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               beforeSlots: const <TimeSlot>[],
               afterSlots: afterSlots,
               kind: _MidSemesterChangeKind.added,
+              subject: imported,
             ),
           );
         }
@@ -254,6 +362,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
             beforeSlots: beforeSlots,
             afterSlots: afterSlots,
             kind: _MidSemesterChangeKind.updated,
+            subject: imported,
           ),
         );
       }
@@ -352,29 +461,115 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 
-  void _copyJsonTemplate() {
-    final formatRef = _getJsonFormatReference();
-    Clipboard.setData(ClipboardData(text: formatRef));
-    
-    ScaffoldMessenger.of(context).showReplacingSnackBar(
-      const SnackBar(
-        content: Text('JSON format reference copied to clipboard'),
-        backgroundColor: Colors.blue,
-        duration: Duration(seconds: 2),
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showReplacingSnackBar(
+          const SnackBar(content: Text('Clipboard is empty')),
+        );
+      }
+      return;
+    }
+    setState(() {
+      _inputTextController.text = text;
+      _errorMessage = null;
+      _importedSubjects = null;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(
+          content: Text('Pasted from clipboard'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  void _showSampleFormatDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => DefaultTabController(
+        length: 3,
+        child: AlertDialog(
+          title: const Text('Timetable Import Formats'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    Tab(text: 'AI Prompt (Recommended)'),
+                    Tab(text: 'JSON Format'),
+                    Tab(text: 'CSV Format'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 250,
+                  child: TabBarView(
+                    children: [
+                      _buildTemplateView(TimetableImportUtils.timetableAiPrompt, 'AI Prompt'),
+                      _buildTemplateView(_getJsonFormatReference(), 'JSON'),
+                      _buildTemplateView(_getCsvFormatReference(), 'CSV'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _copyCsvTemplate() {
-    final formatRef = _getCsvFormatReference();
-    Clipboard.setData(ClipboardData(text: formatRef));
-
-    ScaffoldMessenger.of(context).showReplacingSnackBar(
-      const SnackBar(
-        content: Text('CSV format reference copied to clipboard'),
-        backgroundColor: Colors.blue,
-        duration: Duration(seconds: 2),
-      ),
+  Widget _buildTemplateView(String template, String formatName) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                template,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: template));
+            ScaffoldMessenger.of(context).showReplacingSnackBar(
+              SnackBar(
+                content: Text('$formatName template copied to clipboard'),
+                backgroundColor: Colors.blue,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          },
+          icon: const Icon(Icons.copy, size: 14),
+          label: Text('Copy $formatName Template'),
+        ),
+      ],
     );
   }
 
@@ -596,6 +791,55 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     tutorialController.registerKey('key_export_menu', _exportMenuKey);
     tutorialController.registerKey('key_import_input', _importInputKey);
 
+    final content = SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.all(rs.scale(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Mode Selector Section
+          _buildModeSelectorCard(context, rs),
+
+          SizedBox(height: rs.height(16)),
+
+          // Effective Date Picker (Mid-Semester Mode)
+          if (_isMidSemesterUpdate) ...[
+            _buildEffectiveDatePickerCard(context, rs),
+            SizedBox(height: rs.height(16)),
+          ],
+
+          // Data Input Section
+          _buildDataInputSection(context, rs),
+
+          SizedBox(height: rs.height(16)),
+
+          // Parse & Clear Actions
+          _buildParseActionsRow(context, rs),
+
+          // Error Message Card
+          if (_errorMessage != null) ...[
+            SizedBox(height: rs.height(14)),
+            _buildErrorMessageCard(context, rs),
+          ],
+
+          // Preview Section
+          if (_importedSubjects != null && _importedSubjects!.isNotEmpty) ...[
+            SizedBox(height: rs.height(20)),
+            _buildPreviewSection(context, rs),
+          ],
+
+          SizedBox(height: rs.height(16)),
+        ],
+      ),
+    );
+
+    if (widget.embedInUnifiedImport) {
+      return GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: content,
+      );
+    }
+
     return TutorialOverlay(
       child: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
@@ -661,148 +905,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               SizedBox(width: rs.width(4)),
             ],
           ),
-          body: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(rs.scale(16)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Modern Hero Instructions Card
-                _buildInstructionsCard(context, rs),
-
-                SizedBox(height: rs.height(16)),
-
-                // Mode Selector Section
-                _buildModeSelectorCard(context, rs),
-
-                SizedBox(height: rs.height(16)),
-
-                // Effective Date Picker (Mid-Semester Mode)
-                if (_isMidSemesterUpdate) ...[
-                  _buildEffectiveDatePickerCard(context, rs),
-                  SizedBox(height: rs.height(16)),
-                ],
-
-                // Data Input Section
-                _buildDataInputSection(context, rs),
-
-                SizedBox(height: rs.height(16)),
-
-                // Parse & Clear Actions
-                _buildParseActionsRow(context, rs),
-
-                // Error Message Card
-                if (_errorMessage != null) ...[
-                  SizedBox(height: rs.height(14)),
-                  _buildErrorMessageCard(context, rs),
-                ],
-
-                // Preview Section
-                if (_importedSubjects != null && _importedSubjects!.isNotEmpty) ...[
-                  SizedBox(height: rs.height(20)),
-                  _buildPreviewSection(context, rs),
-                ],
-
-                // Format Reference Accordions
-                SizedBox(height: rs.height(24)),
-                _buildFormatReferencesSection(context, rs),
-
-                SizedBox(height: rs.height(16)),
-              ],
-            ),
-          ),
+          body: content,
         ),
-      ),
-    );
-  }
-
-  Widget _buildInstructionsCard(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: EdgeInsets.all(rs.scale(18)),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-            : theme.colorScheme.primaryContainer.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(rs.scale(18)),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-          width: 1.2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(rs.scale(8)),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  color: theme.colorScheme.primary,
-                  size: rs.scale(20),
-                ),
-              ),
-              SizedBox(width: rs.width(12)),
-              Text(
-                'Import Instructions',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: rs.font(15),
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: rs.height(10)),
-          Text(
-            'Paste JSON or CSV data into the text box below, or tap the file upload icon to select a file from your device. '
-            'Use "Update Mid-Semester" to apply schedule changes from a target date while preserving previous attendance history.',
-            style: TextStyle(
-              fontSize: rs.font(12.5),
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
-              height: 1.4,
-            ),
-          ),
-          SizedBox(height: rs.height(14)),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _copyJsonTemplate,
-                  icon: Icon(Icons.code_rounded, size: rs.scale(16)),
-                  label: Text('Copy JSON Template', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: rs.height(9)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(rs.scale(10)),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: rs.width(8)),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _copyCsvTemplate,
-                  icon: Icon(Icons.table_chart_rounded, size: rs.scale(16)),
-                  label: Text('Copy CSV Template', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: rs.height(9)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(rs.scale(10)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -1022,42 +1126,86 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
         SizedBox(height: rs.height(6)),
         KeyedSubtree(
           key: _importInputKey,
-          child: TextFormField(
-            controller: _inputTextController,
-            minLines: 8,
-            maxLines: 16,
-            decoration: InputDecoration(
-              hintText: 'Paste your JSON or CSV text data here...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(rs.scale(14)),
-                borderSide: BorderSide(
-                  color: theme.dividerColor.withValues(alpha: 0.15),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(rs.scale(14)),
-                borderSide: BorderSide(
-                  color: theme.dividerColor.withValues(alpha: 0.15),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(rs.scale(14)),
-                borderSide: BorderSide(
-                  color: theme.colorScheme.primary,
-                  width: 1.5,
-                ),
-              ),
-              filled: true,
-              fillColor: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.grey.withValues(alpha: 0.06),
-              contentPadding: EdgeInsets.all(rs.scale(14)),
-            ),
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: rs.font(12),
-              color: theme.colorScheme.onSurface,
-            ),
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _inputTextController,
+            builder: (context, value, _) {
+              final hasText = value.text.trim().isNotEmpty;
+              return Stack(
+                children: [
+                  TextFormField(
+                    controller: _inputTextController,
+                    minLines: 8,
+                    maxLines: 16,
+                    decoration: InputDecoration(
+                      hintText: 'Paste your JSON or CSV text data here...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(14)),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(14)),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(rs.scale(14)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: isDarkMode
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.grey.withValues(alpha: 0.06),
+                      contentPadding: EdgeInsets.fromLTRB(rs.scale(14), rs.scale(14), rs.scale(85), rs.scale(14)),
+                    ),
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: rs.font(12),
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  Positioned(
+                    top: rs.scale(8),
+                    right: rs.scale(8),
+                    child: Material(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(rs.scale(8)),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(rs.scale(8)),
+                        onTap: hasText ? _clearInput : _pasteFromClipboard,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: rs.scale(8), vertical: rs.scale(5)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                hasText ? Icons.close_rounded : Icons.content_paste_rounded,
+                                size: rs.scale(14),
+                                color: hasText ? theme.colorScheme.error : theme.colorScheme.primary,
+                              ),
+                              SizedBox(width: rs.scale(4)),
+                              Text(
+                                hasText ? 'Clear' : 'Paste',
+                                style: TextStyle(
+                                  fontSize: rs.font(11),
+                                  fontWeight: FontWeight.bold,
+                                  color: hasText ? theme.colorScheme.error : theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
@@ -1065,16 +1213,35 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   }
 
   Widget _buildParseActionsRow(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-
     return Row(
       children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _showSampleFormatDialog,
+            icon: Icon(Icons.help_outline_rounded, size: rs.scale(16)),
+            label: Text(
+              'View Format',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: rs.height(13)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(rs.scale(12)),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: rs.width(10)),
         Expanded(
           child: FilledButton.icon(
             onPressed: _parseAndValidateInput,
             icon: Icon(Icons.auto_fix_high_rounded, size: rs.scale(18)),
             label: Text(
               'Parse & Preview',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: rs.font(13.5),
                 fontWeight: FontWeight.bold,
@@ -1085,31 +1252,6 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(rs.scale(12)),
               ),
-            ),
-          ),
-        ),
-        SizedBox(width: rs.width(10)),
-        OutlinedButton.icon(
-          onPressed: _clearInput,
-          icon: Icon(Icons.clear_all_rounded, size: rs.scale(18)),
-          label: Text(
-            'Clear',
-            style: TextStyle(
-              fontSize: rs.font(13),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: theme.colorScheme.error,
-            side: BorderSide(
-              color: theme.colorScheme.error.withValues(alpha: 0.4),
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: rs.width(14),
-              vertical: rs.height(13),
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(rs.scale(12)),
             ),
           ),
         ),
@@ -1283,6 +1425,23 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                           ),
                         ),
                       ),
+                      SizedBox(width: rs.width(6)),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(rs.scale(6)),
+                        onTap: () => _editImportedSubject(change.subject),
+                        child: Container(
+                          padding: EdgeInsets.all(rs.scale(4)),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(rs.scale(6)),
+                            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Tooltip(
+                            message: 'Edit Subject',
+                            child: Icon(Icons.edit_outlined, size: rs.scale(15), color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: rs.height(8)),
@@ -1349,7 +1508,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                           ),
                         ),
                       ),
-                      if (subject.acronym != null && subject.acronym!.isNotEmpty)
+                      if (subject.acronym != null && subject.acronym!.isNotEmpty) ...[
                         Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: rs.width(6),
@@ -1368,6 +1527,24 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                             ),
                           ),
                         ),
+                        SizedBox(width: rs.width(6)),
+                      ],
+                      InkWell(
+                        borderRadius: BorderRadius.circular(rs.scale(6)),
+                        onTap: () => _editImportedSubject(subject),
+                        child: Container(
+                          padding: EdgeInsets.all(rs.scale(4)),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(rs.scale(6)),
+                            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Tooltip(
+                            message: 'Edit Subject',
+                            child: Icon(Icons.edit_outlined, size: rs.scale(15), color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   SizedBox(height: rs.height(8)),
@@ -1413,129 +1590,6 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(rs.scale(12)),
               ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFormatReferencesSection(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Format References',
-          style: TextStyle(
-            fontSize: rs.font(13.5),
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        SizedBox(height: rs.height(8)),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-                : theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(rs.scale(16)),
-            border: Border.all(
-              color: theme.dividerColor.withValues(alpha: 0.12),
-              width: 1.2,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(rs.scale(16)),
-            child: ExpansionTile(
-              shape: const Border(),
-              collapsedShape: const Border(),
-              leading: Icon(
-                Icons.data_object_rounded,
-                color: theme.colorScheme.primary,
-                size: rs.scale(20),
-              ),
-              title: Text(
-                'JSON Format Reference',
-                style: TextStyle(
-                  fontSize: rs.font(14),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              children: [
-                Container(
-                  width: double.infinity,
-                  color: isDarkMode
-                      ? Colors.black.withValues(alpha: 0.25)
-                      : Colors.grey.withValues(alpha: 0.08),
-                  padding: EdgeInsets.all(rs.scale(12)),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Text(
-                      _getJsonFormatReference(),
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: rs.font(11),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: rs.height(10)),
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-                : theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(rs.scale(16)),
-            border: Border.all(
-              color: theme.dividerColor.withValues(alpha: 0.12),
-              width: 1.2,
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(rs.scale(16)),
-            child: ExpansionTile(
-              shape: const Border(),
-              collapsedShape: const Border(),
-              leading: Icon(
-                Icons.table_chart_rounded,
-                color: Colors.teal,
-                size: rs.scale(20),
-              ),
-              title: Text(
-                'CSV Format Reference',
-                style: TextStyle(
-                  fontSize: rs.font(14),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              children: [
-                Container(
-                  width: double.infinity,
-                  color: isDarkMode
-                      ? Colors.black.withValues(alpha: 0.25)
-                      : Colors.grey.withValues(alpha: 0.08),
-                  padding: EdgeInsets.all(rs.scale(12)),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Text(
-                      _getCsvFormatReference(),
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: rs.font(11),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ),
@@ -1629,11 +1683,13 @@ class _MidSemesterChangePreview {
   final List<TimeSlot> beforeSlots;
   final List<TimeSlot> afterSlots;
   final _MidSemesterChangeKind kind;
+  final Subject subject;
 
   const _MidSemesterChangePreview({
     required this.heading,
     required this.beforeSlots,
     required this.afterSlots,
     required this.kind,
+    required this.subject,
   });
 }

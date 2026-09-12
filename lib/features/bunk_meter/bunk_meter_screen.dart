@@ -442,6 +442,11 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                         subjectProvider: subjectProvider,
                         countingStart: snapshot.countingStart,
                       ),
+                      onShowProjectedLeaveTooltip: () => _showProjectedLeaveTooltip(
+                        context: context,
+                        subject: subject,
+                        subjectProjection: subjectProjection,
+                      ),
                     );
                   },
                 ),
@@ -623,6 +628,115 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     );
   }
 
+  Future<void> _showProjectedLeaveTooltip({
+    required BuildContext context,
+    required Subject subject,
+    required SubjectProjectedAttendance subjectProjection,
+  }) async {
+    final rs = context.rs;
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final plannedMissed = subjectProjection.plannedMissedCount;
+    final projectedRatio = subjectProjection.projectedPercentage;
+    final projectedBelowTarget = projectedRatio < subject.targetAttendance;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(rs.scale(16)),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.event_available_outlined,
+                color: projectedBelowTarget ? Colors.red : theme.colorScheme.primary,
+                size: rs.scale(24),
+              ),
+              SizedBox(width: rs.width(8)),
+              Expanded(
+                child: Text(
+                  'Projected (After Leave)',
+                  style: TextStyle(fontSize: rs.font(16), fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                subject.name,
+                style: TextStyle(
+                  fontSize: rs.font(14),
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              SizedBox(height: rs.height(10)),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: rs.width(12), vertical: rs.height(8)),
+                decoration: BoxDecoration(
+                  color: projectedBelowTarget
+                      ? Colors.red.withValues(alpha: 0.12)
+                      : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                  borderRadius: BorderRadius.circular(rs.scale(8)),
+                  border: Border.all(
+                    color: projectedBelowTarget
+                        ? Colors.red.shade300
+                        : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'Projected Attendance:',
+                      style: TextStyle(fontSize: rs.font(12.5), fontWeight: FontWeight.w500),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${projectedRatio.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: rs.font(14),
+                        fontWeight: FontWeight.bold,
+                        color: projectedBelowTarget ? Colors.red.shade700 : theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: rs.height(10)),
+              Text(
+                '• Missed classes during leave: $plannedMissed',
+                style: TextStyle(fontSize: rs.font(12.5), color: theme.colorScheme.onSurfaceVariant),
+              ),
+              SizedBox(height: rs.height(4)),
+              Text(
+                '• Assumed present classes: ${subjectProjection.assumedPresentCount}',
+                style: TextStyle(fontSize: rs.font(12.5), color: theme.colorScheme.onSurfaceVariant),
+              ),
+              if (subjectProjection.leaveName != null && subjectProjection.leaveName!.isNotEmpty) ...[
+                SizedBox(height: rs.height(4)),
+                Text(
+                  '• Leave reason: ${subjectProjection.leaveName}',
+                  style: TextStyle(fontSize: rs.font(12.5), color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _showManualCountUpdateDialog({
     required Subject subject,
     required SubjectProvider subjectProvider,
@@ -694,6 +808,7 @@ class _BunkMeterSubjectCard extends StatefulWidget {
   final SubjectProvider subjectProvider;
   final VoidCallback onUpdateCountsManually;
   final VoidCallback onShowManualBaselineTooltip;
+  final VoidCallback onShowProjectedLeaveTooltip;
 
   const _BunkMeterSubjectCard({
     super.key,
@@ -713,6 +828,7 @@ class _BunkMeterSubjectCard extends StatefulWidget {
     required this.subjectProvider,
     required this.onUpdateCountsManually,
     required this.onShowManualBaselineTooltip,
+    required this.onShowProjectedLeaveTooltip,
   });
 
   @override
@@ -859,31 +975,55 @@ class _BunkMeterSubjectCardState extends State<_BunkMeterSubjectCard>
                                   ),
                                 ),
                                 if (snapshot.manualOverride != null) ...[
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   InkWell(
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(6),
                                     onTap: widget.onShowManualBaselineTooltip,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.all(3),
                                       decoration: BoxDecoration(
                                         color: Colors.orange.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.warning_amber_rounded, size: 12, color: Colors.orange.shade800),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Manual Baseline',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.orange.shade900,
-                                            ),
-                                          ),
-                                        ],
+                                      child: Tooltip(
+                                        message: 'Manual Baseline active',
+                                        child: Icon(
+                                          Icons.tune_rounded,
+                                          size: 13,
+                                          color: Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                if (subjectProjection.hasActivePlannedLeave && plannedMissed > 0) ...[
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(6),
+                                    onTap: widget.onShowProjectedLeaveTooltip,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        color: projectedBelowTarget
+                                            ? Colors.red.withValues(alpha: 0.15)
+                                            : (isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: projectedBelowTarget
+                                              ? Colors.red.withValues(alpha: 0.4)
+                                              : (isDarkMode ? Colors.white24 : Colors.black26),
+                                        ),
+                                      ),
+                                      child: Tooltip(
+                                        message: 'Projected after leave: ${projectedRatio.toStringAsFixed(1)}%',
+                                        child: Icon(
+                                          Icons.event_available_outlined,
+                                          size: 13,
+                                          color: projectedBelowTarget
+                                              ? Colors.red.shade700
+                                              : (isDarkMode ? Colors.white70 : Colors.black87),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -915,43 +1055,6 @@ class _BunkMeterSubjectCardState extends State<_BunkMeterSubjectCard>
                     crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                     duration: const Duration(milliseconds: 200),
                   ),
-                  if (subjectProjection.hasActivePlannedLeave && plannedMissed > 0) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: projectedBelowTarget
-                            ? Colors.red.withValues(alpha: 0.1)
-                            : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: projectedBelowTarget
-                              ? Colors.red.shade300
-                              : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.event_available_outlined,
-                            size: 14,
-                            color: projectedBelowTarget ? Colors.red : (isDarkMode ? Colors.white70 : Colors.black87),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Projected (After Leave): ${projectedRatio.toStringAsFixed(1)}% ($plannedMissed class${plannedMissed > 1 ? "es" : ""} missed, ${subjectProjection.assumedPresentCount} assumed present)',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: projectedBelowTarget ? Colors.red.shade700 : (isDarkMode ? Colors.white70 : Colors.black87),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

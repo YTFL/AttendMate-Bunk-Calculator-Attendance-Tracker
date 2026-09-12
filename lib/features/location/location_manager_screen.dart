@@ -19,23 +19,27 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
   @override
   void initState() {
     super.initState();
-    _loadLocations();
+    _loadLocations(showLoading: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleLocationPermission();
     });
   }
 
-  Future<void> _loadLocations() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadLocations({bool showLoading = false}) async {
+    if (showLoading) {
+      setState(() => _isLoading = true);
+    }
     try {
       final locs = await DatabaseService().loadLocations();
-      setState(() {
-        _locations = locs;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
       if (mounted) {
+        setState(() {
+          _locations = locs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load locations: $e')),
         );
@@ -97,7 +101,7 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
           builder: (ctx) => AlertDialog(
             title: const Text('Precise Location Required'),
             content: const Text(
-              'Bunk needs "Precise" location to distinguish between classrooms within 25 metres. Please enable Precise location in your device settings.',
+              'AttendMate needs "Precise" location to distinguish between classrooms within 25 metres. Please enable Precise location in your device settings.',
             ),
             actions: [
               TextButton(
@@ -414,9 +418,8 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                 );
 
                 Navigator.pop(dialogCtx);
-                setState(() => _isLoading = true);
                 await DatabaseService().saveLocation(newLoc);
-                _loadLocations();
+                _loadLocations(showLoading: false);
               },
               child: const Text('Save'),
             ),
@@ -451,9 +454,8 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
     );
 
     if (confirm == true) {
-      setState(() => _isLoading = true);
       await DatabaseService().deleteLocation(id);
-      _loadLocations();
+      _loadLocations(showLoading: false);
     }
   }
 
@@ -496,76 +498,95 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                     ],
                   ),
                 )
-              : ListView.builder(
+              : ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _locations.length,
-                  itemBuilder: (ctx, index) {
-                    final loc = _locations[index];
-                    final hasGps = loc.latitude != null && loc.longitude != null;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
                           color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-                          width: 1,
                         ),
                       ),
-                      elevation: 0,
-                      color: colorScheme.surfaceContainerLowest,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: hasGps ? Colors.green.withValues(alpha: 0.1) : colorScheme.surfaceContainerHigh,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            hasGps ? Icons.gps_fixed : Icons.pin_drop_outlined,
-                            color: hasGps ? Colors.green : colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                        ),
-                        title: Text(
-                          loc.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (loc.block != null)
-                              Text(
-                                'Block: ${loc.block!}',
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            const SizedBox(height: 4),
-                            Text(
-                              hasGps ? 'Geofence Active (25m radius)' : 'Text label (No Geofence)',
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 20, color: colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'For active locations, geofencing considers attendance within 25m of the set location.',
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: hasGps ? Colors.green.shade700 : Colors.grey,
+                                fontSize: 13,
+                                height: 1.35,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.edit_outlined, color: colorScheme.primary),
-                              onPressed: () => _showAddEditLocationDialog(loc),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                              onPressed: () => _deleteLocation(loc.id),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
+                    ),
+                    ..._locations.map((loc) {
+                      final hasGps = loc.latitude != null && loc.longitude != null;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                            width: 1,
+                          ),
+                        ),
+                        elevation: 0,
+                        color: colorScheme.surfaceContainerLowest,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          leading: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: hasGps
+                                  ? Colors.green.withValues(alpha: 0.12)
+                                  : colorScheme.surfaceContainerHighest,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              hasGps ? Icons.gps_fixed : Icons.pin_drop_outlined,
+                              color: hasGps ? Colors.green : colorScheme.outline,
+                            ),
+                          ),
+                          title: Text(
+                            loc.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          subtitle: loc.block != null
+                              ? Text(
+                                  'Block: ${loc.block!}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                )
+                              : null,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit_outlined, color: colorScheme.primary),
+                                onPressed: () => _showAddEditLocationDialog(loc),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                                onPressed: () => _deleteLocation(loc.id),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                 ),
       floatingActionButton: _locations.isEmpty
           ? null

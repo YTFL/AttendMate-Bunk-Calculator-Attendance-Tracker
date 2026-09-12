@@ -63,6 +63,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
       setState(() {
         _plannedLeaves = leaves;
       });
+      if (leaves.isNotEmpty) {
+        final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+        final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+        if (subjectProvider.subjects.isNotEmpty) {
+          await _autoMarkPlannedLeaves(leaves, subjectProvider.subjects, attendanceProvider);
+        }
+      }
     }
   }
 
@@ -102,14 +109,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const Scaffold(
         body: Center(child: Text('Semester not set')),
       );
-    }
-
-    if (_plannedLeaves.isNotEmpty && subjectProvider.subjects.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _autoMarkPlannedLeaves(_plannedLeaves, subjectProvider.subjects, attendanceProvider);
-        }
-      });
     }
 
     final startDate = semesterProvider.semester!.startDate;
