@@ -460,6 +460,52 @@ Saturday,"-","PHY","-","CSE","-"
 Sunday,"-","-","-","-","ENG"''';
   }
 
+  static const String timetableAiPrompt = '''I have provided an image, screenshot, or text of my college class timetable/schedule. Convert all subjects and their weekly schedules into the following JSON format:
+
+{
+  "subjects": [
+    {
+      "name": "Mathematics",
+      "acronym": "MTH",
+      "room": "Room 101",
+      "block": "Block A",
+      "schedule": [
+        {
+          "day": "monday",
+          "startTime": "09:00",
+          "endTime": "10:30",
+          "room": "Room 101",
+          "block": "Block A"
+        },
+        {
+          "day": "wednesday",
+          "startTime": "14:00",
+          "endTime": "15:30",
+          "room": "Lab 2"
+        }
+      ]
+    },
+    {
+      "name": "Physics",
+      "acronym": "PHY",
+      "room": "Hall 3",
+      "schedule": [
+        {
+          "day": "tuesday",
+          "startTime": "09:00",
+          "endTime": "10:30"
+        }
+      ]
+    }
+  ]
+}
+
+Rules to follow:
+- "day" must be lowercase day of week: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", or "sunday".
+- "startTime" and "endTime" must strictly be in 24-hour HH:mm format (e.g., "09:00", "14:30").
+- "acronym", "room", and "block" are optional.
+- Return ONLY the raw valid JSON object with no markdown code blocks, preamble, or explanation.''';
+
   /// Format JSON string with proper indentation
   static String formatJson(String jsonString) {
     try {

@@ -7,4 +7,22 @@ extension SnackbarUtils on ScaffoldMessengerState {
     clearSnackBars();
     return showSnackBar(snackBar);
   }
+
+  static void showSuccessSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showReplacingSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green.shade700,
+      ),
+    );
+  }
+
+  static void showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showReplacingSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+      ),
+    );
+  }
 }

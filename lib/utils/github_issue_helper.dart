@@ -77,6 +77,7 @@ class GitHubIssueHelper {
 
     final clipboardText = fullLogMarkdown.toString();
     await Clipboard.setData(ClipboardData(text: clipboardText));
+    if (context != null && !context.mounted) return;
 
     // Construct short issue title
     final firstLine = message.replaceAll('\r\n', '\n').split('\n').first.trim();
@@ -105,17 +106,20 @@ class GitHubIssueHelper {
       },
     );
 
-    final launched = await UrlLauncherUtils.launchExternalUrl(issueUri.toString());
+    final result = await UrlLauncherUtils.launchExternalUrl(
+      issueUri.toString(),
+      context: context,
+    );
 
     if (context != null && context.mounted) {
-      if (launched) {
+      if (result == LaunchResult.opened) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(
           const SnackBar(
             content: Text('Opening GitHub Issue page... Log copied to clipboard!'),
             duration: Duration(seconds: 4),
           ),
         );
-      } else {
+      } else if (result == LaunchResult.failed) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(
           const SnackBar(
             content: Text('Could not open browser. Full log copied to clipboard.'),
