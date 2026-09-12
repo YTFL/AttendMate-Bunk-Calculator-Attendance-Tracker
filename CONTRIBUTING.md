@@ -30,7 +30,7 @@ Be respectful, constructive, and collaborative. Harassment or hostile behaviour 
 ## Getting Started
 
 1. **Fork** this repository
-2. **Clone** your fork: `git clone https://github.com/<your-username>/AttendMate-Bunk-Calculator-Attendance-Tracker.git`
+2. **Clone** your fork: `git clone https://github.com/<your-username>/bunk-attendance.git`
 3. **Set up** the development environment (see [Development Setup](#development-setup))
 4. **Create a branch** for your change: `git checkout -b fix/my-bug-fix`
 5. **Make your changes**, commit, and push
@@ -93,8 +93,9 @@ flutter format .
 
 ### Building a Release APK
 
+To build optimized, obfuscated release APKs split per ABI (`armeabi-v7a`, `arm64-v8a`, `x86_64`):
 ```bash
-flutter build apk --target-platform android-arm64
+flutter build apk --split-per-abi --release --obfuscate --split-debug-info=build/app/outputs/symbols
 ```
 
 ---
@@ -116,6 +117,8 @@ lib/
 │   ├── notification_service.dart
 │   └── update_service.dart
 └── utils/                     # Shared utilities & extensions
+
+git_public/                    # Public-facing docs and release assets
 ```
 
 ---
