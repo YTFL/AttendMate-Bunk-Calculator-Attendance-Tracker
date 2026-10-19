@@ -12,6 +12,7 @@ import '../../features/subject/subject_provider.dart';
 import '../../services/database_service.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
+import '../home/add_extra_class_sheet.dart';
 import '../tutorial/tutorial_controller.dart';
 import '../tutorial/tutorial_overlay.dart';
 import 'calendar_utils.dart';
@@ -1123,6 +1124,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               );
                             },
                           ),
+                        if (!Provider.of<SemesterProvider>(context).hasSemesterEnded)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: rs.height(8)),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                                  ),
+                                  padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                                ),
+                                onPressed: () async {
+                                  await showAddExtraClassSheet(
+                                    context: context,
+                                    date: pageDate,
+                                  );
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.add_circle_outline, size: 18),
+                                label: const Text(
+                                  'Add Extra Class',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                          ),
                         // Copy Timetable Button
                         if (pageDayInfo.state != DayState.futureClasses)
                           Padding(
@@ -1431,25 +1459,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (timeText.isNotEmpty)
+                  if (timeText.isNotEmpty || timeSlot?.isExtra == true)
                     Padding(
                       padding: EdgeInsets.only(top: rs.height(2)),
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: rs.scale(12),
-                            color: theme.textTheme.bodySmall?.color,
-                          ),
-                          SizedBox(width: rs.width(4)),
-                          Text(
-                            timeText,
-                            style: TextStyle(
-                              fontSize: rs.font(11),
+                          if (timeSlot?.isExtra == true) ...[
+                            const ExtraClassBadge(),
+                            SizedBox(width: rs.width(6)),
+                          ],
+                          if (timeText.isNotEmpty) ...[
+                            Icon(
+                              Icons.access_time_rounded,
+                              size: rs.scale(12),
                               color: theme.textTheme.bodySmall?.color,
                             ),
-                          ),
+                            SizedBox(width: rs.width(4)),
+                            Flexible(
+                              child: Text(
+                                timeText,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: rs.font(11),
+                                  color: theme.textTheme.bodySmall?.color,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1468,7 +1504,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ],
               )
             : null,
-        trailing: isLockedByManualOverride
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (timeSlot?.isExtra == true && !isLockedByManualOverride)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Remove extra class',
+                color: Colors.red.shade400,
+                visualDensity: VisualDensity.compact,
+                onPressed: () async {
+                  final removed = await confirmAndRemoveExtraClass(
+                    context: context,
+                    subjectId: subject.id,
+                    subjectName: subject.name,
+                    date: date,
+                    slotKey: slotKey,
+                  );
+                  if (removed) {
+                    setState(() {});
+                  }
+                },
+              ),
+            isLockedByManualOverride
             ? _buildLockedStatusButton()
             : _buildAttendanceStatusButton(
                 status,
@@ -1491,6 +1549,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   setState(() {});
                 },
               ),
+          ],
+        ),
         ),
       ),
     );
