@@ -433,7 +433,10 @@ class SemesterShareService {
 
           if (existingIdx != -1) {
             currentSubjects[existingIdx] = currentSubjects[existingIdx].copyWith(
-              schedule: newSub.schedule,
+              schedule: schedulePreservingExtraClasses(
+                replacement: newSub.schedule,
+                existing: currentSubjects[existingIdx].schedule,
+              ),
               room: () => newSub.room,
               block: () => newSub.block,
             );

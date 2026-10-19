@@ -262,7 +262,7 @@ class TutorialController extends ChangeNotifier {
       stepIndex: 14,
       title: '14. Marking Attendance via Swipe Gestures',
       description:
-          'Swipe class cards Right to mark Present, or Left to mark Absent. Swiping in the same direction again unmarks it! Use the top Holiday / Skip Day buttons for bulk day actions.',
+          'Swipe class cards Right to mark Present, or Left to mark Absent. Swiping in the same direction again unmarks it! Use the top Holiday / Skip Day buttons for bulk day actions. Add Extra Class records a makeup lecture for that day only.',
       targetTabIndex: 0,
       targetKeyName: 'nav_tab_today',
       borderRadius: BorderRadius.all(Radius.circular(16.0)),

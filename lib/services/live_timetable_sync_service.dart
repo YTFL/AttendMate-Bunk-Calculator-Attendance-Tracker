@@ -650,7 +650,10 @@ class LiveTimetableSyncService extends ChangeNotifier {
             // Update schedule timings, room, block, locationId
             // Crucially: KEEPS existing ID, existing attendanceRecords, and existing targetAttendance!
             currentSubjects[existingIdx] = currentSubjects[existingIdx].copyWith(
-              schedule: newSub.schedule,
+              schedule: schedulePreservingExtraClasses(
+                replacement: newSub.schedule,
+                existing: currentSubjects[existingIdx].schedule,
+              ),
               room: () => newSub.room,
               block: () => newSub.block,
               locationId: () => newSub.locationId,

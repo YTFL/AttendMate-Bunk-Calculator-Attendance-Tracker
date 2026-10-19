@@ -26,6 +26,16 @@ class TimetableUpdateResult {
   });
 }
 
+class ExtraClassMutationResult {
+  final bool success;
+  final String message;
+
+  const ExtraClassMutationResult({
+    required this.success,
+    required this.message,
+  });
+}
+
 class DayTimetableCopyResult {
   final int copiedClasses;
   final int replacedClasses;
@@ -183,10 +193,13 @@ class SubjectProvider with ChangeNotifier {
         normalizedEffectiveFrom,
       );
 
-      final mergedSchedule = <TimeSlot>[
-        ...oldWeeklyBeforeCutoff,
-        ...importedNewSlots,
-      ];
+      final mergedSchedule = schedulePreservingExtraClasses(
+        replacement: <TimeSlot>[
+          ...oldWeeklyBeforeCutoff,
+          ...importedNewSlots,
+        ],
+        existing: existing.schedule,
+      );
 
       final updatedSubject = existing.copyWith(
         name: importedSubject.name,
@@ -360,6 +373,7 @@ class SubjectProvider with ChangeNotifier {
             normalizeDate(slot.specificDate)?.toIso8601String() ?? '',
             normalizeDate(slot.effectiveFrom)?.toIso8601String() ?? '',
             normalizeDate(slot.effectiveUntil)?.toIso8601String() ?? '',
+            slot.isExtra ? 'extra' : '',
           ].join('|'),
         )
         .join('~');
@@ -507,6 +521,136 @@ class SubjectProvider with ChangeNotifier {
     return DayTimetableCopyResult(
       copiedClasses: sourceClassCount,
       replacedClasses: replacedClassCount,
+    );
+  }
+
+  Future<ExtraClassMutationResult> addExtraClass({
+    required String subjectId,
+    required DateTime date,
+    required TimeOfDay startTime,
+    required TimeOfDay endTime,
+  }) async {
+    final index = _subjects.indexWhere((subject) => subject.id == subjectId);
+    if (index == -1) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'Subject not found.',
+      );
+    }
+
+    final subject = _subjects[index];
+    final normalizedDate = normalizeDate(date) ?? date;
+    final startMinutes = startTime.hour * 60 + startTime.minute;
+    final endMinutes = endTime.hour * 60 + endTime.minute;
+    if (endMinutes <= startMinutes) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'End time must be after the start time.',
+      );
+    }
+
+    if (CalendarUtils.isLockedByManualOverride(subject, normalizedDate)) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'This date is locked by a manual attendance baseline.',
+      );
+    }
+
+    for (final other in _subjects) {
+      for (final slot in other.schedule) {
+        if (!slot.occursOnDate(normalizedDate)) {
+          continue;
+        }
+        if (slot.overlapsMinutes(startMinutes, endMinutes)) {
+          return ExtraClassMutationResult(
+            success: false,
+            message: 'That time overlaps an existing ${other.name} class.',
+          );
+        }
+      }
+    }
+
+    final extraSlot = TimeSlot(
+      day: DayOfWeek.values[normalizedDate.weekday - 1],
+      startTime: startTime,
+      endTime: endTime,
+      specificDate: normalizedDate,
+      isExtra: true,
+    );
+
+    _subjects[index] = subject.copyWith(
+      schedule: _sortedSchedule([...subject.schedule, extraSlot]),
+    );
+    await _databaseService.saveSubjects(_subjects);
+    final plannedLeaves = await _databaseService.loadPlannedLeaves();
+    if (plannedLeaves.isNotEmpty) {
+      await _attendanceProvider.syncPlannedLeavesWithAttendance(
+        plannedLeaves: plannedLeaves,
+        subjects: _subjects,
+      );
+    }
+    await _refreshAttendanceReminders();
+    await BackupService().notifyDataChanged();
+    notifyListeners();
+    _scheduleAutoSync();
+
+    return ExtraClassMutationResult(
+      success: true,
+      message: 'Extra ${subject.name} class added.',
+    );
+  }
+
+  Future<ExtraClassMutationResult> removeExtraClass({
+    required String subjectId,
+    required DateTime date,
+    required String slotKey,
+  }) async {
+    final index = _subjects.indexWhere((subject) => subject.id == subjectId);
+    if (index == -1) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'Subject not found.',
+      );
+    }
+
+    final subject = _subjects[index];
+    final normalizedDate = normalizeDate(date) ?? date;
+    if (CalendarUtils.isLockedByManualOverride(subject, normalizedDate)) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'This date is locked by a manual attendance baseline.',
+      );
+    }
+
+    final extraExists = subject.schedule.any(
+      (slot) => slot.isExtra && slot.slotKey == slotKey,
+    );
+    if (!extraExists) {
+      return const ExtraClassMutationResult(
+        success: false,
+        message: 'That extra class is no longer on this day.',
+      );
+    }
+
+    _subjects[index] = subject.copyWith(
+      schedule: subject.schedule
+          .where((slot) => !(slot.isExtra && slot.slotKey == slotKey))
+          .toList(),
+    );
+    await _databaseService.saveSubjects(_subjects);
+    await _attendanceProvider.deleteRecordForSubjectOnDate(
+      subjectId,
+      normalizedDate,
+      slotKey: slotKey,
+    );
+    await _refreshAttendanceReminders();
+    await BackupService().notifyDataChanged();
+    notifyListeners();
+    _scheduleAutoSync();
+
+    return ExtraClassMutationResult(
+      success: true,
+      message: 'Removed the extra ${subject.name} class.',
     );
   }
 

@@ -47,11 +47,18 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
     _selectedColor = widget.subject.color;
     _isSpecialClass = widget.subject.isSpecialClass;
     _targetAttendance = widget.subject.targetAttendance;
-    _specialClassDates.addAll(widget.subject.specialClassDates);
-    if (_specialClassDates.isEmpty && widget.subject.specialClassDate != null) {
-      _specialClassDates.add(widget.subject.specialClassDate!);
+    for (final slot in widget.subject.schedule) {
+      if (slot.isExtra || slot.specificDate == null) {
+        continue;
+      }
+      final date = normalizeDate(slot.specificDate);
+      if (date != null) {
+        _specialClassDates.add(date);
+      }
     }
-    _schedule.addAll(widget.subject.activeSchedule);
+    _schedule.addAll(
+      widget.subject.activeSchedule.where((slot) => !slot.isExtra),
+    );
     _sortSchedule();
 
     _loadLocations();
@@ -933,7 +940,13 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
       return until != null && now != null && until.isBefore(now);
     }).toList();
 
-    final fullSchedule = [...oldClosedSlots, ..._schedule];
+    final fullSchedule = schedulePreservingExtraClasses(
+      replacement: [
+        ...oldClosedSlots,
+        ..._schedule.where((slot) => !slot.isExtra),
+      ],
+      existing: widget.subject.schedule,
+    );
 
     final updatedSubject = widget.subject.copyWith(
       name: name,
