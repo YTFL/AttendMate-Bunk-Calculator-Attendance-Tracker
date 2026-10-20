@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -455,66 +456,69 @@ class BackupService {
         return bMod.compareTo(aMod);
       });
 
-      final List<BackupFileInfo> list = [];
-      for (final item in items.take(maxRollingBackups)) {
-        try {
-          final fileName = item['fileName'] as String;
-          final content = item['content'] as String;
-          final fileSizeBytes = (item['fileSizeBytes'] as num?)?.toInt() ?? 0;
-          final lastModified = (item['lastModified'] as num?)?.toInt() ?? 0;
+      final list = await Isolate.run(() {
+        final List<BackupFileInfo> parsedList = [];
+        for (final item in items.take(maxRollingBackups)) {
+          try {
+            final fileName = item['fileName'] as String;
+            final content = item['content'] as String;
+            final fileSizeBytes = (item['fileSizeBytes'] as num?)?.toInt() ?? 0;
+            final lastModified = (item['lastModified'] as num?)?.toInt() ?? 0;
 
-          final data = jsonDecode(content) as Map<String, dynamic>;
+            final data = jsonDecode(content) as Map<String, dynamic>;
 
-          final createdAtStr = data['created_at'] as String?;
-          final createdAt = createdAtStr != null
-              ? DateTime.tryParse(createdAtStr)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(lastModified)
-              : DateTime.fromMillisecondsSinceEpoch(lastModified);
+            final createdAtStr = data['created_at'] as String?;
+            final createdAt = createdAtStr != null
+                ? DateTime.tryParse(createdAtStr)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(lastModified)
+                : DateTime.fromMillisecondsSinceEpoch(lastModified);
 
-          final db = data['database'] as Map<String, dynamic>? ?? {};
-          final subjects = db['subjects'] as List? ?? [];
-          final attendance = db['attendance'] as List? ?? [];
-          final semesterList = db['semester'] as List? ?? [];
+            final db = data['database'] as Map<String, dynamic>? ?? {};
+            final subjects = db['subjects'] as List? ?? [];
+            final attendance = db['attendance'] as List? ?? [];
+            final semesterList = db['semester'] as List? ?? [];
 
-          String? semesterRange;
-          if (semesterList.isNotEmpty) {
-            final semMap = semesterList.first as Map<String, dynamic>;
-            final start = semMap['start_date'] as String? ?? semMap['startDate'] as String?;
-            final end = semMap['end_date'] as String? ?? semMap['endDate'] as String?;
-            if (start != null && end != null) {
-              try {
-                final d1 = DateFormat.yMMMd().format(DateTime.parse(start));
-                final d2 = DateFormat.yMMMd().format(DateTime.parse(end));
-                semesterRange = '$d1 - $d2';
-              } catch (_) {}
+            String? semesterRange;
+            if (semesterList.isNotEmpty) {
+              final semMap = semesterList.first as Map<String, dynamic>;
+              final start = semMap['start_date'] as String? ?? semMap['startDate'] as String?;
+              final end = semMap['end_date'] as String? ?? semMap['endDate'] as String?;
+              if (start != null && end != null) {
+                try {
+                  final d1 = DateFormat.yMMMd().format(DateTime.parse(start));
+                  final d2 = DateFormat.yMMMd().format(DateTime.parse(end));
+                  semesterRange = '$d1 - $d2';
+                } catch (_) {}
+              }
             }
-          }
 
-          list.add(
-            BackupFileInfo(
-              file: File(fileName),
-              fileName: fileName,
-              createdAt: createdAt,
-              fileSizeBytes: fileSizeBytes,
-              subjectCount: subjects.length,
-              attendanceCount: attendance.length,
-              semesterRange: semesterRange,
-              rawData: data,
-            ),
-          );
-        } catch (e) {
-          list.add(
-            BackupFileInfo(
-              file: File(item['fileName'] as String? ?? 'backup.json'),
-              fileName: item['fileName'] as String? ?? 'backup.json',
-              createdAt: DateTime.fromMillisecondsSinceEpoch((item['lastModified'] as num?)?.toInt() ?? 0),
-              fileSizeBytes: (item['fileSizeBytes'] as num?)?.toInt() ?? 0,
-              subjectCount: 0,
-              attendanceCount: 0,
-              semesterRange: 'Corrupted or legacy format',
-            ),
-          );
+            parsedList.add(
+              BackupFileInfo(
+                file: File(fileName),
+                fileName: fileName,
+                createdAt: createdAt,
+                fileSizeBytes: fileSizeBytes,
+                subjectCount: subjects.length,
+                attendanceCount: attendance.length,
+                semesterRange: semesterRange,
+                rawData: data,
+              ),
+            );
+          } catch (e) {
+            parsedList.add(
+              BackupFileInfo(
+                file: File(item['fileName'] as String? ?? 'backup.json'),
+                fileName: item['fileName'] as String? ?? 'backup.json',
+                createdAt: DateTime.fromMillisecondsSinceEpoch((item['lastModified'] as num?)?.toInt() ?? 0),
+                fileSizeBytes: (item['fileSizeBytes'] as num?)?.toInt() ?? 0,
+                subjectCount: 0,
+                attendanceCount: 0,
+                semesterRange: 'Corrupted or legacy format',
+              ),
+            );
+          }
         }
-      }
+        return parsedList;
+      });
 
       return list;
     } catch (e) {
@@ -637,7 +641,7 @@ class BackupService {
   /// Restore state from a backup File
   Future<bool> restoreBackupFromFile(File file, {BuildContext? context}) async {
     final content = await file.readAsString();
-    final data = jsonDecode(content) as Map<String, dynamic>;
+    final data = await Isolate.run(() => jsonDecode(content) as Map<String, dynamic>);
     if (context != null && !context.mounted) return false;
     return restoreBackupFromData(data, context: context);
   }

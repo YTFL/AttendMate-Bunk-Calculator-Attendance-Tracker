@@ -11,6 +11,7 @@ import '../../services/system_calendar_service.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class CalendarSyncSelectionScreen extends StatefulWidget {
   const CalendarSyncSelectionScreen({super.key});
@@ -406,10 +407,15 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     final semester = Provider.of<SemesterProvider>(context).semester;
     final subjects = Provider.of<SubjectProvider>(context).subjects;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Calendar Synchronization'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Calendar Synchronization'),
+        ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -601,7 +607,10 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                 alignment: Alignment.centerRight,
                                 child: OutlinedButton.icon(
                                   icon: const Icon(Icons.sync_rounded, size: 18),
-                                  label: const Text('Sync to Device Calendar Now'),
+                                  label: const FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text('Sync to Device Calendar Now'),
+                                  ),
                                   onPressed: _isActionInProgress ? null : _triggerSystemSync,
                                 ),
                               ),
@@ -634,11 +643,14 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                   color: theme.colorScheme.primary,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Sync Bounds (Semester Only)',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.primary,
+                                Expanded(
+                                  child: Text(
+                                    'Sync Bounds (Semester Only)',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -717,6 +729,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                   ),
               ],
             ),
+      ),
     );
   }
 

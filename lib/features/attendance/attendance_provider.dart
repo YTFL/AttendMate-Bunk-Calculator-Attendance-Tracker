@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
+import '../calendar/calendar_utils.dart';
 import 'attendance_model.dart';
 import '../planner/planned_leave_model.dart';
 import '../subject/subject_model.dart';
@@ -46,17 +47,22 @@ class AttendanceProvider with ChangeNotifier {
     String? slotKey,
   }) async {
     try {
-      // Remove any existing record for this subject on this day to avoid duplicates
+      final normalizedDate = DateTime(date.year, date.month, date.day);
+      final cleanSlotKey = slotKey ?? '';
+
+      // Remove any existing record for this subject on this day that matches this slot or was a wildcard
       _attendanceRecords.removeWhere(
         (record) =>
             record.subjectId == subjectId &&
-            record.date == date &&
-            (record.slotKey ?? '') == (slotKey ?? ''),
+            CalendarUtils.isSameDay(record.date, normalizedDate) &&
+            ((record.slotKey ?? '') == cleanSlotKey ||
+             (record.slotKey ?? '').isEmpty ||
+             cleanSlotKey.isEmpty),
       );
 
       final newRecord = Attendance(
         subjectId: subjectId,
-        date: date,
+        date: normalizedDate,
         status: status,
         slotKey: slotKey,
       );
@@ -73,16 +79,28 @@ class AttendanceProvider with ChangeNotifier {
   Future<void> markMultipleAttendance(List<Attendance> records) async {
     if (records.isEmpty) return;
     try {
+      final normalizedRecords = <Attendance>[];
       for (final record in records) {
+        final normDate = DateTime(record.date.year, record.date.month, record.date.day);
+        final cleanSlotKey = record.slotKey ?? '';
         _attendanceRecords.removeWhere(
           (r) =>
               r.subjectId == record.subjectId &&
-              r.date == record.date &&
-              (r.slotKey ?? '') == (record.slotKey ?? ''),
+              CalendarUtils.isSameDay(r.date, normDate) &&
+              ((r.slotKey ?? '') == cleanSlotKey ||
+               (r.slotKey ?? '').isEmpty ||
+               cleanSlotKey.isEmpty),
         );
-        _attendanceRecords.add(record);
+        final normRecord = Attendance(
+          subjectId: record.subjectId,
+          date: normDate,
+          status: record.status,
+          slotKey: record.slotKey,
+        );
+        _attendanceRecords.add(normRecord);
+        normalizedRecords.add(normRecord);
       }
-      await _databaseService.saveMultipleAttendanceIncremental(records);
+      await _databaseService.saveMultipleAttendanceIncremental(normalizedRecords);
       await BackupService().notifyDataChanged();
       notifyListeners();
     } catch (e) {
@@ -96,20 +114,30 @@ class AttendanceProvider with ChangeNotifier {
     String? slotKey,
   }) {
     try {
-      if (slotKey != null) {
-        return _attendanceRecords.firstWhere(
-          (record) =>
-              record.subjectId == subjectId &&
-              record.date == date &&
-              (record.slotKey ?? '') == slotKey,
-        );
+      final cleanSlotKey = slotKey ?? '';
+      final matchingRecords = _attendanceRecords.where((record) {
+        return record.subjectId == subjectId &&
+            CalendarUtils.isSameDay(record.date, date);
+      }).toList();
+
+      if (matchingRecords.isEmpty) return null;
+
+      if (cleanSlotKey.isNotEmpty) {
+        // Look for exact slot match first
+        final exactIndex = matchingRecords.indexWhere((r) => (r.slotKey ?? '') == cleanSlotKey);
+        if (exactIndex != -1) return matchingRecords[exactIndex];
+
+        // Fallback to wildcard (record marked for whole day without slotKey)
+        final wildcardIndex = matchingRecords.indexWhere((r) => (r.slotKey ?? '').isEmpty);
+        if (wildcardIndex != -1) return matchingRecords[wildcardIndex];
+
+        return matchingRecords.first;
       }
 
-      return _attendanceRecords.firstWhere((record) {
-        return record.subjectId == subjectId &&
-            record.date == date &&
-            ((record.slotKey ?? '').isEmpty);
-      });
+      // No slotKey specified: prefer wildcard record
+      final wildcardIndex = matchingRecords.indexWhere((r) => (r.slotKey ?? '').isEmpty);
+      if (wildcardIndex != -1) return matchingRecords[wildcardIndex];
+      return matchingRecords.first;
     } catch (e) {
       return null; // No record found
     }
@@ -117,7 +145,7 @@ class AttendanceProvider with ChangeNotifier {
 
   bool isHoliday(DateTime date) {
     // A day is a holiday if all records for that day are 'cancelled'
-    final recordsForDay = _attendanceRecords.where((record) => record.date == date).toList();
+    final recordsForDay = _attendanceRecords.where((record) => CalendarUtils.isSameDay(record.date, date)).toList();
     if (recordsForDay.isEmpty) return false;
     return recordsForDay.every((record) => record.status == AttendanceStatus.cancelled);
   }
@@ -140,11 +168,12 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
   }
 
-
   /// Delete all attendance records for a specific date
   Future<void> deleteRecordsForDate(DateTime date) async {
-    _attendanceRecords.removeWhere((record) => record.date == date);
-    await _databaseService.deleteAttendanceForDate(date);
+    final normDate = DateTime(date.year, date.month, date.day);
+    _attendanceRecords.removeWhere((record) => CalendarUtils.isSameDay(record.date, normDate));
+    await _databaseService.deleteAttendanceForDate(normDate);
+    await BackupService().notifyDataChanged();
     notifyListeners();
   }
 
@@ -154,15 +183,17 @@ class AttendanceProvider with ChangeNotifier {
     DateTime date, {
     String? slotKey,
   }) async {
+    final normDate = DateTime(date.year, date.month, date.day);
+    final cleanSlotKey = slotKey ?? '';
     _attendanceRecords.removeWhere(
       (record) =>
           record.subjectId == subjectId &&
-          record.date == date &&
-          (slotKey == null || (record.slotKey ?? '') == slotKey),
+          CalendarUtils.isSameDay(record.date, normDate) &&
+          (cleanSlotKey.isEmpty || (record.slotKey ?? '') == cleanSlotKey || (record.slotKey ?? '').isEmpty),
     );
     await _databaseService.deleteSingleAttendance(
       subjectId: subjectId,
-      date: date,
+      date: normDate,
       slotKey: slotKey,
     );
     await BackupService().notifyDataChanged();

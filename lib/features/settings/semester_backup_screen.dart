@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,8 @@ import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/day_cycle_background.dart';
+import '../../widgets/glass_dialog.dart';
 
 class SemesterBackupScreen extends StatefulWidget {
   const SemesterBackupScreen({super.key});
@@ -283,16 +286,11 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showGlassDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Theme.of(dialogCtx).colorScheme.error),
-            const SizedBox(width: 8),
-            const Text('Restore Backup?'),
-          ],
-        ),
+      builder: (dialogCtx) => GlassDialog(
+        icon: Icon(Icons.warning_amber_rounded, color: Theme.of(dialogCtx).colorScheme.error, size: 28),
+        title: const Text('Restore Backup?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,13 +300,14 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
             ),
             const SizedBox(height: 12),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Theme.of(dialogCtx).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                color: Theme.of(dialogCtx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                '${info.subjectCount} Subjects • ${info.attendanceCount} Attendance Records',
+                '${info.subjectCount} Subjects  |  ${info.attendanceCount} Attendance Records',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -382,16 +381,11 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
     final subjects = dbMap['subjects'] as List? ?? [];
     final attendance = dbMap['attendance'] as List? ?? [];
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showGlassDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Theme.of(dialogCtx).colorScheme.error),
-            const SizedBox(width: 8),
-            Text(title),
-          ],
-        ),
+      builder: (dialogCtx) => GlassDialog(
+        icon: Icon(Icons.warning_amber_rounded, color: Theme.of(dialogCtx).colorScheme.error, size: 28),
+        title: Text(title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,13 +395,14 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
             ),
             const SizedBox(height: 12),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Theme.of(dialogCtx).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                color: Theme.of(dialogCtx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                '${subjects.length} Subjects • ${attendance.length} Attendance Records',
+                '${subjects.length} Subjects  |  ${attendance.length} Attendance Records',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -464,9 +459,10 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
   }
 
   Future<void> _deleteBackup(BackupFileInfo info) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showGlassDialog<bool>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => GlassDialog(
+        icon: Icon(Icons.delete_outline_rounded, color: Theme.of(dialogCtx).colorScheme.error, size: 28),
         title: const Text('Delete Backup?'),
         content: Text('Are you sure you want to delete "${info.fileName}"?'),
         actions: [
@@ -474,9 +470,13 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
             onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+              foregroundColor: Theme.of(dialogCtx).colorScheme.onError,
+            ),
             onPressed: () => Navigator.pop(dialogCtx, true),
-            child: Text('Delete', style: TextStyle(color: Theme.of(dialogCtx).colorScheme.error)),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -536,15 +536,52 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
     return decoded;
   }
 
+  Widget _buildGlassCard({
+    required Widget child,
+    required bool isDarkMode,
+    EdgeInsetsGeometry? padding,
+    Color? borderColor,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF0F0F16).withValues(alpha: 0.60)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: borderColor ??
+                  (isDarkMode
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : Colors.black.withValues(alpha: 0.08)),
+              width: 1.0,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Semester Backup'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Semester Backup'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       body: _isLoading || _isRestoring
           ? Center(
               child: Column(
@@ -560,14 +597,8 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 // Automatic Backups Toggle Box
-                Container(
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
+                _buildGlassCard(
+                  isDarkMode: isDarkMode,
                   child: SwitchListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                     value: _isBackupEnabled,
@@ -595,15 +626,9 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                 const SizedBox(height: 12),
 
                 // Location Selection Box
-                Container(
+                _buildGlassCard(
+                  isDarkMode: isDarkMode,
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -621,6 +646,8 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           OutlinedButton.icon(
@@ -662,7 +689,10 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : const Icon(Icons.backup_outlined),
-                        label: Text(_isCreatingBackup ? 'Creating...' : 'Create Backup'),
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(_isCreatingBackup ? 'Creating...' : 'Create Backup'),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -670,7 +700,10 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _importBackupFile,
                         icon: const Icon(Icons.file_open_outlined),
-                        label: const Text('Import File'),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Import File'),
+                        ),
                       ),
                     ),
                   ],
@@ -684,14 +717,19 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'AVAILABLE BACKUPS (${_backups.length}/3)',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
+                      Expanded(
+                        child: Text(
+                          'AVAILABLE BACKUPS (${_backups.length}/3)',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         'Auto 3 Rolling Limit',
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -703,12 +741,10 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                 ),
 
                 if (_backups.isEmpty)
-                  Card(
-                    elevation: 0,
-                    margin: const EdgeInsets.only(top: 8),
-                    color: colorScheme.surfaceContainerLow,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                  _buildGlassCard(
+                    isDarkMode: isDarkMode,
+                    padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+                    child: Center(
                       child: Column(
                         children: [
                           Icon(Icons.cloud_off_outlined, size: 48, color: colorScheme.outline),
@@ -733,19 +769,20 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
                   ..._backups.map((info) => _buildBackupCard(context, info)),
               ],
             ),
+      ),
     );
   }
 
   Widget _buildBackupCard(BuildContext context, BackupFileInfo info) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
     final sizeKb = (info.fileSizeBytes / 1024).toStringAsFixed(1);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _buildGlassCard(
+        isDarkMode: isDarkMode,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,17 +790,23 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.verified_outlined, color: colorScheme.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('MMM d, y • h:mm a').format(info.createdAt),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.verified_outlined, color: colorScheme.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          DateFormat('MMM d, y • h:mm a').format(info.createdAt),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20),
@@ -809,21 +852,26 @@ class _SemesterBackupScreenState extends State<SemesterBackupScreen> {
 
   Widget _buildChip(BuildContext context, IconData icon, String label) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        color: isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDarkMode ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
+              fontWeight: FontWeight.w500,
               color: colorScheme.onSurfaceVariant,
             ),
           ),

@@ -875,8 +875,9 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
 
     final name = _nameController.text.trim();
     final acronymRaw = _acronymController.text.trim();
+    final defaultAcronym = Subject.defaultAcronymFromName(name);
     final acronym =
-        acronymRaw.isEmpty ? name.acronymFromName() : acronymRaw;
+        acronymRaw.isEmpty ? defaultAcronym : acronymRaw.toUpperCase();
 
     if (_schedule.isEmpty) {
       ScaffoldMessenger.of(context).showReplacingSnackBar(
@@ -1037,11 +1038,14 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                 controller: _acronymController,
                 textCapitalization: TextCapitalization.characters,
                 textInputAction: TextInputAction.done,
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(3),
+                ],
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                 decoration: InputDecoration(
-                  labelText: 'Acronym (Optional)',
+                  labelText: 'Acronym (3 letters max)',
                   hintText: 'e.g., MTH, PHY',
-                  helperText: 'Leave empty to auto-generate',
+                  helperText: 'Leave empty to use first 3 letters of subject',
                   helperStyle: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.45)),
                   filled: true,
                   fillColor: colorScheme.surfaceContainerLowest,
@@ -1524,8 +1528,8 @@ class _EditSubjectScreenState extends State<EditSubjectScreen> {
                     Text(
                       slot.formatTimeRange(timeFormat) +
                           (slot.room != null
-                              ? ' • ${slot.room}${slot.block != null && slot.block!.isNotEmpty ? " (${slot.block})" : ""}'
-                              : (_selectedLocation != null ? ' • Default (${_selectedLocation!.name})' : '')),
+                              ? '  |  ${slot.room}${slot.block != null && slot.block!.isNotEmpty ? " (${slot.block})" : ""}'
+                              : (_selectedLocation != null ? '  |  Default (${_selectedLocation!.name})' : '')),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

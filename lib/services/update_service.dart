@@ -131,17 +131,89 @@ class UpdateService {
     }
   }
 
+  static final _emojiRegex = RegExp(
+    r'[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1FA70}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{2B50}\u{203C}\u{2049}\u{2122}\u{2139}\u{2194}-\u{21AA}\u{231A}-\u{23FA}]',
+    unicode: true,
+  );
+
+  static String _stripEmojis(String text) {
+    var result = text.replaceAll(_emojiRegex, '');
+    result = result.replaceAll(RegExp(r' {2,}'), ' ');
+    return result;
+  }
+
+  static List<String> _humanizeContent(List<String> lines) {
+    final output = <String>[];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      // Humanize AI word salad intro paragraph
+      if (line.contains('delivers a major feature expansion and performance overhaul') ||
+          (line.startsWith('AttendMate') && line.contains('Highlights include'))) {
+        output.add(
+          'This update brings live classroom timetable syncing, automated Google Drive cloud backups, multi-day special classes, and smoother performance across the app.',
+        );
+        continue;
+      }
+
+      // Omit awkward looking-ahead teasers and following dividers to remove empty gaps before features
+      if (line.contains('Looking Ahead:') || line.contains('Looking ahead:')) {
+        while (i + 1 < lines.length &&
+            (lines[i + 1].trim().isEmpty || lines[i + 1].trim() == '---')) {
+          i++;
+        }
+        continue;
+      }
+
+      // Clean robotic AI phrases
+      line = line.replaceAll(
+        RegExp(r'complete elimination of tab-switching UI flickers via `?IndexedStack`?', caseSensitive: false),
+        'smooth tab switching with no visual flicker',
+      );
+      line = line.replaceAll(
+        RegExp(r'instantaneous screen loading across integration screens', caseSensitive: false),
+        'faster screen loading across settings',
+      );
+      line = line.replaceAll(
+        RegExp(r'Strictly protects existing student attendance records', caseSensitive: false),
+        'Protects existing student attendance records',
+      );
+      line = line.replaceAll(
+        RegExp(r'Centrally accessible under', caseSensitive: false),
+        'Available under',
+      );
+
+      output.add(line);
+    }
+    return output;
+  }
+
   /// Sanitize markdown release notes for clean in-app display.
   static String sanitizeReleaseNotes(String markdown) {
-    final normalized = markdown.replaceAll('\r\n', '\n').trim();
+    var normalized = markdown.replaceAll('\r\n', '\n').trim();
     if (normalized.isEmpty) return normalized;
+
+    normalized = _stripEmojis(normalized);
 
     var lines = normalized.split('\n');
     lines = _removeTopMetadataBlock(lines);
     lines = _removeInstallationSection(lines);
     lines = _removeTrailingDividersAndFooters(lines);
+    lines = _humanizeContent(lines);
 
-    final sanitized = lines.join('\n').trim();
+    // Collapse multiple blank lines into at most one blank line
+    final collapsed = <String>[];
+    for (final l in lines) {
+      if (l.trim().isEmpty) {
+        if (collapsed.isNotEmpty && collapsed.last.trim().isNotEmpty) {
+          collapsed.add('');
+        }
+      } else {
+        collapsed.add(l);
+      }
+    }
+
+    final sanitized = collapsed.join('\n').trim();
     return sanitized;
   }
 
@@ -238,7 +310,7 @@ class UpdateService {
           buildNumber: 99,
           changelog: sanitizedNotes.isNotEmpty
               ? sanitizedNotes
-              : '## ✨ Simulated Release Notes\n\n- Improved download progress bar with percentage indicator\n- Clean release notes presentation without trailing dividers',
+              : '## Release Notes (v2.0.0)\n\n### What\'s New\n- Live classroom timetable sync with Google Drive\n- Automatic cloud backups and instant restore\n- Clean translucent liquid glass design\n- Performance and stability fixes',
         );
       }
     } catch (e) {
@@ -249,7 +321,7 @@ class UpdateService {
     return AppUpdate(
       version: '2.0.0',
       buildNumber: 99,
-      changelog: '## ✨ Simulated Release Notes (v2.0.0)\n\n### Added\n- Full animated white download progress bar with percentage indicator.\n- Developer option simulation for testing update UI.\n\n### Changed\n- Cleaned up trailing lines and dividers from release notes display.',
+      changelog: '## Release Notes (v2.0.0)\n\n### What\'s New\n- Live classroom timetable sync with Google Drive\n- Automatic cloud backups and instant restore\n- Smooth progress bar with percentage indicator during updates\n- Translucent liquid glass design polish\n\n### Fixes & Improvements\n- Improved background backup reliability\n- Refined navigation and eliminated tab switching flicker',
     );
   }
 

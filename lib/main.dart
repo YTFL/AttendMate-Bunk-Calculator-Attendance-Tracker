@@ -15,6 +15,8 @@ import 'features/home/home_screen.dart';
 import 'features/semester/semester_provider.dart';
 import 'features/settings/time_format_provider.dart';
 import 'features/settings/swipe_action_provider.dart';
+import 'features/settings/ambient_theme_provider.dart';
+import 'features/settings/refresh_rate_provider.dart';
 import 'features/subject/subject_provider.dart';
 import 'features/tutorial/tutorial_controller.dart';
 import 'package:geolocator/geolocator.dart';
@@ -649,11 +651,17 @@ Future<void> main() async {
   final attendanceProvider = AttendanceProvider();
   final timeFormatProvider = TimeFormatProvider();
   final swipeActionProvider = SwipeActionProvider();
+  final refreshRateProvider = RefreshRateProvider();
+
+  // Initialize display refresh rate according to saved preference (defaults to device default)
+  unawaited(refreshRateProvider.init());
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => AmbientThemeProvider()),
+        ChangeNotifierProvider(create: (context) => refreshRateProvider),
         ChangeNotifierProvider(create: (context) => timeFormatProvider),
         ChangeNotifierProvider(create: (context) => swipeActionProvider),
         ChangeNotifierProvider(create: (context) => SemesterProvider()),
@@ -841,17 +849,30 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TextTheme appTextTheme = TextTheme(
-      displayLarge: GoogleFonts.oswald(fontSize: 57, fontWeight: FontWeight.bold),
-      titleLarge: GoogleFonts.roboto(fontSize: 22, fontWeight: FontWeight.w500),
-      bodyMedium: GoogleFonts.openSans(fontSize: 14),
+    final TextTheme baseInterTheme = GoogleFonts.interTextTheme();
+    final TextTheme lightAppTextTheme = baseInterTheme.copyWith(
+      displayLarge: GoogleFonts.inter(fontSize: 48, fontWeight: FontWeight.w700, letterSpacing: -1.0),
+      titleLarge: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+      titleMedium: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2),
+      bodyLarge: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w400),
+      bodyMedium: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w400),
+      labelLarge: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
     ).apply(bodyColor: Colors.black, displayColor: Colors.black);
+
+    final TextTheme darkAppTextTheme = baseInterTheme.copyWith(
+      displayLarge: GoogleFonts.inter(fontSize: 48, fontWeight: FontWeight.w700, letterSpacing: -1.0),
+      titleLarge: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+      titleMedium: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2),
+      bodyLarge: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w400),
+      bodyMedium: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w400),
+      labelLarge: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+    ).apply(bodyColor: Colors.white, displayColor: Colors.white);
 
     final ThemeData lightTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: Colors.white,
-      colorScheme: const ColorScheme(
+      scaffoldBackgroundColor: const Color(0xFFF9F9FB),
+      colorScheme: ColorScheme(
         brightness: Brightness.light,
         primary: Colors.black,
         onPrimary: Colors.white,
@@ -861,53 +882,94 @@ class MyApp extends StatelessWidget {
         onError: Colors.white,
         surface: Colors.white,
         onSurface: Colors.black,
+        outline: Colors.black.withValues(alpha: 0.12),
+        outlineVariant: Colors.black.withValues(alpha: 0.06),
+        surfaceContainerHighest: const Color(0xFFEBEBEF),
+        surfaceContainerLowest: const Color(0xFFFAFAFC),
       ),
-      textTheme: appTextTheme,
+      textTheme: lightAppTextTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF9F9FB),
         foregroundColor: Colors.black,
         scrolledUnderElevation: 0,
-        titleTextStyle: GoogleFonts.oswald(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
+        titleTextStyle: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.black, letterSpacing: -0.4),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.white,
           backgroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          textStyle: GoogleFonts.roboto(fontSize: 16, fontWeight: FontWeight.w500),
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.black,
+          backgroundColor: Colors.black.withValues(alpha: 0.03),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.12), width: 1.0),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white.withValues(alpha: 0.85),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.08), width: 0.9),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      dividerTheme: DividerThemeData(
+        color: Colors.black.withValues(alpha: 0.06),
+        thickness: 0.8,
+        space: 1,
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        barrierColor: Colors.black.withValues(alpha: 0.45),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.08), width: 1.0),
+        ),
+      ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: Colors.white,
-        elevation: 6,
+        elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.08), width: 0.9),
         ),
         headerBackgroundColor: Colors.black,
         headerForegroundColor: Colors.white,
-        headerHeadlineStyle: GoogleFonts.roboto(
-          fontSize: 22,
+        headerHeadlineStyle: GoogleFonts.inter(
+          fontSize: 20,
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
-        headerHelpStyle: GoogleFonts.roboto(
+        headerHelpStyle: GoogleFonts.inter(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: Colors.white70,
         ),
-        weekdayStyle: GoogleFonts.roboto(
+        weekdayStyle: GoogleFonts.inter(
           fontSize: 13,
           fontWeight: FontWeight.bold,
           color: Colors.black87,
         ),
-        dayStyle: GoogleFonts.roboto(
+        dayStyle: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w600,
         ),
@@ -934,11 +996,11 @@ class MyApp extends StatelessWidget {
         todayBorder: const BorderSide(color: Colors.black, width: 1.8),
         cancelButtonStyle: TextButton.styleFrom(
           foregroundColor: Colors.grey.shade700,
-          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         confirmButtonStyle: TextButton.styleFrom(
           foregroundColor: Colors.black,
-          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.bold, fontSize: 14),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
         ),
       ),
     );
@@ -947,7 +1009,7 @@ class MyApp extends StatelessWidget {
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: Colors.black,
-      colorScheme: const ColorScheme(
+      colorScheme: ColorScheme(
         brightness: Brightness.dark,
         primary: Colors.white,
         onPrimary: Colors.black,
@@ -955,59 +1017,96 @@ class MyApp extends StatelessWidget {
         onSecondary: Colors.black,
         error: Colors.red,
         onError: Colors.black,
-        surface: Colors.black,
+        surface: const Color(0xFF141416), // Elevated graphite/obsidian surface
         onSurface: Colors.white,
+        outline: Colors.white.withValues(alpha: 0.12),
+        outlineVariant: Colors.white.withValues(alpha: 0.06),
+        surfaceContainerHighest: const Color(0xFF222226),
+        surfaceContainerLowest: const Color(0xFF0D0D0F),
       ),
-      textTheme: appTextTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+      textTheme: darkAppTextTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         scrolledUnderElevation: 0,
-        titleTextStyle: GoogleFonts.oswald(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+        titleTextStyle: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.4),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.black,
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          textStyle: GoogleFonts.roboto(fontSize: 16, fontWeight: FontWeight.w500),
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.white.withValues(alpha: 0.04),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.14), width: 1.0),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF141416).withValues(alpha: 0.78),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.9),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      dividerTheme: DividerThemeData(
+        color: Colors.white.withValues(alpha: 0.08),
+        thickness: 0.8,
+        space: 1,
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.grey,
       ),
       dialogTheme: DialogThemeData(
-        barrierColor: Colors.white.withValues(alpha: 0.12),
+        backgroundColor: const Color(0xFF16161A),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        barrierColor: Colors.black.withValues(alpha: 0.65),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.14), width: 1.0),
+        ),
       ),
       datePickerTheme: DatePickerThemeData(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF141416),
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.8),
         ),
         headerBackgroundColor: Colors.black,
         headerForegroundColor: Colors.white,
-        headerHeadlineStyle: GoogleFonts.roboto(
-          fontSize: 22,
+        headerHeadlineStyle: GoogleFonts.inter(
+          fontSize: 20,
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
-        headerHelpStyle: GoogleFonts.roboto(
+        headerHelpStyle: GoogleFonts.inter(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: Colors.white70,
         ),
-        weekdayStyle: GoogleFonts.roboto(
+        weekdayStyle: GoogleFonts.inter(
           fontSize: 13,
           fontWeight: FontWeight.bold,
           color: Colors.white70,
         ),
-        dayStyle: GoogleFonts.roboto(
+        dayStyle: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w600,
         ),
@@ -1034,12 +1133,56 @@ class MyApp extends StatelessWidget {
         todayBorder: const BorderSide(color: Colors.white, width: 1.8),
         cancelButtonStyle: TextButton.styleFrom(
           foregroundColor: Colors.grey.shade400,
-          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         confirmButtonStyle: TextButton.styleFrom(
           foregroundColor: Colors.white,
-          textStyle: GoogleFonts.roboto(fontWeight: FontWeight.bold, fontSize: 14),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14),
         ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF1A1A1E),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.8),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Colors.white, width: 1.2),
+        ),
+        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: const Color(0xFF18181B),
+        surfaceTintColor: Colors.transparent,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.8),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Color(0xFF141416),
+        modalBackgroundColor: Color(0xFF141416),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF222226),
+        contentTextStyle: const TextStyle(color: Colors.white),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 0.8),
+        ),
+        behavior: SnackBarBehavior.floating,
       ),
     );
 

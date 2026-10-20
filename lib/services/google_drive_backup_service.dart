@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -246,8 +247,10 @@ class GoogleDriveBackupService {
         byteList.addAll(chunk);
       }
 
-      final jsonString = utf8.decode(byteList);
-      final backupData = jsonDecode(jsonString) as Map<String, dynamic>;
+      final backupData = await Isolate.run(() {
+        final jsonString = utf8.decode(byteList);
+        return jsonDecode(jsonString) as Map<String, dynamic>;
+      });
 
       if (context != null && !context.mounted) return false;
       final success = await BackupService().restoreBackupFromData(backupData, context: context);

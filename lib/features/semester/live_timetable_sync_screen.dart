@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../services/google_auth_service.dart';
@@ -9,6 +11,8 @@ import '../../services/semester_share_service.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/day_cycle_background.dart';
+import '../../widgets/glass_dialog.dart';
 import 'semester_share_preview_dialog.dart';
 
 class LiveTimetableSyncScreen extends StatefulWidget {
@@ -245,16 +249,11 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
         final newVer = updateData['sync_version'] as int? ?? (_syncService.subscribedVersion + 1);
         final className = updateData['class_name'] as String? ?? _syncService.subscribedClassName ?? 'Class';
 
-        final apply = await showDialog<bool>(
+        final apply = await showGlassDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.system_update_rounded, color: Theme.of(ctx).colorScheme.primary),
-                const SizedBox(width: 8),
-                const Text('Timetable Update Available'),
-              ],
-            ),
+          builder: (ctx) => GlassDialog(
+            icon: Icon(Icons.system_update_rounded, color: Theme.of(ctx).colorScheme.primary, size: 28),
+            title: const Text('Timetable Update Available'),
             content: Text(
               '$className has an updated schedule (Version $newVer). Would you like to update your schedule now?\n\n'
               'Note: Your personal attendance records will NOT be lost or reset.',
@@ -385,15 +384,31 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
     final theme = Theme.of(context);
     final rs = context.rs;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Classroom Timetable & Sharing'),
-        centerTitle: true,
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'Classroom Timetable & Sharing',
+            style: GoogleFonts.roboto(
+              fontWeight: FontWeight.w700,
+              fontSize: rs.font(17),
+            ),
+          ),
+          centerTitle: false,
+        ),
       body: Stack(
         children: [
           ListView(
-            padding: rs.insetsAll(16),
+            padding: EdgeInsets.fromLTRB(
+              rs.scale(16),
+              rs.scale(12),
+              rs.scale(16),
+              rs.scale(140),
+            ),
             children: [
               if (_syncService.isHost) ...[
                 _buildHostActiveCard(theme, rs),
@@ -434,7 +449,8 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
             ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Future<void> _handleImportSharedFile() async {
@@ -479,26 +495,48 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
     }
   }
 
-  Widget _buildOneTimeShareCard(ThemeData theme, ResponsiveScale rs) {
-    final colorScheme = theme.colorScheme;
-    final isDarkMode = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: isDarkMode ? 0.4 : 0.6),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+  Widget _buildGlassCard({
+    required Widget child,
+    required bool isDarkMode,
+    EdgeInsetsGeometry? padding,
+    Color? borderColor,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: padding ?? const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF0F0F16).withValues(alpha: 0.60)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: borderColor ??
+                  (isDarkMode
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : Colors.black.withValues(alpha: 0.08)),
+              width: 1.0,
+            ),
           ),
-        ],
+          child: child,
+        ),
       ),
+    );
+  }
+
+  Widget _buildOneTimeShareCard(ThemeData theme, ResponsiveScale rs) {
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final cardBorder = isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.08);
+    final badgeBg = isDarkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return _buildGlassCard(
+      isDarkMode: isDarkMode,
       padding: rs.insetsAll(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,13 +546,14 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
               Container(
                 padding: rs.insetsAll(10),
                 decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  color: badgeBg,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cardBorder, width: 0.8),
                 ),
                 child: Icon(
                   Icons.share_outlined,
-                  color: colorScheme.primary,
-                  size: rs.scale(22),
+                  color: isDarkMode ? Colors.white : Colors.black,
+                  size: rs.scale(20),
                 ),
               ),
               SizedBox(width: rs.width(12)),
@@ -524,10 +563,10 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                   children: [
                     Text(
                       'One-Time Semester Share',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: rs.font(16),
-                        color: colorScheme.onSurface,
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.w700,
+                        fontSize: rs.font(15.5),
+                        color: isDarkMode ? Colors.white : Colors.black,
                       ),
                     ),
                     SizedBox(height: rs.height(2)),
@@ -535,7 +574,7 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                       'Export or import semester files without cloud sync',
                       style: TextStyle(
                         fontSize: rs.font(12),
-                        color: colorScheme.onSurfaceVariant,
+                        color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                       ),
                     ),
                   ],
@@ -548,7 +587,7 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
             'Share your semester dates and schedule directly with friends via file or messaging app. Personal attendance records are never included.',
             style: TextStyle(
               fontSize: rs.font(12.5),
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
               height: 1.4,
             ),
           ),
@@ -556,13 +595,30 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
           Row(
             children: [
               Expanded(
-                child: FilledButton.tonalIcon(
+                child: ElevatedButton.icon(
                   onPressed: () => SemesterShareService().shareSemesterWithFriend(context),
-                  icon: const Icon(Icons.share_rounded, size: 17),
-                  label: const Text('Share File'),
-                  style: FilledButton.styleFrom(
+                  icon: Icon(
+                    Icons.share_rounded,
+                    size: 16,
+                    color: isDarkMode ? Colors.black : Colors.white,
+                  ),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Share File',
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.w700,
+                        fontSize: rs.font(12.5),
+                        color: isDarkMode ? Colors.black : Colors.white,
+                      ),
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDarkMode ? Colors.white : Colors.black,
+                    foregroundColor: isDarkMode ? Colors.black : Colors.white,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: EdgeInsets.symmetric(vertical: rs.height(11)),
+                    padding: EdgeInsets.symmetric(vertical: rs.height(12)),
                   ),
                 ),
               ),
@@ -570,11 +626,26 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _handleImportSharedFile,
-                  icon: const Icon(Icons.file_open_outlined, size: 17),
-                  label: const Text('Import File'),
+                  icon: Icon(
+                    Icons.file_open_outlined,
+                    size: 16,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Import File',
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.w600,
+                        fontSize: rs.font(12.5),
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
                   style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: cardBorder, width: 0.8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: EdgeInsets.symmetric(vertical: rs.height(11)),
+                    padding: EdgeInsets.symmetric(vertical: rs.height(12)),
                   ),
                 ),
               ),
@@ -599,22 +670,9 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
 
     final fileId = _syncService.hostedFileId ?? '';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.green.withValues(alpha: 0.4),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+    return _buildGlassCard(
+      isDarkMode: isDarkMode,
+      borderColor: Colors.green.withValues(alpha: 0.45),
       padding: rs.insetsAll(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -792,22 +850,9 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
         ? dateFormat.format(_syncService.subscribedLastSyncedAt!)
         : 'Never';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDarkMode ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.4),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+    return _buildGlassCard(
+      isDarkMode: isDarkMode,
+      borderColor: colorScheme.primary.withValues(alpha: 0.45),
       padding: rs.insetsAll(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -944,28 +989,22 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
   // ==========================================
 
   Widget _buildSetupOptions(ThemeData theme, ResponsiveScale rs) {
-    final colorScheme = theme.colorScheme;
     final isDarkMode = theme.brightness == Brightness.dark;
+    final cardBorder = isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.08);
+    final badgeBg = isDarkMode
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+    final inputBg = isDarkMode
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
 
     return Column(
       children: [
         // JOIN CARD (Classmate)
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: isDarkMode ? 0.4 : 0.6),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+        _buildGlassCard(
+          isDarkMode: isDarkMode,
           padding: rs.insetsAll(18),
           child: Form(
             key: _joinFormKey,
@@ -977,10 +1016,15 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                     Container(
                       padding: rs.insetsAll(10),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.12),
+                        color: badgeBg,
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cardBorder, width: 0.8),
                       ),
-                      child: const Icon(Icons.group_add_rounded, color: Colors.blue, size: 22),
+                      child: Icon(
+                        Icons.group_add_outlined,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        size: 20,
+                      ),
                     ),
                     SizedBox(width: rs.width(12)),
                     Expanded(
@@ -989,10 +1033,10 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                         children: [
                           Text(
                             'Join Class Timetable',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: rs.font(16),
-                              color: colorScheme.onSurface,
+                            style: GoogleFonts.roboto(
+                              fontWeight: FontWeight.w700,
+                              fontSize: rs.font(15.5),
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
                           ),
                           SizedBox(height: rs.height(2)),
@@ -1000,7 +1044,7 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                             'No Google Sign-In required for classmates',
                             style: TextStyle(
                               fontSize: rs.font(12),
-                              color: colorScheme.onSurfaceVariant,
+                              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                             ),
                           ),
                         ],
@@ -1011,29 +1055,80 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                 SizedBox(height: rs.height(16)),
                 TextFormField(
                   controller: _codeController,
+                  style: GoogleFonts.roboto(
+                    fontSize: rs.font(13.5),
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Class Code or Google Drive Link',
                     hintText: 'Paste code shared by your Class Rep',
-                    prefixIcon: const Icon(Icons.key_rounded),
+                    labelStyle: TextStyle(
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                      fontSize: 13,
+                    ),
+                    hintStyle: TextStyle(
+                      color: isDarkMode ? Colors.white24 : Colors.black26,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.key_rounded,
+                      size: 18,
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                    ),
                     suffixIcon: IconButton(
-                      icon: const Icon(Icons.paste_rounded, size: 20),
+                      icon: Icon(
+                        Icons.paste_rounded,
+                        size: 18,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
                       tooltip: 'Paste',
                       onPressed: _pasteFromClipboard,
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    filled: true,
+                    fillColor: inputBg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: cardBorder, width: 0.8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        width: 1.2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
                 SizedBox(height: rs.height(14)),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.icon(
+                  child: ElevatedButton.icon(
                     onPressed: _handlePreviewAndJoin,
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Preview & Subscribe'),
-                    style: FilledButton.styleFrom(
+                    icon: Icon(
+                      Icons.download_rounded,
+                      size: 16,
+                      color: isDarkMode ? Colors.black : Colors.white,
+                    ),
+                    label: Text(
+                      'Preview & Subscribe',
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.w700,
+                        fontSize: rs.font(13),
+                        color: isDarkMode ? Colors.black : Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isDarkMode ? Colors.white : Colors.black,
+                      foregroundColor: isDarkMode ? Colors.black : Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                      padding: EdgeInsets.symmetric(vertical: rs.height(13)),
                     ),
                   ),
                 ),
@@ -1045,22 +1140,8 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
         SizedBox(height: rs.height(16)),
 
         // HOST CARD (Class Rep)
-        Container(
-          decoration: BoxDecoration(
-            color: isDarkMode ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3) : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: isDarkMode ? 0.4 : 0.6),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
+        _buildGlassCard(
+          isDarkMode: isDarkMode,
           padding: rs.insetsAll(18),
           child: Form(
             key: _hostFormKey,
@@ -1072,10 +1153,15 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                     Container(
                       padding: rs.insetsAll(10),
                       decoration: BoxDecoration(
-                        color: Colors.purple.withValues(alpha: 0.12),
+                        color: badgeBg,
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cardBorder, width: 0.8),
                       ),
-                      child: const Icon(Icons.campaign_rounded, color: Colors.purple, size: 22),
+                      child: Icon(
+                        Icons.campaign_outlined,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        size: 20,
+                      ),
                     ),
                     SizedBox(width: rs.width(12)),
                     Expanded(
@@ -1084,10 +1170,10 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                         children: [
                           Text(
                             'Host Live Timetable',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: rs.font(16),
-                              color: colorScheme.onSurface,
+                            style: GoogleFonts.roboto(
+                              fontWeight: FontWeight.w700,
+                              fontSize: rs.font(15.5),
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
                           ),
                           SizedBox(height: rs.height(2)),
@@ -1095,7 +1181,7 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                             'For Class Representatives / Timetable Managers',
                             style: TextStyle(
                               fontSize: rs.font(12),
-                              color: colorScheme.onSurfaceVariant,
+                              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                             ),
                           ),
                         ],
@@ -1106,36 +1192,117 @@ class _LiveTimetableSyncScreenState extends State<LiveTimetableSyncScreen> {
                 SizedBox(height: rs.height(16)),
                 TextFormField(
                   controller: _classNameController,
+                  style: GoogleFonts.roboto(
+                    fontSize: rs.font(13.5),
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Class / Branch / Section Name',
                     hintText: 'e.g., CSE 3rd Year - Section A',
-                    prefixIcon: const Icon(Icons.school_rounded),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    labelStyle: TextStyle(
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                      fontSize: 13,
+                    ),
+                    hintStyle: TextStyle(
+                      color: isDarkMode ? Colors.white24 : Colors.black26,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.school_outlined,
+                      size: 18,
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                    ),
+                    filled: true,
+                    fillColor: inputBg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: cardBorder, width: 0.8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        width: 1.2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter a class name' : null,
                 ),
                 SizedBox(height: rs.height(12)),
                 TextFormField(
                   controller: _creatorNameController,
+                  style: GoogleFonts.roboto(
+                    fontSize: rs.font(13.5),
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Your Name (Class Rep)',
                     hintText: 'e.g., Alex (Class Rep)',
-                    prefixIcon: const Icon(Icons.person_rounded),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    labelStyle: TextStyle(
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                      fontSize: 13,
+                    ),
+                    hintStyle: TextStyle(
+                      color: isDarkMode ? Colors.white24 : Colors.black26,
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.person_outline_rounded,
+                      size: 18,
+                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                    ),
+                    filled: true,
+                    fillColor: inputBg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: cardBorder, width: 0.8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        width: 1.2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
                 SizedBox(height: rs.height(14)),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.tonalIcon(
+                  child: OutlinedButton.icon(
                     onPressed: _handleStartHosting,
-                    icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                    label: const Text('Host Timetable on Google Drive'),
-                    style: FilledButton.styleFrom(
+                    icon: Icon(
+                      Icons.cloud_upload_outlined,
+                      size: 17,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                    ),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Host Timetable on Google Drive',
+                        style: GoogleFonts.roboto(
+                          fontWeight: FontWeight.w700,
+                          fontSize: rs.font(13),
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: cardBorder, width: 0.8),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                      padding: EdgeInsets.symmetric(vertical: rs.height(13)),
                     ),
                   ),
                 ),

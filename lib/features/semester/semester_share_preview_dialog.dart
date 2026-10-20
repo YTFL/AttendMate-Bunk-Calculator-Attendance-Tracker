@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -9,10 +10,12 @@ import '../subject/subject_model.dart';
 
 class SemesterSharePreviewDialog extends StatefulWidget {
   final Map<String, dynamic> shareData;
+  final String? confirmButtonLabel;
 
   const SemesterSharePreviewDialog({
     super.key,
     required this.shareData,
+    this.confirmButtonLabel,
   });
 
   @override
@@ -57,58 +60,81 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
       }
     }
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(rs.scale(20)),
-      ),
-      titlePadding: EdgeInsets.fromLTRB(rs.width(20), rs.height(20), rs.width(20), rs.height(10)),
-      contentPadding: EdgeInsets.symmetric(horizontal: rs.width(20)),
-      actionsPadding: EdgeInsets.fromLTRB(rs.width(16), rs.height(10), rs.width(16), rs.height(16)),
-      title: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(rs.scale(10)),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(rs.scale(24)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(rs.scale(12)),
-            ),
-            child: Icon(
-              Icons.share_arrival_time_outlined,
-              color: theme.colorScheme.primary,
-              size: rs.scale(24),
-            ),
-          ),
-          SizedBox(width: rs.width(12)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Import Shared Semester',
-                  style: TextStyle(
-                    fontSize: rs.font(17),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: rs.height(2)),
-                Text(
-                  'Shared by a classmate',
-                  style: TextStyle(
-                    fontSize: rs.font(12),
-                    color: theme.textTheme.bodySmall?.color,
-                  ),
+              color: isDarkMode
+                  ? const Color(0xFF101016).withValues(alpha: 0.68)
+                  : Colors.white.withValues(alpha: 0.80),
+              borderRadius: BorderRadius.circular(rs.scale(24)),
+              border: Border.all(
+                color: isDarkMode
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.black.withValues(alpha: 0.08),
+                width: 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDarkMode ? 0.35 : 0.08),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: rs.height(8)),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(rs.scale(20)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(rs.scale(10)),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(rs.scale(12)),
+                        ),
+                        child: Icon(
+                          Icons.share_arrival_time_outlined,
+                          color: theme.colorScheme.primary,
+                          size: rs.scale(24),
+                        ),
+                      ),
+                      SizedBox(width: rs.width(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Import Shared Semester',
+                              style: TextStyle(
+                                fontSize: rs.font(17),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: rs.height(2)),
+                            Text(
+                              'Shared by a classmate',
+                              style: TextStyle(
+                                fontSize: rs.font(12),
+                                color: theme.textTheme.bodySmall?.color,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: rs.height(16)),
+                  SizedBox(height: rs.height(8)),
 
             // Semester Summary Card
             if (semesterRangeStr != null) ...[
@@ -237,7 +263,7 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
                                 [
                                   if (s.block != null) 'Block ${s.block}',
                                   if (s.room != null) 'Room ${s.room}',
-                                ].join(' • '),
+                                ].join('  |  '),
                                 style: TextStyle(
                                   fontSize: rs.font(11),
                                   color: theme.textTheme.bodySmall?.color,
@@ -314,26 +340,36 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
                 ],
               ),
             ),
-          ],
+                  SizedBox(height: rs.height(20)),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: _isImporting ? null : () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _isImporting ? null : _handleImport,
+                        icon: _isImporting
+                            ? SizedBox(
+                                width: rs.scale(16),
+                                height: rs.scale(16),
+                                child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.download_rounded, size: 18),
+                        label: Text(_isImporting ? 'Importing...' : (widget.confirmButtonLabel ?? 'Import Semester')),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _isImporting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          onPressed: _isImporting ? null : _handleImport,
-          icon: _isImporting
-              ? SizedBox(
-                  width: rs.scale(16),
-                  height: rs.scale(16),
-                  child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.download_rounded, size: 18),
-          label: Text(_isImporting ? 'Importing...' : 'Import Semester'),
-        ),
-      ],
     );
   }
 
@@ -350,7 +386,7 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
       );
 
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context, success);
 
       if (success) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(

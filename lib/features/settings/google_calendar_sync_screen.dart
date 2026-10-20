@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../services/calendar_service.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/day_cycle_background.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 
@@ -199,19 +200,23 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     final semester = semesterProvider.semester;
     final subjectCount = subjectProvider.subjects.length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Google Calendar Sync'),
-        elevation: 0,
-        actions: [
-          if (_isConnected && !_isLoading)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Check Status',
-              onPressed: _checkStatus,
-            ),
-        ],
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Google Calendar Sync'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          actions: [
+            if (_isConnected && !_isLoading)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Check Status',
+                onPressed: _checkStatus,
+              ),
+          ],
+        ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -320,6 +325,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                   ),
               ],
             ),
+      ),
     );
   }
 
@@ -565,12 +571,15 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 8),
-              Text(
-                'Sync Bounds (Semester Only)',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+              Expanded(
+                child: Text(
+                  'Sync Bounds (Semester Only)',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

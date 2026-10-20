@@ -19,6 +19,7 @@ import 'keep_android_open_screen.dart';
 import '../../services/battery_optimization_service.dart';
 import '../../utils/attendance_import_utils.dart';
 import '../../utils/markdown_link_helper.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class SetupGuideScreen extends StatefulWidget {
   final int initialPage;
@@ -873,10 +874,15 @@ The **More** page contains app preferences, integrations, diagnostics, update to
           await _goToPage(0);
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(appBarTitle),
-        ),
+      child: DayCycleBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(appBarTitle),
+          ),
         body: Column(
           children: [
             Expanded(
@@ -937,7 +943,8 @@ The **More** page contains app preferences, integrations, diagnostics, update to
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

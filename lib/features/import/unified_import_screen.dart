@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
@@ -180,6 +181,7 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
   Widget build(BuildContext context) {
     final rs = context.rs;
     final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
 
     final tutorialController = Provider.of<TutorialController>(context, listen: false);
     tutorialController.registerKey('key_export_menu', _exportMenuKey);
@@ -193,8 +195,8 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
           appBar: AppBar(
             title: Text(
               'Import Data',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
+              style: GoogleFonts.roboto(
+                fontWeight: FontWeight.w700,
                 fontSize: rs.font(18),
               ),
             ),
@@ -223,10 +225,10 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
                             Icon(
                               Icons.data_object_rounded,
                               size: rs.scale(18),
-                              color: theme.colorScheme.primary,
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
                             SizedBox(width: rs.width(12)),
-                            Text('Export as JSON', style: TextStyle(fontSize: rs.font(13.5))),
+                            Text('Export as JSON', style: GoogleFonts.roboto(fontSize: rs.font(13.5))),
                           ],
                         ),
                       ),
@@ -237,10 +239,10 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
                             Icon(
                               Icons.table_chart_rounded,
                               size: rs.scale(18),
-                              color: Colors.teal,
+                              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                             ),
                             SizedBox(width: rs.width(12)),
-                            Text('Export as CSV', style: TextStyle(fontSize: rs.font(13.5))),
+                            Text('Export as CSV', style: GoogleFonts.roboto(fontSize: rs.font(13.5))),
                           ],
                         ),
                       ),
@@ -251,10 +253,10 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
                             Icon(
                               Icons.picture_as_pdf_rounded,
                               size: rs.scale(18),
-                              color: Colors.redAccent,
+                              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                             ),
                             SizedBox(width: rs.width(12)),
-                            Text('Export as PDF', style: TextStyle(fontSize: rs.font(13.5))),
+                            Text('Export as PDF', style: GoogleFonts.roboto(fontSize: rs.font(13.5))),
                           ],
                         ),
                       ),
@@ -265,13 +267,20 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
             ],
             bottom: TabBar(
               controller: _tabController,
+              indicatorColor: isDarkMode ? Colors.white : Colors.black,
+              indicatorWeight: 2,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelColor: isDarkMode ? Colors.white : Colors.black,
+              unselectedLabelColor: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+              labelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w700, fontSize: 13),
+              unselectedLabelStyle: GoogleFonts.roboto(fontWeight: FontWeight.w500, fontSize: 13),
               tabs: const [
                 Tab(
-                  icon: Icon(Icons.table_chart_outlined),
+                  icon: Icon(Icons.table_chart_outlined, size: 19),
                   text: 'Timetable',
                 ),
                 Tab(
-                  icon: Icon(Icons.fact_check_outlined),
+                  icon: Icon(Icons.fact_check_outlined, size: 19),
                   text: 'Attendance',
                 ),
               ],

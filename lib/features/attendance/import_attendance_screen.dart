@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +108,7 @@ class _ImportAttendanceScreenState extends State<ImportAttendanceScreen> {
     }
   }
 
-  void _processAttendanceContent(String content, {String? fileName}) {
+  Future<void> _processAttendanceContent(String content, {String? fileName}) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
       setState(() {
@@ -121,7 +122,8 @@ class _ImportAttendanceScreenState extends State<ImportAttendanceScreen> {
     try {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
       final subjects = subjectProvider.subjects;
-      final parsed = AttendanceImportUtils.parseContent(trimmed, subjects, fileName: fileName);
+      final parsed = await Isolate.run(() => AttendanceImportUtils.parseContent(trimmed, subjects, fileName: fileName));
+      if (!mounted) return;
 
       if (parsed.errors.isNotEmpty && parsed.items.isEmpty && parsed.directBaselines.isEmpty) {
         setState(() {
@@ -148,6 +150,7 @@ class _ImportAttendanceScreenState extends State<ImportAttendanceScreen> {
         _computedBaselines = computed;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Parsing failed: $e';
         _parsedResult = null;

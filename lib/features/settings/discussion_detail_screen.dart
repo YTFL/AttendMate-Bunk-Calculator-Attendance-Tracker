@@ -6,6 +6,7 @@ import '../../models/github_discussion_model.dart';
 import '../../services/github_discussions_service.dart';
 import '../../utils/markdown_link_helper.dart';
 import '../../utils/url_launcher_utils.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class DiscussionDetailScreen extends StatefulWidget {
   final GitHubDiscussion discussion;
@@ -30,18 +31,23 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final formattedDate = DateFormat.yMMMd().add_jm().format(discussion.publishedAt.toLocal());
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(discussion.number > 0 ? '#${discussion.number} Discussion' : 'Discussion'),
-        actions: [
-          if (discussion.url.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.open_in_new_rounded),
-              tooltip: 'Open on GitHub',
-              onPressed: () => UrlLauncherUtils.launchExternalUrl(discussion.url, context: context),
-            ),
-        ],
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(discussion.number > 0 ? '#${discussion.number} Discussion' : 'Discussion'),
+          actions: [
+            if (discussion.url.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.open_in_new_rounded),
+                tooltip: 'Open on GitHub',
+                onPressed: () => UrlLauncherUtils.launchExternalUrl(discussion.url, context: context),
+              ),
+          ],
+        ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -98,7 +104,11 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
                 if (discussion.authorAvatarUrl != null)
                   CircleAvatar(
                     radius: 14,
-                    backgroundImage: NetworkImage(discussion.authorAvatarUrl!),
+                    backgroundImage: ResizeImage(
+                      NetworkImage(discussion.authorAvatarUrl!),
+                      width: 90,
+                      height: 90,
+                    ),
                   )
                 else
                   const CircleAvatar(
@@ -170,6 +180,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

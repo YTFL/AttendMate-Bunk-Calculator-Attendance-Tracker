@@ -3,8 +3,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../services/update_service.dart';
-
 import '../../utils/markdown_link_helper.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class WhatsNewScreen extends StatefulWidget {
   const WhatsNewScreen({super.key});
@@ -24,10 +24,15 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('What\'s New'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('What\'s New'),
+        ),
       body: FutureBuilder<String>(
         future: _releaseNotesFuture,
         builder: (context, snapshot) {
@@ -52,14 +57,15 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
             selectable: true,
             softLineBreak: true,
             padding: const EdgeInsets.all(16),
-            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+            styleSheet: MarkdownLinkHelper.buildStyleSheet(context),
             onTapLink: (text, href, title) {
               MarkdownLinkHelper.openLink(context, href);
             },
           );
         },
       ),
-    );
+    ),
+  );
   }
 
   Future<String> _loadReleaseNotes() async {

@@ -104,7 +104,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       children: [
         widget.child,
         if (controller.isActive && controller.currentStep != null)
-          AnimatedBuilder(
+          RepaintBoundary(
+            child: AnimatedBuilder(
             animation: _pulseAnimation,
             builder: (context, _) {
               final step = controller.currentStep!;
@@ -181,6 +182,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               );
             },
           ),
+        ),
       ],
     );
   }

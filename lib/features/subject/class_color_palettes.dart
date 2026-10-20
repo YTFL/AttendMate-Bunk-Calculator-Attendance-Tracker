@@ -1,34 +1,26 @@
 import 'package:flutter/material.dart';
 
 const List<Color> weeklyClassColors = [
-  Color(0xFFE53935),
-  Color(0xFFD81B60),
-  Color(0xFFEC407A),
-  Color(0xFFAB47BC),
-  Color(0xFF8E24AA),
-  Color(0xFF5E35B1),
-  Color(0xFF3949AB),
-  Color(0xFF1E88E5),
-  Color(0xFF42A5F5),
-  Color(0xFF039BE5),
-  Color(0xFF26C6DA),
-  Color(0xFF00ACC1),
-  Color(0xFF26A69A),
-  Color(0xFF00897B),
-  Color(0xFF43A047),
-  Color(0xFF66BB6A),
-  Color(0xFF7CB342),
-  Color(0xFFC0CA33),
-  Color(0xFFFDD835),
-  Color(0xFFFFCA28),
-  Color(0xFFFFB300),
-  Color(0xFFFB8C00),
-  Color(0xFFFF7043),
-  Color(0xFFF4511E),
-  Color(0xFF6D4C41),
-  Color(0xFF8D6E63),
-  Color(0xFF546E7A),
-  Color(0xFF757575),
+  Color(0xFF3A506B), // Deep Slate Navy
+  Color(0xFF2C3E50), // Obsidian Charcoal
+  Color(0xFF4A5568), // Titanium Graphite
+  Color(0xFF385A48), // Muted Forest Sage
+  Color(0xFF52796F), // Nordic Mineral
+  Color(0xFF40656E), // Muted Arctic Blue
+  Color(0xFF2B2D42), // Dark Carbon Indigo
+  Color(0xFF4A4E69), // Slate Lavender
+  Color(0xFF6D597A), // Muted Mulberry
+  Color(0xFF7A3E48), // Architectural Burgundy
+  Color(0xFF7F5539), // Warm Walnut
+  Color(0xFF8C6D3A), // Muted Antique Amber
+  Color(0xFF6B705C), // Olive Concrete
+  Color(0xFF4E5D6C), // Industrial Steel
+  Color(0xFF5A6268), // Basalt Grey
+  Color(0xFF343A40), // Pitch Carbon
+  Color(0xFF485460), // Midnight Steel
+  Color(0xFF57606F), // Dark Heather
+  Color(0xFF2F3542), // Dark Obsidian
+  Color(0xFF535C68), // Steel Ash
 ];
 
 const List<Color> specialClassColors = [

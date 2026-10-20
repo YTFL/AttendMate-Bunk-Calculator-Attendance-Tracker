@@ -669,12 +669,32 @@ class DatabaseService {
   Future<void> saveSingleAttendance(Attendance record) async {
     try {
       final db = _getDb();
+      final normDate = DateTime(record.date.year, record.date.month, record.date.day);
+      final isoDate = normDate.toIso8601String();
+      final datePrefix = isoDate.split('T')[0];
+      final cleanSlotKey = record.slotKey ?? '';
+
+      // Clean up previous record for this subject on this day that matches the slot or is a wildcard
+      if (cleanSlotKey.isNotEmpty) {
+        await db.delete(
+          'attendance',
+          where: 'subjectId = ? AND date LIKE ? AND (slotKey = ? OR slotKey = "")',
+          whereArgs: [record.subjectId, '$datePrefix%', cleanSlotKey],
+        );
+      } else {
+        await db.delete(
+          'attendance',
+          where: 'subjectId = ? AND date LIKE ?',
+          whereArgs: [record.subjectId, '$datePrefix%'],
+        );
+      }
+
       await db.insert(
         'attendance',
         {
           'subjectId': record.subjectId,
-          'date': record.date.toIso8601String(),
-          'slotKey': record.slotKey ?? '',
+          'date': isoDate,
+          'slotKey': cleanSlotKey,
           'status': record.status.toString().split('.').last,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -694,11 +714,23 @@ class DatabaseService {
   }) async {
     try {
       final db = _getDb();
-      await db.delete(
-        'attendance',
-        where: 'subjectId = ? AND date = ? AND slotKey = ?',
-        whereArgs: [subjectId, date.toIso8601String(), slotKey ?? ''],
-      );
+      final normDate = DateTime(date.year, date.month, date.day);
+      final datePrefix = normDate.toIso8601String().split('T')[0];
+      final cleanSlotKey = slotKey ?? '';
+
+      if (cleanSlotKey.isNotEmpty) {
+        await db.delete(
+          'attendance',
+          where: 'subjectId = ? AND date LIKE ? AND (slotKey = ? OR slotKey = "")',
+          whereArgs: [subjectId, '$datePrefix%', cleanSlotKey],
+        );
+      } else {
+        await db.delete(
+          'attendance',
+          where: 'subjectId = ? AND date LIKE ?',
+          whereArgs: [subjectId, '$datePrefix%'],
+        );
+      }
       await BackupService().notifyDataChanged();
     } catch (e) {
       debugPrint('DatabaseService deleteSingleAttendance error: $e');
@@ -739,15 +771,16 @@ class DatabaseService {
     }
   }
 
-
   /// Delete all attendance records on a specific date
   Future<void> deleteAttendanceForDate(DateTime date) async {
     try {
       final db = _getDb();
+      final normDate = DateTime(date.year, date.month, date.day);
+      final datePrefix = normDate.toIso8601String().split('T')[0];
       await db.delete(
         'attendance',
-        where: 'date = ?',
-        whereArgs: [date.toIso8601String()],
+        where: 'date LIKE ?',
+        whereArgs: ['$datePrefix%'],
       );
       await BackupService().notifyDataChanged();
     } catch (e) {
@@ -762,12 +795,31 @@ class DatabaseService {
       final db = _getDb();
       final batch = db.batch();
       for (final record in records) {
+        final normDate = DateTime(record.date.year, record.date.month, record.date.day);
+        final isoDate = normDate.toIso8601String();
+        final datePrefix = isoDate.split('T')[0];
+        final cleanSlotKey = record.slotKey ?? '';
+
+        if (cleanSlotKey.isNotEmpty) {
+          batch.delete(
+            'attendance',
+            where: 'subjectId = ? AND date LIKE ? AND (slotKey = ? OR slotKey = "")',
+            whereArgs: [record.subjectId, '$datePrefix%', cleanSlotKey],
+          );
+        } else {
+          batch.delete(
+            'attendance',
+            where: 'subjectId = ? AND date LIKE ?',
+            whereArgs: [record.subjectId, '$datePrefix%'],
+          );
+        }
+
         batch.insert(
           'attendance',
           {
             'subjectId': record.subjectId,
-            'date': record.date.toIso8601String(),
-            'slotKey': record.slotKey ?? '',
+            'date': isoDate,
+            'slotKey': cleanSlotKey,
             'status': record.status.toString().split('.').last,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,

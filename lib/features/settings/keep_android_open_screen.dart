@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/url_launcher_utils.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class KeepAndroidOpenScreen extends StatelessWidget {
   const KeepAndroidOpenScreen({super.key});
@@ -25,10 +26,15 @@ class KeepAndroidOpenScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Keep Android Open'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Keep Android Open'),
+        ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
@@ -235,6 +241,7 @@ class KeepAndroidOpenScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -22,6 +22,9 @@ class CalendarDayInfo {
   final DayState state;
   final int classesCount;
   final int markedClasses;
+  final int attendedCount;
+  final int absentCount;
+  final int cancelledCount;
   final List<Subject> subjectsWithClassesToday;
   final List<Attendance> attendanceRecordsToday;
 
@@ -30,9 +33,18 @@ class CalendarDayInfo {
     required this.state,
     required this.classesCount,
     required this.markedClasses,
+    this.attendedCount = 0,
+    this.absentCount = 0,
+    this.cancelledCount = 0,
     required this.subjectsWithClassesToday,
     required this.attendanceRecordsToday,
   });
+
+  /// Attendance completion ratio from 0.0 to 1.0
+  double get attendanceRatio {
+    if (classesCount <= 0) return 0.0;
+    return (attendedCount / classesCount).clamp(0.0, 1.0);
+  }
 }
 
 /// Utility class for calendar-related calculations
@@ -227,32 +239,35 @@ class CalendarUtils {
       state: dayState,
       classesCount: totalClassesCount,
       markedClasses: accountedCount,
+      attendedCount: attendedCount,
+      absentCount: absentCount,
+      cancelledCount: cancelledCount,
       subjectsWithClassesToday: subjectsWithClassesToday,
       attendanceRecordsToday: attendanceRecordsToday,
     );
   }
 
-  /// Get the color for a specific day state
+  /// Get the color for a specific day state (flat, minimalist palette)
   static Color getStateColor(DayState state) {
     switch (state) {
       case DayState.noClasses:
-        return const Color(0xFF9E9E9E);
+        return const Color(0xFF71717A); // Flat zinc
       case DayState.classesNotMarked:
-        return const Color(0xFFFFA726);
+        return const Color(0xFFF59E0B); // Flat amber
       case DayState.classesMarked:
-        return const Color(0xFF42A5F5);
+        return const Color(0xFF3B82F6); // Flat blue
       case DayState.holiday:
-        return const Color(0xFFAB47BC);
+        return const Color(0xFF8B5CF6); // Flat violet
       case DayState.attendedFullDay:
-        return const Color(0xFF4CAF50);
+        return const Color(0xFFFF8A00); // Warm vibrant amber/orange matching activity ring
       case DayState.bunkedFullDay:
-        return const Color(0xFFEF5350);
+        return const Color(0xFFEF4444); // Flat red
       case DayState.futureClasses:
-        return const Color(0xFF7E57C2);
+        return const Color(0xFF64748B); // Flat slate
       case DayState.plannedLeave:
-        return const Color(0xFFFF7043);
+        return const Color(0xFF06B6D4); // Flat cyan
       case DayState.locked:
-        return const Color(0xFF607D8B);
+        return const Color(0xFF52525B); // Flat muted graphite
     }
   }
 

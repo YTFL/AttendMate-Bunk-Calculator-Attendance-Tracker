@@ -5,6 +5,7 @@ import '../attendance/attendance_model.dart';
 import '../../utils/responsive_scale.dart';
 import 'swipe_action_provider.dart';
 import 'swipeable_card.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class SwipeActionsSettingsScreen extends StatefulWidget {
   const SwipeActionsSettingsScreen({super.key});
@@ -196,16 +197,15 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
         },
         rs: rs,
         child: Card(
-          elevation: 2.0,
+          elevation: isDarkMode ? 0 : 1.0,
           margin: rs.insetsSymmetric(horizontal: 8, vertical: 6),
-          shadowColor: isDarkMode ? null : Colors.black.withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(rs.scale(12)),
+            borderRadius: BorderRadius.circular(rs.scale(22)),
             side: BorderSide(
               color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.4)
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              width: 1,
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.15),
+              width: 0.8,
             ),
           ),
           child: Padding(
@@ -398,10 +398,15 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Swipe Actions'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Swipe Actions'),
+        ),
       body: ListView(
         padding: rs.insetsAll(16),
         children: [
@@ -461,6 +466,7 @@ class _SwipeActionsSettingsScreenState extends State<SwipeActionsSettingsScreen>
           SizedBox(height: rs.height(20)),
         ],
       ),
-    );
+    ),
+  );
   }
 }

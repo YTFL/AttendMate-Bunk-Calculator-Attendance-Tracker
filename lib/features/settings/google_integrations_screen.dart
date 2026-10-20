@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/calendar_service.dart';
@@ -7,6 +9,9 @@ import '../../services/google_drive_backup_service.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/day_cycle_background.dart';
+import '../../widgets/glass_dialog.dart';
+import 'google_calendar_sync_screen.dart';
 
 class GoogleIntegrationsScreen extends StatefulWidget {
   const GoogleIntegrationsScreen({super.key});
@@ -45,7 +50,6 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
   }
 
   Future<void> _loadIntegrationSettings() async {
-    // 1. Immediately read local preferences and update state synchronously / fast
     final driveEnabled = await _driveService.isBackupEnabled();
     final lastBackup = await _driveService.getLastBackupTime();
     final calendarEnabled = await CalendarService.isGoogleCalendarSyncEnabled();
@@ -58,7 +62,6 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
       });
     }
 
-    // 2. Query Google Drive API asynchronously in the background without blocking the UI
     final isSignedIn = await _authService.isSignedIn();
     if (isSignedIn) {
       final existingBackup = await _driveService.checkForExistingBackup();
@@ -82,9 +85,12 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
   }
 
   Future<void> _handleSignOut() async {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final confirm = await showDialog<bool>(
       context: context,
+      barrierColor: isDarkMode ? Colors.black.withValues(alpha: 0.6) : Colors.black.withValues(alpha: 0.3),
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Log Out from Google?'),
         content: const Text(
           'Logging out will disable Google Calendar sync and Google Drive cloud backups until you sign in again.',
@@ -145,10 +151,10 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
       final formattedDate = DateFormat.yMMMd().add_jm().format(backup.modifiedTime);
       final sizeKb = (backup.sizeBytes / 1024).toStringAsFixed(1);
 
-      showDialog(
+      showGlassDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.cloud_download_outlined, size: 40, color: Colors.blue),
+        builder: (ctx) => GlassDialog(
+          icon: const Icon(Icons.cloud_download_outlined, size: 28, color: Colors.blue),
           title: const Text('Cloud Backup Found'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -160,10 +166,11 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
               ),
               const SizedBox(height: 12),
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,353 +271,710 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Google Integrations'),
-      ),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Google Integrations'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       body: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
-              // User profile card
-              if (user != null) ...[
-                Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                          child: user.photoUrl == null
-                              ? Text(
-                                  (user.displayName?.isNotEmpty == true
-                                          ? user.displayName![0]
-                                          : user.email[0])
-                                      .toUpperCase(),
-                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user.displayName ?? 'Google User',
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                user.email,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.logout_rounded, color: Colors.red),
-                          tooltip: 'Log Out',
-                          onPressed: _handleSignOut,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else ...[
-                Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.hub_outlined,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Connect Your Google Account',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sign in to synchronize class schedules with Google Calendar and back up your attendance securely to Google Drive.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _isLoading ? null : _handleSignIn,
-                          icon: const Icon(Icons.login),
-                          label: const Text('Sign in with Google'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              // ── 1. User Profile or Connect Account Hero Card ─────────
+              if (user != null)
+                _buildConnectedUserCard(user, colorScheme, isDarkMode)
+              else
+                _buildConnectGoogleCard(colorScheme, isDarkMode),
 
               const SizedBox(height: 24),
 
-              // Controls section
+              // Section Header
               Text(
-                'Connected Services',
+                'CONNECTED CLOUD SERVICES',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Google Calendar Card
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_month, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Google Calendar Sync',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Sync class schedule to your primary calendar',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch(
-                            value: user != null && _isCalendarSyncEnabled,
-                            onChanged: user == null
-                                ? null
-                                : (val) async {
-                                    await _toggleCalendarSync(val);
-                                  },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (user != null)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: OutlinedButton.icon(
-                            onPressed: (_isLoading || !_isCalendarSyncEnabled) ? null : _forceCalendarSync,
-                            icon: const Icon(Icons.sync, size: 16),
-                            label: const Text('Force Sync Calendar'),
-                          ),
-                        )
-                      else
-                        const Text(
-                          'Sign in with Google to enable calendar synchronization.',
-                          style: TextStyle(fontSize: 12, color: Colors.orange),
-                        ),
-                    ],
-                  ),
+                  letterSpacing: 0.8,
+                  color: colorScheme.primary,
                 ),
               ),
 
               const SizedBox(height: 12),
 
-              // Google Drive Cloud Backup Card
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.cloud_upload_outlined, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Google Drive Cloud Backup',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Automatic daily backup at midnight',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Switch(
-                            value: user != null && _isDriveBackupEnabled,
-                            onChanged: user == null
-                                ? null
-                                : (val) async {
-                                    setState(() => _isDriveBackupEnabled = val);
-                                    await _driveService.setBackupEnabled(val);
-                                    if (!mounted) return;
-                                    if (val) {
-                                      SnackbarUtils.showSuccessSnackBar(
-                                        this.context,
-                                        'Google Drive midnight backup enabled.',
-                                      );
-                                    }
-                                  },
-                          ),
-                        ],
-                      ),
-                      if (_lastDriveBackupTime != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Last Cloud Backup: ${DateFormat.yMMMd().add_jm().format(_lastDriveBackupTime!)}',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      if (user != null) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _isLoading ? null : _forceDriveBackup,
-                                icon: const Icon(Icons.backup_outlined, size: 16),
-                                label: const Text('Backup Now', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                ),
-                              ),
-                            ),
-                            if (_existingDriveBackup != null) ...[
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _isLoading
-                                      ? null
-                                      : () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (ctx) => AlertDialog(
-                                              title: const Text('Restore from Cloud?'),
-                                              content: Text(
-                                                'This will overwrite your current local attendance data with the backup from ${DateFormat.yMMMd().add_jm().format(_existingDriveBackup!.modifiedTime)}.',
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(ctx),
-                                                  child: const Text('Cancel'),
-                                                ),
-                                                FilledButton(
-                                                  onPressed: () {
-                                                    Navigator.pop(ctx);
-                                                    _restoreFromDrive();
-                                                  },
-                                                  child: const Text('Restore Backup'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                  icon: const Icon(Icons.cloud_download_outlined, size: 16),
-                                  label: const Text('Restore Backup', maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ] else
-                        const Text(
-                          'Sign in with Google to enable Drive cloud backups.',
-                          style: TextStyle(fontSize: 12, color: Colors.orange),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
+              // ── 2. Google Calendar Sync Card ────────────────────────
+              _buildCalendarSyncCard(user != null, colorScheme, isDarkMode),
+
+              const SizedBox(height: 14),
+
+              // ── 3. Google Drive Cloud Backup Card ───────────────────
+              _buildDriveBackupCard(user != null, colorScheme, isDarkMode),
 
               const SizedBox(height: 24),
 
-              // Privacy & Data Guarantees
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4)),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.shield_outlined, size: 18, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text(
-                            'Privacy & API Bounds',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              // ── 4. Privacy & Trust Strip ─────────────────────────────
+              _buildPrivacyTrustCard(colorScheme, isDarkMode),
+
+              const SizedBox(height: 40),
+            ],
+          ),
+
+          // ── Frosted Loading Overlay ──────────────────────────────────
+          if (_isLoading)
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                          decoration: BoxDecoration(
+                            color: isDarkMode
+                                ? const Color(0xFF14141E).withValues(alpha: 0.90)
+                                : Colors.white.withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDarkMode ? Colors.white12 : Colors.black12,
+                            ),
                           ),
-                        ],
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(strokeWidth: 3),
+                              SizedBox(height: 18),
+                              Text(
+                                'Syncing with Google...',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      SizedBox(height: 6),
-                      Text(
-                        '• Google Drive: AttendMate stores strictly one file (attendmate_cloud_backup.json) and never reads or modifies any other files in your Google Drive.\n'
-                        '• Calendar: All created events are strictly bounded by your current semester dates and tagged cleanly.\n'
-                        '• No Third-Party Tracking: Your data is never sent to third-party servers.',
-                        style: TextStyle(fontSize: 11, height: 1.4),
-                      ),
-                    ],
+                    ),
                   ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+  // ── Connected User Hero Card ──────────────────────────────────────────
+  Widget _buildConnectedUserCard(dynamic user, ColorScheme colorScheme, bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF0F0F16).withValues(alpha: 0.60)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.08),
+              width: 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // User Avatar with ring
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: colorScheme.primary.withValues(alpha: 0.4),
+                        width: 2,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 26,
+                      backgroundImage: user.photoUrl != null
+                          ? ResizeImage(
+                              NetworkImage(user.photoUrl!),
+                              width: 160,
+                              height: 160,
+                            )
+                          : null,
+                      backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
+                      child: user.photoUrl == null
+                          ? Text(
+                              (user.displayName?.isNotEmpty == true
+                                      ? user.displayName![0]
+                                      : user.email[0])
+                                  .toUpperCase(),
+                              style: GoogleFonts.inter(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+
+                  // Name & Email
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.displayName ?? 'Google User',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user.email,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Connected status badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded, color: Colors.green, size: 12),
+                        SizedBox(width: 4),
+                        Text(
+                          'Connected',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+
+              // Bottom Row with Logout
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Active Google Cloud Session',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: _handleSignOut,
+                    style: TextButton.styleFrom(
+                      foregroundColor: colorScheme.error,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.logout_rounded, size: 15),
+                    label: const Text('Disconnect', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Connect Google Account Hero Card ──────────────────────────────────
+  Widget _buildConnectGoogleCard(ColorScheme colorScheme, bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF0F0F16).withValues(alpha: 0.60)
+                : Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.08),
+              width: 1.0,
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.hub_outlined,
+                  size: 40,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Connect Google Account',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Sign in to synchronize your weekly class timetable with Google Calendar and back up attendance securely to Google Drive.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _isLoading ? null : _handleSignIn,
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
 
-          if (_isLoading)
-            Container(
-              color: Colors.black26,
-              child: const Center(child: CircularProgressIndicator()),
+  // ── Google Calendar Sync Glass Card ───────────────────────────────────
+  Widget _buildCalendarSyncCard(bool isSignedIn, ColorScheme colorScheme, bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF13131B).withValues(alpha: 0.55)
+                : Colors.white.withValues(alpha: 0.70),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.11)
+                  : Colors.black.withValues(alpha: 0.07),
+              width: 1.0,
             ),
-        ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.calendar_month_rounded, color: colorScheme.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Google Calendar Sync',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Sync class schedule to primary calendar',
+                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: isSignedIn && _isCalendarSyncEnabled,
+                    onChanged: !isSignedIn
+                        ? null
+                        : (val) async {
+                            await _toggleCalendarSync(val);
+                          },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+
+              if (isSignedIn) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const GoogleCalendarSyncScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.settings_outlined, size: 16),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Sync Settings', style: TextStyle(fontSize: 12.5)),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: (_isLoading || !_isCalendarSyncEnabled) ? null : _forceCalendarSync,
+                        icon: const Icon(Icons.sync_rounded, size: 16),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Force Sync'),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 15, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Sign in with Google above to enable calendar synchronization.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.orange.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Google Drive Cloud Backup Glass Card ──────────────────────────────
+  Widget _buildDriveBackupCard(bool isSignedIn, ColorScheme colorScheme, bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF13131B).withValues(alpha: 0.55)
+                : Colors.white.withValues(alpha: 0.70),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.11)
+                  : Colors.black.withValues(alpha: 0.07),
+              width: 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.cloud_upload_outlined, color: colorScheme.primary, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Google Drive Cloud Backup',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Automatic daily backup at midnight',
+                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: isSignedIn && _isDriveBackupEnabled,
+                    onChanged: !isSignedIn
+                        ? null
+                        : (val) async {
+                            setState(() => _isDriveBackupEnabled = val);
+                            await _driveService.setBackupEnabled(val);
+                            if (!mounted) return;
+                            if (val) {
+                              SnackbarUtils.showSuccessSnackBar(
+                                context,
+                                'Google Drive midnight backup enabled.',
+                              );
+                            }
+                          },
+                  ),
+                ],
+              ),
+
+              // Snapshot metadata pill
+              if (_lastDriveBackupTime != null || _existingDriveBackup != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDarkMode ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.history_rounded, size: 15, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _lastDriveBackupTime != null
+                              ? 'Last Cloud Snapshot: ${DateFormat.yMMMd().add_jm().format(_lastDriveBackupTime!)}'
+                              : 'Cloud Snapshot Available',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurface.withValues(alpha: 0.85),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+
+              if (isSignedIn) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _isLoading ? null : _forceDriveBackup,
+                        icon: const Icon(Icons.backup_outlined, size: 16),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Backup Now'),
+                        ),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    if (_existingDriveBackup != null) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  showGlassDialog(
+                                    context: context,
+                                    builder: (ctx) => GlassDialog(
+                                      icon: const Icon(Icons.cloud_download_outlined, size: 28, color: Colors.blue),
+                                      title: const Text('Restore from Cloud?'),
+                                      content: Text(
+                                        'This will overwrite your current local attendance data with the backup from ${DateFormat.yMMMd().add_jm().format(_existingDriveBackup!.modifiedTime)}.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () {
+                                            Navigator.pop(ctx);
+                                            _restoreFromDrive();
+                                          },
+                                          child: const Text('Restore Backup'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                          icon: const Icon(Icons.cloud_download_outlined, size: 16),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Restore Backup'),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ] else
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 15, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Sign in with Google above to enable Drive cloud backups.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.orange.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Privacy & Trust Strip ─────────────────────────────────────────────
+  Widget _buildPrivacyTrustCard(ColorScheme colorScheme, bool isDarkMode) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDarkMode
+                ? const Color(0xFF13131B).withValues(alpha: 0.45)
+                : Colors.white.withValues(alpha: 0.60),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              width: 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.shield_outlined, size: 16, color: Colors.green),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Privacy & Data Guarantees',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '• Restricted Storage: AttendMate only accesses its private appDataFolder on Google Drive and never inspects personal files.\n'
+                '• Semester Scope: Calendar synchronization strictly operates within your configured active semester bounds.\n'
+                '• Zero Telemetry: No third-party servers, tracking cookies, or external analytics.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.45,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+

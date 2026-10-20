@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -882,8 +883,9 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
 
     final name = _nameController.text.trim();
     final acronymRaw = _acronymController.text.trim();
+    final defaultAcronym = Subject.defaultAcronymFromName(name);
     final acronym =
-        acronymRaw.isEmpty ? name.acronymFromName() : acronymRaw;
+        acronymRaw.isEmpty ? defaultAcronym : acronymRaw.toUpperCase();
 
     if (_schedule.isEmpty) {
       ScaffoldMessenger.of(context).showReplacingSnackBar(
@@ -960,12 +962,20 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     tutorialController.registerKey('key_save_subject', _saveSubjectKey);
 
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeFormat = Provider.of<TimeFormatProvider>(context).timeFormat;
+
+    final inputFill = isDark ? const Color(0xFF131316) : const Color(0xFFF6F6F8);
+    final inputBorder = isDark ? const Color(0xFF222227) : const Color(0xFFE5E5EB);
+    final inputFocusBorder = isDark ? Colors.white : Colors.black;
 
     return TutorialOverlay(
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Add New Subject'),
+          title: Text(
+            'Add New Subject',
+            style: GoogleFonts.roboto(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
           centerTitle: false,
           elevation: 0,
           actions: [
@@ -973,11 +983,12 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
               key: _saveSubjectKey,
               child: TextButton(
                 onPressed: _save,
-                child: const Text(
+                child: Text(
                   'Save',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  style: GoogleFonts.roboto(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
                 ),
               ),
@@ -991,7 +1002,7 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 140),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
               children: [
                 // ── Subject Name & Acronym fields ───────────────────────────
@@ -1003,79 +1014,86 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                         controller: _nameController,
                         textCapitalization: TextCapitalization.words,
                         textInputAction: TextInputAction.next,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                        style: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 15, color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
                           labelText: 'Subject Name',
                           hintText: 'e.g., Mathematics, Physics',
+                          labelStyle: TextStyle(color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70), fontSize: 13),
+                          hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 13),
                           filled: true,
-                          fillColor: colorScheme.surfaceContainerLowest,
+                          fillColor: inputFill,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: inputBorder, width: 0.8),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: _selectedColor, width: 1.5),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: inputFocusBorder, width: 1.2),
                           ),
                           errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: colorScheme.error, width: 1),
                           ),
                           focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(color: colorScheme.error, width: 1.5),
                           ),
-                          prefixIcon: Icon(Icons.book_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                          prefixIcon: Icon(Icons.book_outlined, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70), size: 19),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                         ),
                         validator: (v) =>
                             v == null || v.trim().isEmpty
                                 ? 'Subject name is required'
                                 : null,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       TextFormField(
                         controller: _acronymController,
                         textCapitalization: TextCapitalization.characters,
                         textInputAction: TextInputAction.done,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        style: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 15, color: isDark ? Colors.white : Colors.black),
                         decoration: InputDecoration(
-                          labelText: 'Acronym (Optional)',
+                          labelText: 'Acronym (3 letters max)',
                           hintText: 'e.g., MTH, PHY',
-                          helperText: 'Leave empty to auto-generate',
-                          helperStyle: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.45)),
+                          helperText: 'Leave empty to use first 3 letters of subject',
+                          helperStyle: TextStyle(color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93), fontSize: 11),
+                          labelStyle: TextStyle(color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70), fontSize: 13),
+                          hintStyle: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 13),
                           filled: true,
-                          fillColor: colorScheme.surfaceContainerLowest,
+                          fillColor: inputFill,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: inputBorder, width: 0.8),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: _selectedColor, width: 1.5),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: inputFocusBorder, width: 1.2),
                           ),
-                          prefixIcon: Icon(Icons.label_rounded, color: colorScheme.onSurface.withValues(alpha: 0.4)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                          prefixIcon: Icon(Icons.label_outline_rounded, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70), size: 19),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       // ── Target Attendance Percentage ───────────────────────
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(16),
+                          color: inputFill,
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                            width: 1,
+                            color: inputBorder,
+                            width: 0.8,
                           ),
                         ),
                         child: Column(
@@ -1087,52 +1105,64 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.track_changes_rounded,
-                                      size: 20,
-                                      color: colorScheme.onSurface.withValues(alpha: 0.4),
+                                      Icons.track_changes_outlined,
+                                      size: 18,
+                                      color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
                                     ),
-                                    const SizedBox(width: 12),
-                                    const Text(
+                                    const SizedBox(width: 10),
+                                    Text(
                                       'Target Attendance',
-                                      style: TextStyle(
+                                      style: GoogleFonts.roboto(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 15,
+                                        fontSize: 14,
+                                        color: isDark ? Colors.white : Colors.black,
                                       ),
                                     ),
                                   ],
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
                                   decoration: BoxDecoration(
-                                    color: colorScheme.primary.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: isDark ? Colors.white : Colors.black,
+                                    borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: Text(
                                     '$_targetAttendance%',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: colorScheme.primary,
+                                    style: GoogleFonts.roboto(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      color: isDark ? Colors.black : Colors.white,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            Slider(
-                              value: _targetAttendance.toDouble(),
-                              min: 50,
-                              max: 100,
-                              divisions: 50,
-                              label: '$_targetAttendance%',
-                              onChanged: (val) {
-                                final newTarget = val.round();
-                                if (newTarget != _targetAttendance) {
-                                  HapticFeedback.vibrate();
-                                  setState(() {
-                                    _targetAttendance = newTarget;
-                                  });
-                                }
-                              },
+                            const SizedBox(height: 6),
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                activeTrackColor: isDark ? Colors.white : Colors.black,
+                                inactiveTrackColor: isDark ? const Color(0xFF24242B) : const Color(0xFFE0E0E5),
+                                thumbColor: isDark ? Colors.white : Colors.black,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.5),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                              ),
+                              child: Slider(
+                                value: _targetAttendance.toDouble(),
+                                min: 50,
+                                max: 100,
+                                divisions: 50,
+                                label: '$_targetAttendance%',
+                                onChanged: (val) {
+                                  final newTarget = val.round();
+                                  if (newTarget != _targetAttendance) {
+                                    HapticFeedback.vibrate();
+                                    setState(() {
+                                      _targetAttendance = newTarget;
+                                    });
+                                  }
+                                },
+                              ),
                             ),
                           ],
                         ),
@@ -1151,36 +1181,69 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                       Expanded(
                         child: DropdownButtonFormField<LocationConfig?>(
                           initialValue: _loadingLocations ? null : _selectedLocation,
+                          dropdownColor: isDark ? const Color(0xFF131316) : Colors.white,
+                          style: GoogleFonts.roboto(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'Default Subject Location (Optional)',
-                            helperText: 'Applies to all classes unless overridden per class slot.',
+                            helperText: 'Applies to all classes unless overridden per slot',
+                            helperStyle: TextStyle(
+                              color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+                              fontSize: 11,
+                            ),
+                            labelStyle: TextStyle(
+                              color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                              fontSize: 13,
+                            ),
                             hintText: _loadingLocations ? 'Loading...' : 'Select a room / location',
-                            hintStyle: TextStyle(color: Colors.grey.shade500),
-                            prefixIcon: Icon(Icons.pin_drop_outlined, color: colorScheme.onSurface.withValues(alpha: 0.4)),
+                            hintStyle: TextStyle(
+                              color: isDark ? Colors.white24 : Colors.black26,
+                              fontSize: 13,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.pin_drop_outlined,
+                              color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                              size: 19,
+                            ),
                             filled: true,
-                            fillColor: colorScheme.surfaceContainerLowest,
+                            fillColor: inputFill,
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
                             ),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5), width: 1),
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(color: inputBorder, width: 0.8),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: _selectedColor, width: 1.5),
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(color: inputFocusBorder, width: 1.2),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                           ),
                           items: [
-                            const DropdownMenuItem<LocationConfig?>(
+                            DropdownMenuItem<LocationConfig?>(
                               value: null,
-                              child: Text('No location'),
+                              child: Text(
+                                'No location',
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
                             ..._locations.map((loc) => DropdownMenuItem<LocationConfig?>(
                               value: loc,
-                              child: Text('${loc.name}${loc.block != null ? " (${loc.block})" : ""}'),
+                              child: Text(
+                                '${loc.name}${loc.block != null ? " (${loc.block})" : ""}',
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black,
+                                  fontSize: 14,
+                                ),
+                              ),
                             )),
                           ],
                           onChanged: _loadingLocations ? null : (val) {
@@ -1189,43 +1252,56 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        icon: const Icon(Icons.add_location_alt_outlined),
-                        tooltip: 'Manage locations',
-                        onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const LocationManagerScreen()),
-                          );
-                          _loadLocations();
-                        },
+                      Container(
+                        height: 54,
+                        width: 50,
+                        decoration: BoxDecoration(
+                          color: inputFill,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: inputBorder, width: 0.8),
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.add_location_alt_outlined,
+                            size: 20,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                          tooltip: 'Manage locations',
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const LocationManagerScreen()),
+                            );
+                            _loadLocations();
+                          },
+                        ),
                       ),
                     ],
                   ),
                 ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // ── Color picker ────────────────────────────────────────────
-              _buildColorRow(colorScheme),
+              _buildColorRow(colorScheme, isDark),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // ── Special class toggle ────────────────────────────────────
               KeyedSubtree(
                 key: _specialToggleKey,
-                child: _buildSpecialClassSection(colorScheme),
+                child: _buildSpecialClassSection(colorScheme, isDark),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
 
               // ── Schedule section ────────────────────────────────────────
               KeyedSubtree(
                 key: _addSlotKey,
-                child: _buildScheduleSection(colorScheme, timeFormat),
+                child: _buildScheduleSection(colorScheme, timeFormat, isDark),
               ),
 
-              const SizedBox(height: 80),
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -1234,104 +1310,148 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
   );
 }
 
-  Widget _buildColorRow(ColorScheme colorScheme) {
+  Widget _buildColorRow(ColorScheme colorScheme, bool isDark) {
     final usedColorValues = _getUsedColorValuesForCurrentMode();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.palette_rounded, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-            const SizedBox(width: 8),
-            const Text('Color Palette',
-                style:
-                    TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            TextButton(
-              onPressed: _showColorPicker,
-              style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              child: const Text('All Colors', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 44,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _activePalette.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 10),
-            itemBuilder: (ctx, index) {
-              final color = _activePalette[index];
-              final isSelected =
-                  color.toARGB32() == _selectedColor.toARGB32();
-              final isUsed =
-                  usedColorValues.contains(color.toARGB32());
-              return GestureDetector(
-                onTap: () => setState(() => _selectedColor = color),
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: isSelected
-                        ? Border.all(color: colorScheme.onSurface, width: 2)
-                        : null,
-                  ),
-                  padding: const EdgeInsets.all(3),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: isUsed && !isSelected
-                        ? Icon(Icons.close,
-                            color: Colors.white.withValues(alpha: 0.65),
-                            size: 12)
-                        : null,
+    final cardBg = isDark
+        ? const Color(0xFF14141C).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.75);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.60);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorder, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'COLOR TELEMETRY',
+                style: GoogleFonts.roboto(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                ),
+              ),
+              GestureDetector(
+                onTap: _showColorPicker,
+                child: Text(
+                  'CUSTOM',
+                  style: GoogleFonts.roboto(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 42,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _activePalette.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 10),
+              itemBuilder: (ctx, index) {
+                final color = _activePalette[index];
+                final isSelected =
+                    color.toARGB32() == _selectedColor.toARGB32();
+                final isUsed =
+                    usedColorValues.contains(color.toARGB32());
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedColor = color),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? (isDark ? Colors.white : Colors.black)
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(3),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: isUsed && !isSelected
+                          ? Icon(Icons.close,
+                              color: Colors.white.withValues(alpha: 0.65),
+                              size: 12)
+                          : (isSelected
+                              ? const Icon(Icons.check, color: Colors.white, size: 14)
+                              : null),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildSpecialClassSection(ColorScheme colorScheme) {
+  Widget _buildSpecialClassSection(ColorScheme colorScheme, bool isDark) {
+    final cardBg = isDark
+        ? const Color(0xFF14141C).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.75);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.60);
+
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4), width: 1),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorder, width: 0.8),
       ),
       child: Column(
         children: [
           SwitchListTile.adaptive(
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            title: const Text('Special Class (One-Day or Multi-Day)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            activeThumbColor: isDark ? Colors.white : Colors.black,
+            title: Text(
+              'Special Class (One-Day or Multi-Day)',
+              style: GoogleFonts.roboto(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+            ),
             subtitle: Text(
               'Does not repeat weekly — select arbitrary dates with or without gaps',
               style: TextStyle(
-                  fontSize: 12,
-                  color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                fontSize: 12,
+                color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+              ),
             ),
-            secondary: Icon(Icons.event_note_rounded,
-                color: _isSpecialClass ? _selectedColor : colorScheme.onSurface.withValues(alpha: 0.4)),
+            secondary: Icon(
+              Icons.event_note_rounded,
+              color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+              size: 20,
+            ),
             value: _isSpecialClass,
             onChanged: _toggleSpecialClass,
           ),
           if (_isSpecialClass) ...[
-            Divider(
-                height: 1,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            Divider(height: 1, color: cardBorder, thickness: 0.8),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1341,14 +1461,27 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Class Dates (${_specialClassDates.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        'CLASS DATES (${_specialClassDates.length})',
+                        style: GoogleFonts.roboto(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                          letterSpacing: 1.1,
+                          color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                        ),
                       ),
                       OutlinedButton.icon(
                         onPressed: _pickSpecialClassDate,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add Date'),
+                        icon: Icon(Icons.add, size: 14, color: isDark ? Colors.white : Colors.black),
+                        label: Text(
+                          'Add Date',
+                          style: GoogleFonts.roboto(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ),
                         style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: cardBorder, width: 0.8),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           visualDensity: VisualDensity.compact,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1356,31 +1489,29 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   if (_specialClassDates.isEmpty)
                     InkWell(
                       onTap: _pickSpecialClassDate,
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          color: isDark ? const Color(0xFF0E0E12) : const Color(0xFFEDEDF2),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                          ),
+                          border: Border.all(color: cardBorder, width: 0.8),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.calendar_today_rounded, size: 16, color: colorScheme.primary),
+                            Icon(Icons.calendar_today_rounded, size: 16, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
                             const SizedBox(width: 8),
                             Text(
-                              'Tap "+ Add Date" to select dates',
+                              'Tap to add class dates',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: colorScheme.onSurface.withValues(alpha: 0.7),
+                                color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -1393,25 +1524,38 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: (_specialClassDates.toList()..sort()).map((date) {
-                        return InputChip(
-                          avatar: Icon(Icons.calendar_today_rounded, size: 14, color: _selectedColor),
-                          label: Text(
-                            DateFormat('MMM d, y (EEE)').format(date),
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                          ),
-                          onDeleted: () {
-                            setState(() {
-                              _specialClassDates.remove(date);
-                              _schedule.removeWhere((s) => s.specificDate != null && isSameDay(s.specificDate!, date));
-                              _sortSchedule();
-                            });
-                          },
-                          deleteIconColor: colorScheme.error,
-                          shape: RoundedRectangleBorder(
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1B1B20) : Colors.white,
                             borderRadius: BorderRadius.circular(10),
-                            side: BorderSide(
-                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-                            ),
+                            border: Border.all(color: cardBorder, width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calendar_today_rounded, size: 13, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                              const SizedBox(width: 6),
+                              Text(
+                                DateFormat('MMM d, y (EEE)').format(date),
+                                style: GoogleFonts.roboto(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : Colors.black,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _specialClassDates.remove(date);
+                                    _schedule.removeWhere((s) => s.specificDate != null && isSameDay(s.specificDate!, date));
+                                    _sortSchedule();
+                                  });
+                                },
+                                child: Icon(Icons.close, size: 14, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                              ),
+                            ],
                           ),
                         );
                       }).toList(),
@@ -1425,28 +1569,46 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     );
   }
 
-  Widget _buildScheduleSection(ColorScheme colorScheme, dynamic timeFormat) {
+  Widget _buildScheduleSection(ColorScheme colorScheme, dynamic timeFormat, bool isDark) {
+    final cardBg = isDark
+        ? const Color(0xFF14141C).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.75);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.60);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(Icons.schedule_rounded, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-            const SizedBox(width: 8),
-            const Text(
-              'Schedule',
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.bold),
+            Text(
+              'TIMETABLE SLOTS',
+              style: GoogleFonts.roboto(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+              ),
             ),
-            const Spacer(),
-            TextButton.icon(
+            OutlinedButton.icon(
               onPressed: () => _showAddSlotSheet(),
-              icon: const Icon(Icons.add_rounded, size: 14),
-              label: const Text('Add Slot', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              icon: Icon(Icons.add_rounded, size: 14, color: isDark ? Colors.white : Colors.black),
+              label: Text(
+                'Add Slot',
+                style: GoogleFonts.roboto(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: cardBorder, width: 0.8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ],
         ),
@@ -1456,29 +1618,27 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 36),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-                width: 1,
-              ),
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cardBorder, width: 0.8),
             ),
             child: Column(
               children: [
-                Icon(Icons.calendar_view_week_rounded,
-                    size: 32,
-                    color:
-                        colorScheme.onSurface.withValues(alpha: 0.25)),
+                Icon(
+                  Icons.calendar_view_week_rounded,
+                  size: 28,
+                  color: isDark ? const Color(0xFF383842) : const Color(0xFFC7C7CC),
+                ),
                 const SizedBox(height: 10),
                 Text(
                   _isSpecialClass
                       ? 'No time slots added.'
                       : 'No schedule added yet.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color:
-                        colorScheme.onSurface.withValues(alpha: 0.4),
+                  style: GoogleFonts.roboto(
+                    color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
                     fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -1492,7 +1652,7 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
             separatorBuilder: (context, index) => const SizedBox(height: 10),
             itemBuilder: (ctx, index) {
               final slot = _schedule[index];
-              return _buildSlotCard(slot, index, colorScheme, timeFormat);
+              return _buildSlotCard(slot, index, colorScheme, timeFormat, isDark);
             },
           ),
       ],
@@ -1500,7 +1660,14 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
   }
 
   Widget _buildSlotCard(TimeSlot slot, int index, ColorScheme colorScheme,
-      dynamic timeFormat) {
+      dynamic timeFormat, bool isDark) {
+    final cardBg = isDark
+        ? const Color(0xFF14141C).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.75);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.60);
+
     return Dismissible(
       key: ValueKey('${slot.day.index}-${slot.startTime.hour}-${slot.startTime.minute}-$index'),
       direction: DismissDirection.endToStart,
@@ -1511,59 +1678,79 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.red.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: const Icon(Icons.delete_rounded, color: Colors.red),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.red),
       ),
       child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.4), width: 1),
+          color: cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cardBorder, width: 0.8),
         ),
         child: Row(
           children: [
-            const SizedBox(width: 16),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _slotLabel(slot),
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      slot.formatTimeRange(timeFormat) +
-                          (slot.room != null
-                              ? ' • ${slot.room}${slot.block != null && slot.block!.isNotEmpty ? " (${slot.block})" : ""}'
-                              : (_selectedLocation != null ? ' • Default (${_selectedLocation!.name})' : '')),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: colorScheme.onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                  ],
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1B1B20) : const Color(0xFFEBEBF0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _slotLabel(slot).substring(0, min(3, _slotLabel(slot).length)).toUpperCase(),
+                style: GoogleFonts.roboto(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  letterSpacing: 0.6,
+                  color: isDark ? Colors.white : Colors.black,
                 ),
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _slotLabel(slot),
+                    style: GoogleFonts.roboto(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    slot.formatTimeRange(timeFormat) +
+                        (slot.room != null
+                            ? '  |  ${slot.room}${slot.block != null && slot.block!.isNotEmpty ? " (${slot.block})" : ""}'
+                            : (_selectedLocation != null ? '  |  Default (${_selectedLocation!.name})' : '')),
+                    style: GoogleFonts.roboto(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             IconButton(
-              icon: Icon(Icons.edit_rounded, size: 18, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+              icon: Icon(Icons.edit_outlined, size: 17, color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
               tooltip: 'Edit',
+              visualDensity: VisualDensity.compact,
               onPressed: () => _showAddSlotSheet(editIndex: index),
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+              icon: const Icon(Icons.delete_outline_rounded, size: 17, color: Color(0xFFFF453A)),
               tooltip: 'Delete',
+              visualDensity: VisualDensity.compact,
               onPressed: () =>
                   setState(() => _schedule.removeAt(index)),
             ),
-            const SizedBox(width: 8),
           ],
         ),
       ),

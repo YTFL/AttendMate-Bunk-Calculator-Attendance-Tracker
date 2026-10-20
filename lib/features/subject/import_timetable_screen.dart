@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 
@@ -88,7 +90,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     super.dispose();
   }
 
-  void _parseAndValidateInput() {
+  Future<void> _parseAndValidateInput() async {
     final inputText = _inputTextController.text.trim();
     
     if (inputText.isEmpty) {
@@ -114,7 +116,9 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
       final usedColors = subjectProvider.subjects.map((s) => s.color).toSet();
       
-      final subjects = TimetableImportUtils.parseInputToSubjects(inputText, usedColors);
+      final subjects = await Isolate.run(() => TimetableImportUtils.parseInputToSubjects(inputText, usedColors));
+      if (!mounted) return;
+
       final midSemesterChanges = _isMidSemesterUpdate
           ? _buildMidSemesterChangePreview(subjects)
           : <_MidSemesterChangePreview>[];
@@ -125,6 +129,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
         _errorMessage = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
         _importedSubjects = null;
@@ -224,8 +229,12 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: acronymCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(3),
+                  ],
                   decoration: const InputDecoration(
-                    labelText: 'Acronym / Code (Optional)',
+                    labelText: 'Acronym (3 letters max)',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -261,7 +270,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
 
     if (updated == true && mounted) {
       final newName = nameCtrl.text.trim();
-      final newAcronym = acronymCtrl.text.trim().isEmpty ? null : acronymCtrl.text.trim();
+      final defaultAcronym = Subject.defaultAcronymFromName(newName);
+      final newAcronym = acronymCtrl.text.trim().isEmpty ? defaultAcronym : acronymCtrl.text.trim().toUpperCase();
       final newTarget = int.tryParse(targetCtrl.text.trim()) ?? subject.targetAttendance;
 
       setState(() {
@@ -793,7 +803,12 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
 
     final content = SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.all(rs.scale(16)),
+      padding: EdgeInsets.fromLTRB(
+        rs.scale(16),
+        rs.scale(12),
+        rs.scale(16),
+        widget.embedInUnifiedImport ? rs.scale(24) : rs.scale(140),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -847,8 +862,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           appBar: AppBar(
             title: Text(
               'Import & Export Timetable',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
+              style: GoogleFonts.roboto(
+                fontWeight: FontWeight.w700,
                 fontSize: rs.font(18),
               ),
             ),
@@ -912,69 +927,156 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   }
 
   Widget _buildModeSelectorCard(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDarkMode ? const Color(0xFF131316) : const Color(0xFFF6F6F8);
+    final cardBorder = isDarkMode ? const Color(0xFF222227) : const Color(0xFFE5E5EB);
+    final trackBg = isDarkMode ? const Color(0xFF0E0E12) : const Color(0xFFEBEBF0);
 
     return Container(
       padding: EdgeInsets.all(rs.scale(14)),
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-            : theme.colorScheme.surface,
+        color: cardBg,
         borderRadius: BorderRadius.circular(rs.scale(16)),
-        border: Border.all(
-          color: theme.dividerColor.withValues(alpha: 0.12),
-          width: 1.2,
-        ),
+        border: Border.all(color: cardBorder, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.only(left: rs.width(4), bottom: rs.height(10)),
+            padding: EdgeInsets.only(left: rs.width(2), bottom: rs.height(10)),
             child: Text(
-              'Import Mode',
-              style: TextStyle(
-                fontSize: rs.font(13),
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurfaceVariant,
+              'IMPORT MODE',
+              style: GoogleFonts.roboto(
+                fontSize: rs.font(11),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
               ),
             ),
           ),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<bool>(
-              segments: [
-                ButtonSegment<bool>(
-                  value: true,
-                  label: Text('Update Mid-Semester', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
-                  icon: Icon(Icons.update_rounded, size: rs.scale(18)),
-                ),
-                ButtonSegment<bool>(
-                  value: false,
-                  label: Text('Add As New Subjects', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
-                  icon: Icon(Icons.playlist_add_rounded, size: rs.scale(18)),
-                ),
-              ],
-              selected: <bool>{_isMidSemesterUpdate},
-              style: ButtonStyle(
-                shape: WidgetStateProperty.all(
-                  RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(rs.scale(12)),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: trackBg,
+              borderRadius: BorderRadius.circular(rs.scale(12)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (!_isMidSemesterUpdate) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _isMidSemesterUpdate = true;
+                          if (_importedSubjects != null) {
+                            _midSemesterChanges = _buildMidSemesterChangePreview(_importedSubjects!);
+                          }
+                        });
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(vertical: rs.scale(9)),
+                      decoration: BoxDecoration(
+                        color: _isMidSemesterUpdate
+                            ? (isDarkMode ? const Color(0xFF222227) : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(rs.scale(10)),
+                        boxShadow: _isMidSemesterUpdate && !isDarkMode
+                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.update_rounded,
+                            size: rs.scale(15),
+                            color: _isMidSemesterUpdate
+                                ? (isDarkMode ? Colors.white : Colors.black)
+                                : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                          ),
+                          SizedBox(width: rs.scale(5)),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Update Mid-Semester',
+                                style: GoogleFonts.roboto(
+                                  fontSize: rs.font(12),
+                                  fontWeight: _isMidSemesterUpdate ? FontWeight.w700 : FontWeight.w500,
+                                  color: _isMidSemesterUpdate
+                                      ? (isDarkMode ? Colors.white : Colors.black)
+                                      : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                                ),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              onSelectionChanged: (selection) {
-                if (selection.isEmpty) return;
-                setState(() {
-                  _isMidSemesterUpdate = selection.first;
-                  if (_isMidSemesterUpdate && _importedSubjects != null) {
-                    _midSemesterChanges = _buildMidSemesterChangePreview(_importedSubjects!);
-                  } else {
-                    _midSemesterChanges = [];
-                  }
-                });
-              },
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_isMidSemesterUpdate) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _isMidSemesterUpdate = false;
+                          _midSemesterChanges = [];
+                        });
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: EdgeInsets.symmetric(vertical: rs.scale(9)),
+                      decoration: BoxDecoration(
+                        color: !_isMidSemesterUpdate
+                            ? (isDarkMode ? const Color(0xFF222227) : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(rs.scale(10)),
+                        boxShadow: !_isMidSemesterUpdate && !isDarkMode
+                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.playlist_add_rounded,
+                            size: rs.scale(16),
+                            color: !_isMidSemesterUpdate
+                                ? (isDarkMode ? Colors.white : Colors.black)
+                                : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                          ),
+                          SizedBox(width: rs.scale(5)),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Add As New',
+                                style: GoogleFonts.roboto(
+                                  fontSize: rs.font(12),
+                                  fontWeight: !_isMidSemesterUpdate ? FontWeight.w700 : FontWeight.w500,
+                                  color: !_isMidSemesterUpdate
+                                      ? (isDarkMode ? Colors.white : Colors.black)
+                                      : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                                ),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -983,19 +1085,16 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   }
 
   Widget _buildEffectiveDatePickerCard(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDarkMode ? const Color(0xFF131316) : const Color(0xFFF6F6F8);
+    final cardBorder = isDarkMode ? const Color(0xFF222227) : const Color(0xFFE5E5EB);
+    final badgeBg = isDarkMode ? const Color(0xFF1B1B20) : const Color(0xFFEBEBF0);
 
     return Container(
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-            : theme.colorScheme.surface,
+        color: cardBg,
         borderRadius: BorderRadius.circular(rs.scale(16)),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-          width: 1.2,
-        ),
+        border: Border.all(color: cardBorder, width: 0.8),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1010,13 +1109,14 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                 Container(
                   padding: EdgeInsets.all(rs.scale(10)),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    color: badgeBg,
                     borderRadius: BorderRadius.circular(rs.scale(12)),
+                    border: Border.all(color: cardBorder, width: 0.8),
                   ),
                   child: Icon(
-                    Icons.event_available_rounded,
-                    color: theme.colorScheme.primary,
-                    size: rs.scale(22),
+                    Icons.calendar_today_outlined,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    size: rs.scale(18),
                   ),
                 ),
                 SizedBox(width: rs.width(12)),
@@ -1026,10 +1126,10 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                     children: [
                       Text(
                         'Apply Updated Timetable From',
-                        style: TextStyle(
+                        style: GoogleFonts.roboto(
                           fontSize: rs.font(13.5),
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                          color: isDarkMode ? Colors.white : Colors.black,
                         ),
                       ),
                       SizedBox(height: rs.height(3)),
@@ -1037,7 +1137,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                         'Classes prior to ${_formatDate(_effectiveFromDate)} remain locked to old schedule',
                         style: TextStyle(
                           fontSize: rs.font(11),
-                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                          color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                         ),
                       ),
                     ],
@@ -1047,31 +1147,29 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                 Container(
                   padding: EdgeInsets.symmetric(
                     horizontal: rs.width(10),
-                    vertical: rs.height(5),
+                    vertical: rs.height(6),
                   ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    color: badgeBg,
                     borderRadius: BorderRadius.circular(rs.scale(10)),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                    ),
+                    border: Border.all(color: cardBorder, width: 0.8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         _formatDate(_effectiveFromDate),
-                        style: TextStyle(
+                        style: GoogleFonts.roboto(
                           fontSize: rs.font(11.5),
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          color: isDarkMode ? Colors.white : Colors.black,
                         ),
                       ),
-                      SizedBox(width: rs.width(4)),
+                      SizedBox(width: rs.width(5)),
                       Icon(
                         Icons.edit_calendar_rounded,
-                        size: rs.scale(14),
-                        color: theme.colorScheme.primary,
+                        size: rs.scale(13),
+                        color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
                       ),
                     ],
                   ),
@@ -1085,8 +1183,9 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   }
 
   Widget _buildDataInputSection(BuildContext context, ResponsiveScale rs) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final cardBorder = isDarkMode ? const Color(0xFF222227) : const Color(0xFFE5E5EB);
+    final terminalBg = isDarkMode ? const Color(0xFF0E0E12) : const Color(0xFFF6F6F8);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1095,35 +1194,44 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Timetable Data (JSON / CSV)',
-              style: TextStyle(
-                fontSize: rs.font(13.5),
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
+              'TIMETABLE DATA (JSON / CSV)',
+              style: GoogleFonts.roboto(
+                fontSize: rs.font(11),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
               ),
             ),
-            TextButton.icon(
+            OutlinedButton.icon(
               onPressed: _pickAndLoadImportFile,
-              icon: Icon(Icons.upload_file_rounded, size: rs.scale(16)),
+              icon: Icon(
+                Icons.upload_file_rounded,
+                size: rs.scale(14),
+                color: isDarkMode ? Colors.white : Colors.black,
+              ),
               label: Text(
                 'Upload File',
-                style: TextStyle(
-                  fontSize: rs.font(12),
-                  fontWeight: FontWeight.bold,
+                style: GoogleFonts.roboto(
+                  fontSize: rs.font(11.5),
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode ? Colors.white : Colors.black,
                 ),
               ),
-              style: TextButton.styleFrom(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: cardBorder, width: 0.8),
                 padding: EdgeInsets.symmetric(
-                  horizontal: rs.width(8),
-                  vertical: rs.height(4),
+                  horizontal: rs.width(10),
+                  vertical: rs.height(6),
                 ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(rs.scale(10)),
+                ),
               ),
             ),
           ],
         ),
-        SizedBox(height: rs.height(6)),
+        SizedBox(height: rs.height(10)),
         KeyedSubtree(
           key: _importInputKey,
           child: ValueListenableBuilder<TextEditingValue>(
@@ -1138,63 +1246,64 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                     maxLines: 16,
                     decoration: InputDecoration(
                       hintText: 'Paste your JSON or CSV text data here...',
+                      hintStyle: TextStyle(
+                        color: isDarkMode ? Colors.white24 : Colors.black26,
+                        fontSize: rs.font(12),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(rs.scale(14)),
-                        borderSide: BorderSide(
-                          color: theme.dividerColor.withValues(alpha: 0.15),
-                        ),
+                        borderSide: BorderSide.none,
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(rs.scale(14)),
-                        borderSide: BorderSide(
-                          color: theme.dividerColor.withValues(alpha: 0.15),
-                        ),
+                        borderSide: BorderSide(color: cardBorder, width: 0.8),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(rs.scale(14)),
                         borderSide: BorderSide(
-                          color: theme.colorScheme.primary,
-                          width: 1.5,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                          width: 1.2,
                         ),
                       ),
                       filled: true,
-                      fillColor: isDarkMode
-                          ? Colors.white.withValues(alpha: 0.04)
-                          : Colors.grey.withValues(alpha: 0.06),
+                      fillColor: terminalBg,
                       contentPadding: EdgeInsets.fromLTRB(rs.scale(14), rs.scale(14), rs.scale(85), rs.scale(14)),
                     ),
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: rs.font(12),
-                      color: theme.colorScheme.onSurface,
+                      color: isDarkMode ? const Color(0xFFF2F2F7) : const Color(0xFF1C1C1E),
                     ),
                   ),
                   Positioned(
                     top: rs.scale(8),
                     right: rs.scale(8),
-                    child: Material(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(rs.scale(8)),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? const Color(0xFF1B1B20) : Colors.white,
+                        borderRadius: BorderRadius.circular(rs.scale(8)),
+                        border: Border.all(color: cardBorder, width: 0.8),
+                      ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(rs.scale(8)),
                         onTap: hasText ? _clearInput : _pasteFromClipboard,
                         child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: rs.scale(8), vertical: rs.scale(5)),
+                          padding: EdgeInsets.symmetric(horizontal: rs.scale(9), vertical: rs.scale(5)),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 hasText ? Icons.close_rounded : Icons.content_paste_rounded,
-                                size: rs.scale(14),
-                                color: hasText ? theme.colorScheme.error : theme.colorScheme.primary,
+                                size: rs.scale(13),
+                                color: hasText ? const Color(0xFFFF453A) : (isDarkMode ? Colors.white : Colors.black),
                               ),
                               SizedBox(width: rs.scale(4)),
                               Text(
                                 hasText ? 'Clear' : 'Paste',
-                                style: TextStyle(
+                                style: GoogleFonts.roboto(
                                   fontSize: rs.font(11),
-                                  fontWeight: FontWeight.bold,
-                                  color: hasText ? theme.colorScheme.error : theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                  color: hasText ? const Color(0xFFFF453A) : (isDarkMode ? Colors.white : Colors.black),
                                 ),
                               ),
                             ],
@@ -1213,19 +1322,31 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   }
 
   Widget _buildParseActionsRow(BuildContext context, ResponsiveScale rs) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final cardBorder = isDarkMode ? const Color(0xFF222227) : const Color(0xFFE5E5EB);
+
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _showSampleFormatDialog,
-            icon: Icon(Icons.help_outline_rounded, size: rs.scale(16)),
+            icon: Icon(
+              Icons.help_outline_rounded,
+              size: rs.scale(16),
+              color: isDarkMode ? Colors.white : Colors.black,
+            ),
             label: Text(
               'View Format',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600),
+              style: GoogleFonts.roboto(
+                fontSize: rs.font(12),
+                fontWeight: FontWeight.w600,
+                color: isDarkMode ? Colors.white : Colors.black,
+              ),
             ),
             style: OutlinedButton.styleFrom(
+              side: BorderSide(color: cardBorder, width: 0.8),
               padding: EdgeInsets.symmetric(vertical: rs.height(13)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(rs.scale(12)),
@@ -1235,19 +1356,27 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
         ),
         SizedBox(width: rs.width(10)),
         Expanded(
-          child: FilledButton.icon(
+          child: ElevatedButton.icon(
             onPressed: _parseAndValidateInput,
-            icon: Icon(Icons.auto_fix_high_rounded, size: rs.scale(18)),
+            icon: Icon(
+              Icons.auto_fix_high_rounded,
+              size: rs.scale(16),
+              color: isDarkMode ? Colors.black : Colors.white,
+            ),
             label: Text(
               'Parse & Preview',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: rs.font(13.5),
-                fontWeight: FontWeight.bold,
+              style: GoogleFonts.roboto(
+                fontSize: rs.font(13),
+                fontWeight: FontWeight.w700,
+                color: isDarkMode ? Colors.black : Colors.white,
               ),
             ),
-            style: FilledButton.styleFrom(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDarkMode ? Colors.white : Colors.black,
+              foregroundColor: isDarkMode ? Colors.black : Colors.white,
+              elevation: 0,
               padding: EdgeInsets.symmetric(vertical: rs.height(13)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(rs.scale(12)),

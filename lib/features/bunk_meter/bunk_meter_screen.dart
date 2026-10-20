@@ -1,4 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/attendance_math.dart';
@@ -179,122 +182,280 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
               ],
             ),
           ),
-        // Search field
-        Padding(
-          padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: 'Search for a class...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
+        // Search field (Tesla x Nothing Obsidian Capsule)
+        Builder(
+          builder: (context) {
+            final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+            final searchBg = isDarkMode ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.60);
+            final searchBorder = isDarkMode ? Colors.white.withValues(alpha: 0.14) : Colors.black.withValues(alpha: 0.08);
+
+            return Padding(
+              padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(rs.scale(28)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: searchBg,
+                      borderRadius: BorderRadius.circular(rs.scale(28)),
+                      border: Border.all(color: searchBorder, width: 0.9),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      style: GoogleFonts.inter(
+                        fontSize: rs.font(13.5),
+                        fontWeight: FontWeight.w500,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
+                      onChanged: (value) {
                         setState(() {
-                          _searchController.clear();
-                          _searchQuery = '';
+                          _searchQuery = value;
                         });
                       },
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(rs.scale(12)),
-              ),
-              contentPadding: rs.insetsSymmetric(vertical: 12),
-            ),
-          ),
-        ),
-        // Action toolbar: What-If Calculator & Trip Planner
-        Padding(
-          padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: KeyedSubtree(
-                  key: _bunkCalculatorKey,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: rs.insetsSymmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(rs.scale(10)),
-                      ),
-                    ),
-                    icon: Icon(Icons.calculate_outlined, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 18),
-                    label: Text('Bunk Calculator', style: TextStyle(fontSize: 12, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)),
-                    onPressed: () {
-                      if (tutorialController.isActive && tutorialController.currentStepIndex == 20) {
-                        tutorialController.nextStep();
-                      }
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        barrierColor: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white.withValues(alpha: 0.12)
+                      decoration: InputDecoration(
+                        hintText: 'Search for a class...',
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: rs.font(13),
+                          color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: rs.scale(18),
+                          color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  size: rs.scale(16),
+                                  color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
                             : null,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                        ),
-                        sheetAnimationStyle: AnimationStyle(
-                          duration: const Duration(milliseconds: 300),
-                          reverseDuration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOutCubic,
-                          reverseCurve: Curves.easeInCubic,
-                        ),
-                        builder: (ctx) => WhatIfCalculatorSheet(
-                          subjects: subjects,
-                          recordsBySubject: recordsBySubject,
-                          semester: semester,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              SizedBox(width: rs.width(8)),
-              Expanded(
-                child: KeyedSubtree(
-                  key: _leavePlannerKey,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: rs.insetsSymmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(rs.scale(10)),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        filled: false,
+                        fillColor: Colors.transparent,
+                        contentPadding: rs.insetsSymmetric(vertical: 12, horizontal: 16),
                       ),
                     ),
-                    icon: Icon(Icons.event_available_outlined, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 18),
-                    label: Text('Leave Planner', style: TextStyle(fontSize: 12, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)),
-                    onPressed: () async {
-                      if (tutorialController.isActive && tutorialController.currentStepIndex == 22) {
-                        tutorialController.nextStep();
-                      }
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const LeavePlannerScreen()),
-                      );
-                      _loadPlannedLeaves();
-                    },
                   ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
+        ),
+        // Action toolbar: Bunk Calculator & Leave Planner (Liquid Glass Dual Console)
+        Builder(
+          builder: (context) {
+            final theme = Theme.of(context);
+            final isDarkMode = theme.brightness == Brightness.dark;
+            final cardBg = isDarkMode
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.65);
+            final cardBorder = isDarkMode
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.60);
+            final textColor = isDarkMode ? Colors.white : const Color(0xFF1C1C1E);
+
+            final calcBadgeBg = isDarkMode
+                ? theme.colorScheme.primary.withValues(alpha: 0.16)
+                : theme.colorScheme.primary.withValues(alpha: 0.12);
+            final calcIconColor = theme.colorScheme.primary;
+
+            final plannerBadgeBg = isDarkMode
+                ? const Color(0xFFFF9F0A).withValues(alpha: 0.16)
+                : const Color(0xFFFF9500).withValues(alpha: 0.12);
+            final plannerIconColor = isDarkMode
+                ? const Color(0xFFFF9F0A)
+                : const Color(0xFFD97706);
+
+            return Padding(
+              padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: _bunkCalculatorKey,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(rs.scale(22)),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                          child: Material(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(rs.scale(22)),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(rs.scale(22)),
+                              onTap: () {
+                                if (tutorialController.isActive && tutorialController.currentStepIndex == 20) {
+                                  tutorialController.nextStep();
+                                }
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  barrierColor: isDarkMode
+                                      ? Colors.black.withValues(alpha: 0.65)
+                                      : Colors.black38,
+                                  backgroundColor: Colors.transparent,
+                                  sheetAnimationStyle: AnimationStyle(
+                                    duration: const Duration(milliseconds: 320),
+                                    reverseDuration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeOutCubic,
+                                    reverseCurve: Curves.easeInCubic,
+                                  ),
+                                  builder: (ctx) => WhatIfCalculatorSheet(
+                                    subjects: subjects,
+                                    recordsBySubject: recordsBySubject,
+                                    semester: semester,
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: rs.insetsSymmetric(vertical: 12, horizontal: 14),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(rs.scale(22)),
+                                  border: Border.all(color: cardBorder, width: 0.8),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(7),
+                                      decoration: BoxDecoration(
+                                        color: calcBadgeBg,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: calcIconColor.withValues(alpha: 0.25),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.calculate_outlined,
+                                        color: calcIconColor,
+                                        size: rs.scale(16),
+                                      ),
+                                    ),
+                                    SizedBox(width: rs.width(8)),
+                                    Flexible(
+                                      child: Text(
+                                        'Bunk Calculator',
+                                        style: GoogleFonts.inter(
+                                          fontSize: rs.font(12.5),
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.2,
+                                          color: textColor,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: rs.width(10)),
+                  Expanded(
+                    child: KeyedSubtree(
+                      key: _leavePlannerKey,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(rs.scale(22)),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                          child: Material(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(rs.scale(22)),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(rs.scale(22)),
+                              onTap: () async {
+                                if (tutorialController.isActive && tutorialController.currentStepIndex == 22) {
+                                  tutorialController.nextStep();
+                                }
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const LeavePlannerScreen()),
+                                );
+                                _loadPlannedLeaves();
+                              },
+                              child: Container(
+                                padding: rs.insetsSymmetric(vertical: 12, horizontal: 14),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(rs.scale(22)),
+                                  border: Border.all(color: cardBorder, width: 0.8),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(7),
+                                      decoration: BoxDecoration(
+                                        color: plannerBadgeBg,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: plannerIconColor.withValues(alpha: 0.25),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.event_available_outlined,
+                                        color: plannerIconColor,
+                                        size: rs.scale(16),
+                                      ),
+                                    ),
+                                    SizedBox(width: rs.width(8)),
+                                    Flexible(
+                                      child: Text(
+                                        'Leave Planner',
+                                        style: GoogleFonts.inter(
+                                          fontSize: rs.font(12.5),
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.2,
+                                          color: textColor,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         // Show count of filtered results
         if (_searchQuery.isNotEmpty)
           Padding(
             padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              'Found ${filteredSubjects.length} class${filteredSubjects.length == 1 ? '' : 'es'}',
-              style: TextStyle(
-                fontSize: rs.font(12),
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Found ${filteredSubjects.length} class${filteredSubjects.length == 1 ? '' : 'es'}',
+                style: GoogleFonts.roboto(
+                  fontSize: rs.font(11.5),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF8E8E93)
+                      : const Color(0xFF636366),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -304,22 +465,29 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off, size: rs.scale(64), color: Colors.grey.shade400),
-                      SizedBox(height: rs.height(16)),
+                      Icon(Icons.search_off_rounded, size: rs.scale(56), color: Colors.grey.shade400),
+                      SizedBox(height: rs.height(14)),
                       Text(
                         'No classes found',
-                        style: TextStyle(fontSize: rs.font(18), color: Colors.grey.shade600),
+                        style: GoogleFonts.roboto(
+                          fontSize: rs.font(16),
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white70
+                              : Colors.grey.shade700,
+                        ),
                       ),
-                      SizedBox(height: rs.height(8)),
+                      SizedBox(height: rs.height(4)),
                       Text(
                         'Try a different search term',
-                        style: TextStyle(fontSize: rs.font(14), color: Colors.grey.shade500),
+                        style: GoogleFonts.roboto(fontSize: rs.font(13), color: Colors.grey.shade500),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
                   key: ValueKey(Theme.of(context).brightness),
+                  padding: EdgeInsets.fromLTRB(rs.scale(16), rs.scale(8), rs.scale(16), rs.scale(140)),
                   itemCount: filteredSubjects.length,
                   itemBuilder: (context, index) {
                     final subject = filteredSubjects[index];
@@ -571,7 +739,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(rs.scale(16)),
+            borderRadius: BorderRadius.circular(rs.scale(24)),
           ),
           title: Row(
             children: [
@@ -580,7 +748,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
               Expanded(
                 child: Text(
                   'Manual Baseline',
-                  style: TextStyle(fontSize: rs.font(16), fontWeight: FontWeight.bold),
+                  style: GoogleFonts.inter(fontSize: rs.font(16), fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -591,7 +759,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
             children: [
               Text(
                 'Manual baseline active from ${countingStart.day}/${countingStart.month}/${countingStart.year}. Any attendance or timetable changes before this date are ignored in this card.',
-                style: TextStyle(
+                style: GoogleFonts.inter(
                   fontSize: rs.font(13),
                   color: theme.colorScheme.onSurfaceVariant,
                   height: 1.4,
@@ -607,6 +775,9 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
             FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.red.shade700,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(rs.scale(16)),
+                ),
               ),
               onPressed: () async {
                 Navigator.pop(dialogContext);
@@ -645,7 +816,7 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(rs.scale(16)),
+            borderRadius: BorderRadius.circular(rs.scale(24)),
           ),
           title: Row(
             children: [
@@ -682,11 +853,12 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
                   color: projectedBelowTarget
                       ? Colors.red.withValues(alpha: 0.12)
                       : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                  borderRadius: BorderRadius.circular(rs.scale(8)),
+                  borderRadius: BorderRadius.circular(rs.scale(16)),
                   border: Border.all(
                     color: projectedBelowTarget
-                        ? Colors.red.shade300
-                        : (isDarkMode ? Colors.white24 : Colors.grey.shade300),
+                        ? Colors.red.withValues(alpha: 0.3)
+                        : (isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade300),
+                    width: 0.8,
                   ),
                 ),
                 child: Row(
@@ -747,10 +919,10 @@ class _BunkMeterScreenState extends State<BunkMeterScreen> {
     final manualInput = await showModalBottomSheet<_ManualCountInput>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
+      barrierColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.black54
+          : Colors.black26,
       sheetAnimationStyle: AnimationStyle(
         duration: const Duration(milliseconds: 300),
         reverseDuration: const Duration(milliseconds: 250),
@@ -887,19 +1059,52 @@ class _BunkMeterSubjectCardState extends State<_BunkMeterSubjectCard>
     widget.onExpansionChanged(newExpanded);
   }
 
-  Widget _buildStatColumn(String title, String value) {
+  Widget _buildStatColumn({
+    required ResponsiveScale rs,
+    required bool isDarkMode,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.roboto(
+            fontSize: rs.font(9.5),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+            color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+          ),
+        ),
+        SizedBox(height: rs.height(4)),
+        Text(
+          value,
+          style: GoogleFonts.roboto(
+            fontSize: rs.font(15),
+            fontWeight: FontWeight.w700,
+            color: valueColor ?? (isDarkMode ? Colors.white : const Color(0xFF1C1C1E)),
+          ),
+        ),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final rs = context.rs;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDarkMode
+        ? const Color(0xFF14141C).withValues(alpha: 0.65)
+        : Colors.white.withValues(alpha: 0.75);
+    final cardBorder = isDarkMode
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.white.withValues(alpha: 0.60);
+    final recessedBg = isDarkMode ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03);
+    final innerBorder = isDarkMode ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
+
     final subject = widget.subject;
     final snapshot = widget.snapshot;
     final subjectProjection = widget.subjectProjection;
@@ -907,202 +1112,443 @@ class _BunkMeterSubjectCardState extends State<_BunkMeterSubjectCard>
     final double projectedRatio = subjectProjection.projectedPercentage;
     final bool projectedBelowTarget = projectedRatio < subject.targetAttendance;
 
-    return Card(
-      elevation: 3.0,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-        side: BorderSide(
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.4)
-              : Colors.black.withValues(alpha: 0.2),
-          width: 1.5,
-        ),
-      ),
-      shadowColor: isDarkMode
-          ? Colors.white.withValues(alpha: 0.3)
-          : Colors.black.withValues(alpha: 0.4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8.0),
-            onTap: _handleTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 20.6,
-                        backgroundColor: subject.color,
-                        child: Center(
-                          child: Text(
-                            subject.acronym ?? subject.name.acronymFromName(),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            softWrap: true,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                              height: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              subject.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  'Target: ${subject.targetAttendance}%',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                if (snapshot.manualOverride != null) ...[
-                                  const SizedBox(width: 6),
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(6),
-                                    onTap: widget.onShowManualBaselineTooltip,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
-                                      ),
-                                      child: Tooltip(
-                                        message: 'Manual Baseline active',
-                                        child: Icon(
-                                          Icons.tune_rounded,
-                                          size: 13,
-                                          color: Colors.orange.shade800,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (subjectProjection.hasActivePlannedLeave && plannedMissed > 0) ...[
-                                  const SizedBox(width: 6),
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(6),
-                                    onTap: widget.onShowProjectedLeaveTooltip,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(3),
-                                      decoration: BoxDecoration(
-                                        color: projectedBelowTarget
-                                            ? Colors.red.withValues(alpha: 0.15)
-                                            : (isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: projectedBelowTarget
-                                              ? Colors.red.withValues(alpha: 0.4)
-                                              : (isDarkMode ? Colors.white24 : Colors.black26),
-                                        ),
-                                      ),
-                                      child: Tooltip(
-                                        message: 'Projected after leave: ${projectedRatio.toStringAsFixed(1)}%',
-                                        child: Icon(
-                                          Icons.event_available_outlined,
-                                          size: 13,
-                                          color: projectedBelowTarget
-                                              ? Colors.red.shade700
-                                              : (isDarkMode ? Colors.white70 : Colors.black87),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      RotationTransition(
-                        turns: _iconTurns,
-                        child: Icon(
-                          Icons.expand_more,
-                          color: Theme.of(context).iconTheme.color?.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  AnimatedCrossFade(
-                    firstChild: Text(
-                      widget.compactStatus,
-                      style: TextStyle(fontSize: 14, color: widget.messageColor, fontWeight: FontWeight.w600),
-                    ),
-                    secondChild: Text(
-                      widget.message,
-                      style: TextStyle(fontSize: 14, color: widget.messageColor, fontWeight: FontWeight.w600),
-                    ),
-                    crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                    duration: const Duration(milliseconds: 200),
-                  ),
-                ],
-              ),
+    final double targetPercent = subject.targetAttendance.toDouble();
+    final double currentPct = widget.currentPercentage;
+    final bool isAboveTarget = currentPct >= targetPercent;
+
+    // Status pill colors
+    final Color statusColor = isAboveTarget
+        ? (isDarkMode ? const Color(0xFF34C759) : const Color(0xFF28A745))
+        : (isDarkMode ? const Color(0xFFFF9F0A) : const Color(0xFFFF9500));
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: rs.scale(12)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(rs.scale(24)),
+          border: Border.all(color: cardBorder, width: 0.8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDarkMode ? 0.20 : 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-          ),
-          ClipRect(
-            child: AnimatedBuilder(
-              animation: _controller.view,
-              builder: (context, child) {
-                return Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: _heightFactor.value,
-                  child: child,
-                );
-              },
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(rs.scale(24)),
+              onTap: _handleTap,
               child: Padding(
-                padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 10.0),
+                padding: rs.insetsAll(15),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Divider(height: 1),
-                    const SizedBox(height: 10),
+                    // Top header: Acronym Capsule + Name + Target + Badges + Arrow
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        _buildStatColumn('Classes Held', widget.classesHeldSoFar.toString()),
-                        _buildStatColumn('Attended', widget.attendedClasses.toString()),
-                        _buildStatColumn('Bunked', widget.absentClasses.toString()),
-                        _buildStatColumn('Current %', '${widget.currentPercentage.toStringAsFixed(1)}%'),
+                        // Graphite Acronym squircle badge with micro color indicator
+                        Container(
+                          width: rs.scale(44),
+                          height: rs.scale(44),
+                          decoration: BoxDecoration(
+                            color: isDarkMode ? const Color(0xFF1B1B20) : const Color(0xFFF0F0F3),
+                            borderRadius: BorderRadius.circular(rs.scale(16)),
+                            border: Border.all(
+                              color: subject.color.withValues(alpha: isDarkMode ? 0.45 : 0.35),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              subject.acronym ?? subject.name.acronymFromName(),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              style: GoogleFonts.inter(
+                                color: isDarkMode ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w800,
+                                fontSize: rs.font(12),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: rs.width(12)),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                subject.name,
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: rs.font(14.5),
+                                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              SizedBox(height: rs.height(3)),
+                              Row(
+                                children: [
+                                  Text(
+                                    'TARGET: ${subject.targetAttendance}%',
+                                    style: GoogleFonts.inter(
+                                      fontSize: rs.font(10.5),
+                                      color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                  if (snapshot.manualOverride != null) ...[
+                                    SizedBox(width: rs.width(8)),
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(rs.scale(8)),
+                                      onTap: widget.onShowManualBaselineTooltip,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                        decoration: BoxDecoration(
+                                          color: isDarkMode ? const Color(0xFF261D12) : const Color(0xFFFFF7EB),
+                                          borderRadius: BorderRadius.circular(rs.scale(8)),
+                                          border: Border.all(
+                                            color: isDarkMode ? const Color(0xFF5A3E1B) : const Color(0xFFFFD499),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.tune_rounded,
+                                              size: rs.scale(10),
+                                              color: isDarkMode ? const Color(0xFFFF9F0A) : const Color(0xFFD97706),
+                                            ),
+                                            SizedBox(width: rs.width(3)),
+                                            Text(
+                                              'BASELINE',
+                                              style: GoogleFonts.inter(
+                                                fontSize: rs.font(9),
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.3,
+                                                color: isDarkMode ? const Color(0xFFFF9F0A) : const Color(0xFFD97706),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (subjectProjection.hasActivePlannedLeave && plannedMissed > 0) ...[
+                                    SizedBox(width: rs.width(8)),
+                                    InkWell(
+                                      borderRadius: BorderRadius.circular(rs.scale(8)),
+                                      onTap: widget.onShowProjectedLeaveTooltip,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                        decoration: BoxDecoration(
+                                          color: projectedBelowTarget
+                                              ? (isDarkMode ? const Color(0xFF261214) : const Color(0xFFFFF0F1))
+                                              : (isDarkMode ? const Color(0xFF1B1B20) : const Color(0xFFF2F2F7)),
+                                          borderRadius: BorderRadius.circular(rs.scale(8)),
+                                          border: Border.all(
+                                            color: projectedBelowTarget
+                                                ? (isDarkMode ? const Color(0xFF5A1E24) : const Color(0xFFFFCCD2))
+                                                : (isDarkMode ? const Color(0xFF2E2E36) : const Color(0xFFD1D1D6)),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.event_available_outlined,
+                                              size: rs.scale(10),
+                                              color: projectedBelowTarget
+                                                  ? (isDarkMode ? const Color(0xFFFF453A) : const Color(0xFFDC2626))
+                                                  : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                                            ),
+                                            SizedBox(width: rs.width(3)),
+                                            Text(
+                                              'LEAVE (${projectedRatio.toStringAsFixed(0)}%)',
+                                              style: GoogleFonts.inter(
+                                                fontSize: rs.font(9),
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.3,
+                                                color: projectedBelowTarget
+                                                    ? (isDarkMode ? const Color(0xFFFF453A) : const Color(0xFFDC2626))
+                                                    : (isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366)),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        RotationTransition(
+                          turns: _iconTurns,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: rs.scale(18),
+                              color: isDarkMode ? const Color(0xFF8E8E93) : const Color(0xFF636366),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: widget.onUpdateCountsManually,
-                        icon: const Icon(Icons.edit_calendar_outlined),
-                        label: const Text('Update Counts Manually'),
-                      ),
+                    SizedBox(height: rs.height(13)),
+                    // Modern Progress Bar with Flat Single Color & Target Needle
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final clampedPct = (currentPct / 100.0).clamp(0.0, 1.0);
+                        final targetPos = (targetPercent / 100.0).clamp(0.0, 1.0) * width;
+                        final barHeight = rs.height(8.0);
+
+                        return SizedBox(
+                          height: barHeight,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              // Base Track
+                              Container(
+                                width: width,
+                                height: barHeight,
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(rs.scale(4)),
+                                ),
+                              ),
+                              // Current Fill (Flat Single Color)
+                              Container(
+                                width: width * clampedPct,
+                                height: barHeight,
+                                decoration: BoxDecoration(
+                                  color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                                  borderRadius: BorderRadius.circular(rs.scale(4)),
+                                ),
+                              ),
+                              // Target Threshold Pin Indicator (Flat vertical needle, never overflows)
+                              Positioned(
+                                left: (targetPos - rs.scale(1.2)).clamp(0.0, width - rs.scale(2.4)),
+                                top: -rs.scale(2.5),
+                                bottom: -rs.scale(2.5),
+                                child: Container(
+                                  width: rs.scale(2.4),
+                                  decoration: BoxDecoration(
+                                    color: isDarkMode ? Colors.white : Colors.black,
+                                    borderRadius: BorderRadius.circular(rs.scale(1.2)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    SizedBox(height: rs.height(11)),
+                    // Status Telemetry Row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Left: Intuitive dynamic status capsule
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: rs.width(9), vertical: rs.height(3.5)),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(rs.scale(8)),
+                            border: Border.all(
+                              color: statusColor.withValues(alpha: 0.3),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isAboveTarget ? Icons.check_circle_rounded : Icons.info_rounded,
+                                size: rs.scale(12),
+                                color: statusColor,
+                              ),
+                              SizedBox(width: rs.width(5)),
+                              AnimatedCrossFade(
+                                firstChild: Text(
+                                  widget.compactStatus.toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    fontSize: rs.font(10.5),
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                    color: statusColor,
+                                  ),
+                                ),
+                                secondChild: Text(
+                                  widget.message,
+                                  style: GoogleFonts.inter(
+                                    fontSize: rs.font(10.5),
+                                    fontWeight: FontWeight.w600,
+                                    color: statusColor,
+                                  ),
+                                ),
+                                crossFadeState: widget.isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                                duration: const Duration(milliseconds: 200),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Right: Current Percentage
+                        Text(
+                          '${currentPct.toStringAsFixed(1)}%',
+                          style: GoogleFonts.inter(
+                            fontSize: rs.font(16),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                            color: isDarkMode ? Colors.white : const Color(0xFF1C1C1E),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
+            // Expandable Telemetry Console
+            ClipRect(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _controller.view,
+                  builder: (context, child) {
+                    return Align(
+                      alignment: Alignment.topCenter,
+                      heightFactor: _heightFactor.value,
+                      child: child,
+                    );
+                  },
+                  child: Padding(
+                  padding: EdgeInsets.fromLTRB(rs.scale(15), 0, rs.scale(15), rs.scale(15)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Divider(
+                        height: 1,
+                        thickness: 0.8,
+                        color: isDarkMode ? const Color(0xFF222227) : const Color(0xFFE5E5EA),
+                      ),
+                      SizedBox(height: rs.height(12)),
+                      // 4-column recessed telemetry cockpit
+                      Container(
+                        padding: rs.insetsSymmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: recessedBg,
+                          borderRadius: BorderRadius.circular(rs.scale(18)),
+                          border: Border.all(color: innerBorder, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildStatColumn(
+                              rs: rs,
+                              isDarkMode: isDarkMode,
+                              label: 'Held',
+                              value: widget.classesHeldSoFar.toString(),
+                            ),
+                            Container(
+                              width: 0.8,
+                              height: rs.height(28),
+                              color: innerBorder,
+                            ),
+                            _buildStatColumn(
+                              rs: rs,
+                              isDarkMode: isDarkMode,
+                              label: 'Attended',
+                              value: widget.attendedClasses.toString(),
+                              valueColor: isDarkMode ? const Color(0xFF34C759) : const Color(0xFF28A745),
+                            ),
+                            Container(
+                              width: 0.8,
+                              height: rs.height(28),
+                              color: innerBorder,
+                            ),
+                            _buildStatColumn(
+                              rs: rs,
+                              isDarkMode: isDarkMode,
+                              label: 'Bunked',
+                              value: widget.absentClasses.toString(),
+                              valueColor: isDarkMode ? const Color(0xFFFF453A) : const Color(0xFFDC2626),
+                            ),
+                            Container(
+                              width: 0.8,
+                              height: rs.height(28),
+                              color: innerBorder,
+                            ),
+                            _buildStatColumn(
+                              rs: rs,
+                              isDarkMode: isDarkMode,
+                              label: 'Ratio',
+                              value: '${currentPct.toStringAsFixed(1)}%',
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: rs.height(10)),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: widget.onUpdateCountsManually,
+                          style: OutlinedButton.styleFrom(
+                            padding: rs.insetsSymmetric(horizontal: 14, vertical: 8),
+                            side: BorderSide(
+                              color: isDarkMode ? const Color(0xFF2A2A32) : const Color(0xFFD1D1D6),
+                              width: 0.8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(rs.scale(20)),
+                            ),
+                          ),
+                          icon: Icon(
+                            Icons.tune_rounded,
+                            size: rs.scale(14),
+                            color: isDarkMode ? Colors.white70 : Colors.black87,
+                          ),
+                          label: Text(
+                            'Update Counts Manually',
+                            style: GoogleFonts.inter(
+                              fontSize: rs.font(11.5),
+                              fontWeight: FontWeight.w600,
+                              color: isDarkMode ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _SubjectAttendanceSnapshot {
@@ -1168,6 +1614,8 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
     super.initState();
     _heldController = TextEditingController(text: widget.initialHeld.toString());
     _attendedController = TextEditingController(text: widget.initialAttended.toString());
+    _heldController.addListener(() => setState(() {}));
+    _attendedController.addListener(() => setState(() {}));
   }
 
   @override
@@ -1196,12 +1644,14 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
   }
 
   void _incrementHeld() {
+    HapticFeedback.selectionClick();
     final current = int.tryParse(_heldController.text.trim()) ?? 0;
     _heldController.text = (current + 1).toString();
     _clearError();
   }
 
   void _decrementHeld() {
+    HapticFeedback.selectionClick();
     final current = int.tryParse(_heldController.text.trim()) ?? 0;
     if (current > 0) {
       _heldController.text = (current - 1).toString();
@@ -1210,12 +1660,14 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
   }
 
   void _incrementAttended() {
+    HapticFeedback.selectionClick();
     final current = int.tryParse(_attendedController.text.trim()) ?? 0;
     _attendedController.text = (current + 1).toString();
     _clearError();
   }
 
   void _decrementAttended() {
+    HapticFeedback.selectionClick();
     final current = int.tryParse(_attendedController.text.trim()) ?? 0;
     if (current > 0) {
       _attendedController.text = (current - 1).toString();
@@ -1231,62 +1683,103 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
     }
   }
 
-  Widget _buildCountStepper({
+  Widget _buildGlassStepper({
     required BuildContext context,
     required ResponsiveScale rs,
     required String label,
+    required IconData icon,
     required TextEditingController controller,
     required VoidCallback onDecrement,
     required VoidCallback onIncrement,
-    required Color color,
+    required bool isDark,
   }) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF18181C) : const Color(0xFFF6F6F9);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final btnBg = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.05);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: rs.font(12.5),
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        SizedBox(height: rs.height(6)),
-        Container(
-          height: rs.height(48),
-          decoration: BoxDecoration(
-            color: isDarkMode
-                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
-                : theme.colorScheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(rs.scale(14)),
-            border: Border.all(
-              color: theme.dividerColor.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Row(
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: rs.width(10),
+        vertical: rs.height(12),
+      ),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(rs.scale(18)),
+        border: Border.all(color: cardBorder, width: 0.9),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              IconButton(
-                onPressed: onDecrement,
-                icon: Icon(Icons.remove_rounded, size: rs.scale(18)),
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(
-                  minWidth: rs.width(36),
-                  minHeight: rs.height(48),
-                ),
-                color: theme.colorScheme.onSurface,
+              Icon(
+                icon,
+                size: rs.scale(13),
+                color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
               ),
+              SizedBox(width: rs.width(5)),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.inter(
+                    fontSize: rs.font(10),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: rs.height(10)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Decrement
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onDecrement,
+                  borderRadius: BorderRadius.circular(rs.scale(12)),
+                  child: Container(
+                    width: rs.scale(36),
+                    height: rs.scale(36),
+                    decoration: BoxDecoration(
+                      color: btnBg,
+                      borderRadius: BorderRadius.circular(rs.scale(12)),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.04),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.remove_rounded,
+                      size: rs.scale(18),
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+              // Value display & direct edit
               Expanded(
                 child: TextField(
                   controller: controller,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: rs.font(16),
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                  style: GoogleFonts.inter(
+                    fontSize: rs.font(23),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
@@ -1296,209 +1789,481 @@ class _ManualCountUpdateSheetState extends State<_ManualCountUpdateSheet> {
                   onChanged: (_) => _clearError(),
                 ),
               ),
-              IconButton(
-                onPressed: onIncrement,
-                icon: Icon(Icons.add_rounded, size: rs.scale(18)),
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(
-                  minWidth: rs.width(36),
-                  minHeight: rs.height(48),
+              // Increment
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onIncrement,
+                  borderRadius: BorderRadius.circular(rs.scale(12)),
+                  child: Container(
+                    width: rs.scale(36),
+                    height: rs.scale(36),
+                    decoration: BoxDecoration(
+                      color: btnBg,
+                      borderRadius: BorderRadius.circular(rs.scale(12)),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.04),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: rs.scale(18),
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                  ),
                 ),
-                color: theme.colorScheme.onSurface,
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final rs = context.rs;
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sheetBg = isDark
+        ? const Color(0xFF121218).withValues(alpha: 0.72)
+        : Colors.white.withValues(alpha: 0.78);
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.16)
+        : Colors.white.withValues(alpha: 0.60);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + rs.height(16),
-        left: rs.width(20),
-        right: rs.width(20),
-        top: rs.height(12),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: rs.width(36),
-                height: rs.height(4),
-                margin: EdgeInsets.only(bottom: rs.height(12)),
-                decoration: BoxDecoration(
-                  color: theme.dividerColor.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(rs.scale(2)),
-                ),
-              ),
+    final held = int.tryParse(_heldController.text.trim()) ?? 0;
+    final attended = int.tryParse(_attendedController.text.trim()) ?? 0;
+    final double pct = held > 0 ? (attended / held * 100).clamp(0.0, 100.0) : 100.0;
+    final bool isOnTrack = pct >= 75.0;
+
+    final dateStr =
+        '${widget.effectiveFrom.day}/${widget.effectiveFrom.month}/${widget.effectiveFrom.year}';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(rs.scale(32))),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: sheetBg,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(rs.scale(32))),
+            border: Border(
+              top: BorderSide(color: borderColor, width: 0.9),
             ),
-            Row(
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + rs.height(28),
+            left: rs.width(20),
+            right: rs.width(20),
+            top: rs.height(14),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    'Update ${widget.subjectName} Counts',
-                    style: TextStyle(
-                      fontSize: rs.font(16.5),
-                      fontWeight: FontWeight.bold,
+                // Minimal drag handle
+                Center(
+                  child: Container(
+                    width: rs.scale(36),
+                    height: rs.scale(4.5),
+                    margin: EdgeInsets.only(bottom: rs.height(16)),
+                    decoration: BoxDecoration(
+                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(rs.scale(2.5)),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            SizedBox(height: rs.height(8)),
-            Container(
-              padding: EdgeInsets.all(rs.scale(12)),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(rs.scale(12)),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.orange.shade800,
-                    size: rs.scale(20),
-                  ),
-                  SizedBox(width: rs.width(10)),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Manual Override Notice',
-                          style: TextStyle(
-                            fontSize: rs.font(12.5),
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange.shade900,
+
+                // Header Row with Icon Badge, Title, and Close Button
+                Row(
+                  children: [
+                    Container(
+                      width: rs.scale(42),
+                      height: rs.scale(42),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(rs.scale(14)),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.06),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.tune_rounded,
+                        size: rs.scale(21),
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    SizedBox(width: rs.width(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'UPDATE BASELINE',
+                            style: GoogleFonts.inter(
+                              fontSize: rs.font(10),
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                            ),
+                          ),
+                          SizedBox(height: rs.height(2)),
+                          Text(
+                            widget.subjectName,
+                            style: GoogleFonts.inter(
+                              fontSize: rs.font(16.5),
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context),
+                        borderRadius: BorderRadius.circular(rs.scale(18)),
+                        child: Container(
+                          width: rs.scale(36),
+                          height: rs.scale(36),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.06)
+                                : Colors.black.withValues(alpha: 0.04),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: rs.scale(18),
+                            color: isDark ? Colors.white70 : Colors.black87,
                           ),
                         ),
-                        SizedBox(height: rs.height(2)),
-                        Text(
-                          'Updating counts manually ignores attendance history before ${widget.effectiveFrom.day}/${widget.effectiveFrom.month}/${widget.effectiveFrom.year} for this subject in Bunk Meter.',
-                          style: TextStyle(
-                            fontSize: rs.font(11.5),
-                            color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: rs.height(16)),
+
+                // Redesigned Glass Notice Box
+                Container(
+                  padding: EdgeInsets.all(rs.scale(14)),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(rs.scale(16)),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(rs.scale(6)),
+                        decoration: BoxDecoration(
+                          color: (isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706))
+                              .withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.history_toggle_off_rounded,
+                          color: isDark ? const Color(0xFFF59E0B) : const Color(0xFFB45309),
+                          size: rs.scale(16),
+                        ),
+                      ),
+                      SizedBox(width: rs.width(12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Manual Baseline Active',
+                              style: GoogleFonts.inter(
+                                fontSize: rs.font(12),
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            SizedBox(height: rs.height(3)),
+                            Text(
+                              'Updating counts sets a new starting point as of $dateStr. Attendance records logged prior to this date will be bypassed in Bunk Meter analytics.',
+                              style: GoogleFonts.inter(
+                                fontSize: rs.font(11.5),
+                                color: isDark
+                                    ? const Color(0xFF8E8E93)
+                                    : const Color(0xFF6C6C70),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: rs.height(16)),
+
+                // Two Tactile Counter Stepper Tiles
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildGlassStepper(
+                        context: context,
+                        rs: rs,
+                        label: 'Classes Held',
+                        icon: Icons.event_seat_outlined,
+                        controller: _heldController,
+                        onDecrement: _decrementHeld,
+                        onIncrement: _incrementHeld,
+                        isDark: isDark,
+                      ),
+                    ),
+                    SizedBox(width: rs.width(12)),
+                    Expanded(
+                      child: _buildGlassStepper(
+                        context: context,
+                        rs: rs,
+                        label: 'Classes Attended',
+                        icon: Icons.check_circle_outline_rounded,
+                        controller: _attendedController,
+                        onDecrement: _decrementAttended,
+                        onIncrement: _incrementAttended,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: rs.height(12)),
+
+                // Live Baseline Preview Pill
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: rs.width(14),
+                    vertical: rs.height(10),
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(rs.scale(14)),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.speed_rounded,
+                            size: rs.scale(16),
+                            color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                          ),
+                          SizedBox(width: rs.width(8)),
+                          Text(
+                            'Resulting Baseline:',
+                            style: GoogleFonts.inter(
+                              fontSize: rs.font(12),
+                              fontWeight: FontWeight.w500,
+                              color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                            ),
+                          ),
+                          SizedBox(width: rs.width(6)),
+                          Text(
+                            '${pct.toStringAsFixed(1)}%',
+                            style: GoogleFonts.inter(
+                              fontSize: rs.font(13),
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: rs.width(8),
+                          vertical: rs.height(3),
+                        ),
+                        decoration: BoxDecoration(
+                          color: isOnTrack
+                              ? (isDark ? Colors.white : Colors.black)
+                              : (isDark
+                                  ? const Color(0xFF2C1517)
+                                  : const Color(0xFFFDEDED)),
+                          borderRadius: BorderRadius.circular(rs.scale(100)),
+                          border: Border.all(
+                            color: isOnTrack
+                                ? (isDark ? Colors.white : Colors.black)
+                                : (isDark
+                                    ? const Color(0xFFEF5350).withValues(alpha: 0.4)
+                                    : const Color(0xFFEF5350).withValues(alpha: 0.3)),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          isOnTrack ? 'ON TRACK' : 'BELOW 75%',
+                          style: GoogleFonts.inter(
+                            fontSize: rs.font(9.5),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: isOnTrack
+                                ? (isDark ? Colors.black : Colors.white)
+                                : (isDark
+                                    ? const Color(0xFFFF8A80)
+                                    : const Color(0xFFD32F2F)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (_validationError != null) ...[
+                  SizedBox(height: rs.height(10)),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: rs.width(12),
+                      vertical: rs.height(8),
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2A1517) : const Color(0xFFFDEDED),
+                      borderRadius: BorderRadius.circular(rs.scale(12)),
+                      border: Border.all(
+                        color: const Color(0xFFEF5350).withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: Color(0xFFEF5350),
+                          size: 16,
+                        ),
+                        SizedBox(width: rs.width(8)),
+                        Expanded(
+                          child: Text(
+                            _validationError!,
+                            style: GoogleFonts.inter(
+                              color: isDark ? const Color(0xFFFF8A80) : const Color(0xFFD32F2F),
+                              fontSize: rs.font(11.5),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ],
-              ),
-            ),
-            SizedBox(height: rs.height(16)),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildCountStepper(
-                    context: context,
-                    rs: rs,
-                    label: 'Classes Held',
-                    controller: _heldController,
-                    onDecrement: _decrementHeld,
-                    onIncrement: _incrementHeld,
-                    color: theme.colorScheme.onSurface,
+
+                if (widget.hasManualOverride) ...[
+                  SizedBox(height: rs.height(12)),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _resetBaseline,
+                      icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                      label: Text(
+                        'Reset to System Recorded Attendance',
+                        style: GoogleFonts.inter(
+                          fontSize: rs.font(12.5),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isDark ? const Color(0xFFFF8A80) : const Color(0xFFD32F2F),
+                        side: BorderSide(
+                          color: (isDark ? const Color(0xFFFF8A80) : const Color(0xFFD32F2F))
+                              .withValues(alpha: 0.25),
+                          width: 0.9,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(rs.scale(16)),
+                        ),
+                        padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(width: rs.width(12)),
-                Expanded(
-                  child: _buildCountStepper(
-                    context: context,
-                    rs: rs,
-                    label: 'Classes Attended',
-                    controller: _attendedController,
-                    onDecrement: _decrementAttended,
-                    onIncrement: _incrementAttended,
-                    color: theme.colorScheme.primary,
-                  ),
+                ],
+
+                SizedBox(height: rs.height(18)),
+
+                // Action Buttons (Cancel & Save)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: rs.height(14)),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.10),
+                            width: 0.9,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(22)),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.inter(
+                            fontSize: rs.font(13.5),
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: rs.width(12)),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          'Save Changes',
+                          style: GoogleFonts.inter(
+                            fontSize: rs.font(13.5),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: isDark ? Colors.white : Colors.black,
+                          foregroundColor: isDark ? Colors.black : Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: rs.height(14)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(22)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            if (_validationError != null) ...[
-              SizedBox(height: rs.height(10)),
-              Text(
-                _validationError!,
-                style: TextStyle(
-                  color: theme.colorScheme.error,
-                  fontSize: rs.font(12),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-            if (widget.hasManualOverride) ...[
-              SizedBox(height: rs.height(10)),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: _resetBaseline,
-                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                  label: const Text('Reset Manual Baseline'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.red.shade700,
-                    padding: EdgeInsets.symmetric(vertical: rs.height(10)),
-                  ),
-                ),
-              ),
-            ],
-            SizedBox(height: rs.height(12)),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(rs.scale(12)),
-                      ),
-                    ),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(fontSize: rs.font(13.5)),
-                    ),
-                  ),
-                ),
-                SizedBox(width: rs.width(12)),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _save,
-                    style: FilledButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: rs.height(12)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(rs.scale(12)),
-                      ),
-                    ),
-                    child: Text(
-                      'Save',
-                      style: TextStyle(
-                        fontSize: rs.font(13.5),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );

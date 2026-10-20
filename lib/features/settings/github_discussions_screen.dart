@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../models/github_discussion_model.dart';
 import '../../services/github_discussions_service.dart';
 import '../../utils/url_launcher_utils.dart';
+import '../../widgets/day_cycle_background.dart';
 import 'discussion_detail_screen.dart';
 
 class GitHubDiscussionsScreen extends StatefulWidget {
@@ -78,9 +79,14 @@ class _GitHubDiscussionsScreenState extends State<GitHubDiscussionsScreen> {
     final categories = _availableCategories;
     final filtered = _filteredDiscussions;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Community Discussions'),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Community Discussions'),
         actions: [
           IconButton(
             icon: const Icon(Icons.open_in_new_rounded),
@@ -272,7 +278,11 @@ class _GitHubDiscussionsScreenState extends State<GitHubDiscussionsScreen> {
                                             if (item.authorAvatarUrl != null)
                                               CircleAvatar(
                                                 radius: 9,
-                                                backgroundImage: NetworkImage(item.authorAvatarUrl!),
+                                                backgroundImage: ResizeImage(
+                                                  NetworkImage(item.authorAvatarUrl!),
+                                                  width: 60,
+                                                  height: 60,
+                                                ),
                                               )
                                             else
                                               const CircleAvatar(
@@ -311,6 +321,7 @@ class _GitHubDiscussionsScreenState extends State<GitHubDiscussionsScreen> {
                 ],
               ),
             ),
+      ),
     );
   }
 }

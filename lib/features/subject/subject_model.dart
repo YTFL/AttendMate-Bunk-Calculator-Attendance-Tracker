@@ -93,6 +93,28 @@ class Subject {
   bool get isSpecialClass =>
       schedule.isNotEmpty && schedule.every((slot) => slot.isSpecialClass);
 
+  /// Generates the default 3-letter acronym from subject name.
+  static String defaultAcronymFromName(String name) {
+    final clean = name.trim();
+    if (clean.length >= 3) {
+      return clean.substring(0, 3).toUpperCase();
+    } else if (clean.isNotEmpty) {
+      return clean.toUpperCase();
+    }
+    return '';
+  }
+
+  /// Returns a clean 3-letter acronym for the subject.
+  /// If custom acronym is assigned, limits to first 3 letters.
+  /// If not assigned, uses first 3 letters of subject name by default.
+  String get displayAcronym {
+    final custom = acronym?.trim() ?? '';
+    if (custom.isNotEmpty) {
+      return custom.length > 3 ? custom.substring(0, 3).toUpperCase() : custom.toUpperCase();
+    }
+    return defaultAcronymFromName(name).isNotEmpty ? defaultAcronymFromName(name) : 'SUB';
+  }
+
   /// Returns only the current/latest active schedule slots, filtering out old expired slots.
   List<TimeSlot> get activeSchedule {
     final now = normalizeDate(DateTime.now());

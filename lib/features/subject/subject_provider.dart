@@ -600,6 +600,7 @@ class SubjectProvider with ChangeNotifier {
       status,
       slotKey: slotKey,
     );
+    notifyListeners();
   }
 
   Future<void> markDayAsHoliday(DateTime date) async {
@@ -657,7 +658,7 @@ class SubjectProvider with ChangeNotifier {
   /// Get all cancelled (holiday) attendance records for a specific date
   List<String> getHolidaySubjectIds(DateTime date) {
     return _attendanceProvider.attendanceRecords
-        .where((record) => record.date == date && record.status == AttendanceStatus.cancelled)
+        .where((record) => CalendarUtils.isSameDay(record.date, date) && record.status == AttendanceStatus.cancelled)
         .map((record) => record.subjectId)
         .toList();
   }
@@ -676,12 +677,14 @@ class SubjectProvider with ChangeNotifier {
       date,
       slotKey: slotKey,
     );
+    notifyListeners();
   }
 
   Future<void> unmarkDayAsHoliday(DateTime date) async {
     // Delete all records for this date to completely unmark the holiday
     // This allows the user to mark individual classes as attended/absent later
     await _attendanceProvider.deleteRecordsForDate(date);
+    notifyListeners();
   }
 
   Future<void> markDayAsPresent(DateTime date) async {
@@ -704,6 +707,7 @@ class SubjectProvider with ChangeNotifier {
     if (records.isNotEmpty) {
       await _attendanceProvider.markMultipleAttendance(records);
     }
+    notifyListeners();
   }
 
   /// Auto-mark all unmarked classes as present at end of day

@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
 import '../../utils/responsive_scale.dart';
 
+typedef SwipeableCardBuilder = Widget Function(BuildContext context, double dragOffset);
+
 class SwipeableCard extends StatefulWidget {
-  final Widget child;
+  final Widget? child;
+  final SwipeableCardBuilder? childBuilder;
   final VoidCallback onSwipeRight;
   final VoidCallback onSwipeLeft;
   final Widget swipeRightBackground;
   final Widget swipeLeftBackground;
   final ResponsiveScale rs;
+  final BorderRadius? borderRadius;
 
   const SwipeableCard({
     super.key,
-    required this.child,
+    this.child,
+    this.childBuilder,
     required this.onSwipeRight,
     required this.onSwipeLeft,
     required this.swipeRightBackground,
     required this.swipeLeftBackground,
     required this.rs,
-  });
+    this.borderRadius,
+  }) : assert(child != null || childBuilder != null, 'Either child or childBuilder must be provided');
 
   @override
   State<SwipeableCard> createState() => _SwipeableCardState();
@@ -36,7 +42,7 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 320),
     );
     _animation = _controller.drive(Tween<double>(begin: 0.0, end: 0.0));
   }
@@ -57,9 +63,17 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    final delta = details.primaryDelta ?? 0.0;
     setState(() {
-      _dragOffset += details.primaryDelta ?? 0.0;
-      _dragOffset = _dragOffset.clamp(-_maxDragDistance, _maxDragDistance);
+      final raw = _dragOffset + delta;
+      final absRaw = raw.abs();
+      if (absRaw > _maxDragDistance) {
+        final over = absRaw - _maxDragDistance;
+        final dampened = _maxDragDistance + (over * 0.25);
+        _dragOffset = (raw >= 0 ? 1 : -1) * dampened.clamp(0.0, _maxDragDistance * 1.35);
+      } else {
+        _dragOffset = raw;
+      }
     });
   }
 
@@ -72,10 +86,11 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
       activeBackground = widget.swipeLeftBackground;
     }
 
-    final threshold = _maxDragDistance * 0.5;
-    if (_dragOffset >= threshold) {
+    final vx = details.velocity.pixelsPerSecond.dx;
+    final threshold = _maxDragDistance * 0.45;
+    if (_dragOffset >= threshold || (vx > 350 && _dragOffset > 20)) {
       widget.onSwipeRight();
-    } else if (_dragOffset <= -threshold) {
+    } else if (_dragOffset <= -threshold || (vx < -350 && _dragOffset < -20)) {
       widget.onSwipeLeft();
     }
 
@@ -84,7 +99,7 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
 
     _animation = _controller.drive(
       Tween<double>(begin: _startOffset, end: 0.0).chain(
-        CurveTween(curve: Curves.easeOutQuint),
+        CurveTween(curve: Curves.easeOutCubic),
       ),
     );
     
@@ -105,45 +120,50 @@ class _SwipeableCardState extends State<SwipeableCard> with SingleTickerProvider
     // Limit swipe offset to 25% of the screen width
     _maxDragDistance = screenWidth * 0.25;
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final currentOffset = _controller.isAnimating ? _animation.value : _dragOffset;
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: widget.child,
+        builder: (context, staticChild) {
+          final currentOffset = _controller.isAnimating ? _animation.value : _dragOffset;
 
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            if (currentOffset != 0)
-              Positioned.fill(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(widget.rs.scale(12)),
-                  child: Stack(
-                    children: [
-                      if (_controller.isAnimating && _animatingBackground != null)
-                        Positioned.fill(child: _animatingBackground!)
-                      else ...[
-                        if (currentOffset > 0)
-                          Positioned.fill(child: widget.swipeRightBackground),
-                        if (currentOffset < 0)
-                          Positioned.fill(child: widget.swipeLeftBackground),
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (currentOffset != 0)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: widget.borderRadius ?? BorderRadius.circular(widget.rs.scale(14)),
+                    child: Stack(
+                      children: [
+                        if (_controller.isAnimating && _animatingBackground != null)
+                          Positioned.fill(child: _animatingBackground!)
+                        else ...[
+                          if (currentOffset > 0)
+                            Positioned.fill(child: widget.swipeRightBackground),
+                          if (currentOffset < 0)
+                            Positioned.fill(child: widget.swipeLeftBackground),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
+              GestureDetector(
+                onHorizontalDragStart: _onHorizontalDragStart,
+                onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                onHorizontalDragEnd: _onHorizontalDragEnd,
+                behavior: HitTestBehavior.opaque,
+                child: Transform.translate(
+                  offset: Offset(currentOffset, 0.0),
+                  child: widget.childBuilder != null
+                      ? widget.childBuilder!(context, currentOffset)
+                      : staticChild!,
+                ),
               ),
-            GestureDetector(
-              onHorizontalDragStart: _onHorizontalDragStart,
-              onHorizontalDragUpdate: _onHorizontalDragUpdate,
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              behavior: HitTestBehavior.opaque,
-              child: Transform.translate(
-                offset: Offset(currentOffset, 0.0),
-                child: widget.child,
-              ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }

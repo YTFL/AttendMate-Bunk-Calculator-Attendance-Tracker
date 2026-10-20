@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../services/database_service.dart';
 import '../../utils/github_issue_helper.dart';
+import '../../widgets/day_cycle_background.dart';
 
 class DiagnosticsLogScreen extends StatefulWidget {
   const DiagnosticsLogScreen({super.key});
@@ -135,9 +136,14 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final filtered = _filteredLogs;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Diagnostics Log'),
+    return DayCycleBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text('Diagnostics Log'),
         actions: [
           IconButton(
             icon: const Icon(Icons.bug_report_outlined),
@@ -310,7 +316,8 @@ class _DiagnosticsLogScreenState extends State<DiagnosticsLogScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildFilterChip(String value, String label) {
