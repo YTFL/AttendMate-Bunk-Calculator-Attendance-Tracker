@@ -9,10 +9,12 @@ import '../subject/subject_model.dart';
 
 class SemesterSharePreviewDialog extends StatefulWidget {
   final Map<String, dynamic> shareData;
+  final String? confirmButtonLabel;
 
   const SemesterSharePreviewDialog({
     super.key,
     required this.shareData,
+    this.confirmButtonLabel,
   });
 
   @override
@@ -331,7 +333,7 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
                   child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
               : const Icon(Icons.download_rounded, size: 18),
-          label: Text(_isImporting ? 'Importing...' : 'Import Semester'),
+          label: Text(_isImporting ? 'Importing...' : (widget.confirmButtonLabel ?? 'Import Semester')),
         ),
       ],
     );
@@ -350,7 +352,7 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
       );
 
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context, success);
 
       if (success) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(

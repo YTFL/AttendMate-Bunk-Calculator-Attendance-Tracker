@@ -153,6 +153,106 @@ class CalendarService {
     }
   }
 
+  /// Deep scan and prune all events created by AttendMate across the primary Google Calendar.
+  /// Strictly verifies events against AttendMate's UID schema ("sched_...@attendmate.app")
+  /// or explicit metadata description ("Imported from AttendMate" / "Created with AttendMate").
+  /// Guarantees that personal, work, and non-AttendMate events are completely untouched.
+  static Future<int> pruneAllAttendMateEvents() async {
+    int prunedCount = 0;
+    try {
+      GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
+      googleUser ??= await _googleSignIn.signInSilently();
+      if (googleUser == null) {
+        debugPrint('Google Calendar prune skipped: user not signed in.');
+        return 0;
+      }
+
+      final httpClient = (await _googleSignIn.authenticatedClient())!;
+      final calendarApi = cal.CalendarApi(httpClient);
+      final Set<String> deletedIds = {};
+
+      bool isStrictAttendMateEvent(cal.Event event) {
+        final iCalUID = event.iCalUID?.toLowerCase() ?? '';
+        final desc = event.description?.toLowerCase() ?? '';
+
+        // Strict Check 1: Unique RFC 5545 UID schema stamped exclusively by AttendMate
+        if (iCalUID.startsWith('sched_') && iCalUID.endsWith('@attendmate.app')) {
+          return true;
+        }
+
+        // Strict Check 2: Explicit metadata tag stamped exclusively by AttendMate
+        if (desc.contains('imported from attendmate') || desc.contains('created with attendmate')) {
+          return true;
+        }
+
+        return false;
+      }
+
+      // 1. Paged search by query: "Imported from AttendMate"
+      String? pageToken;
+      do {
+        final cal.Events searchEvents = await calendarApi.events.list(
+          "primary",
+          q: "Imported from AttendMate",
+          maxResults: 250,
+          pageToken: pageToken,
+        );
+        for (final event in searchEvents.items ?? <cal.Event>[]) {
+          final eventId = event.id;
+          if (eventId != null && !deletedIds.contains(eventId)) {
+            if (isStrictAttendMateEvent(event)) {
+              try {
+                await calendarApi.events.delete("primary", eventId);
+                deletedIds.add(eventId);
+                prunedCount++;
+              } catch (e) {
+                debugPrint('Error deleting event $eventId: $e');
+              }
+            }
+          }
+        }
+        pageToken = searchEvents.nextPageToken;
+      } while (pageToken != null && pageToken.isNotEmpty);
+
+      // 2. Wide date-range scan (last 2 years to next 2 years) to catch recurring events and tombstones
+      final now = DateTime.now();
+      final timeMin = now.subtract(const Duration(days: 730)).toUtc();
+      final timeMax = now.add(const Duration(days: 730)).toUtc();
+      pageToken = null;
+      do {
+        final cal.Events windowEvents = await calendarApi.events.list(
+          "primary",
+          timeMin: timeMin,
+          timeMax: timeMax,
+          maxResults: 250,
+          pageToken: pageToken,
+          singleEvents: false,
+        );
+        for (final event in windowEvents.items ?? <cal.Event>[]) {
+          final eventId = event.id;
+          if (eventId == null || deletedIds.contains(eventId)) continue;
+
+          if (isStrictAttendMateEvent(event)) {
+            try {
+              await calendarApi.events.delete("primary", eventId);
+              deletedIds.add(eventId);
+              prunedCount++;
+            } catch (e) {
+              debugPrint('Error deleting event $eventId: $e');
+            }
+          }
+        }
+        pageToken = windowEvents.nextPageToken;
+      } while (pageToken != null && pageToken.isNotEmpty);
+
+      debugPrint('Google Calendar prune complete: safely deleted $prunedCount AttendMate events.');
+    } catch (e) {
+      debugPrint("Error pruning Google Calendar events: $e");
+      rethrow;
+    }
+    return prunedCount;
+  }
+
   /// Synchronizes all subjects and their timeslots to Google Calendar
   static Future<void> syncFullTimetable({
     required List<Subject> subjects,

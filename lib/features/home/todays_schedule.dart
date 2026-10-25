@@ -12,6 +12,7 @@ import '../settings/swipeable_card.dart';
 import '../subject/subject_provider.dart';
 import '../subject/subject_model.dart';
 import '../attendance/attendance_model.dart';
+import '../attendance/attendance_provider.dart';
 import '../calendar/calendar_utils.dart';
 import '../location/location_model.dart';
 import '../../services/database_service.dart';
@@ -323,6 +324,8 @@ class TodayScheduleState extends State<TodaySchedule> {
   @override
   Widget build(BuildContext context) {
     final semesterProvider = Provider.of<SemesterProvider>(context);
+    Provider.of<SubjectProvider>(context);
+    Provider.of<AttendanceProvider>(context);
     final rs = context.rs;
 
     // Check if the semester has started yet
@@ -395,15 +398,16 @@ class TodayScheduleState extends State<TodaySchedule> {
         });
         _notifyDayChanged();
       },
-      itemBuilder: (context, index) {
+      itemBuilder: (pageContext, index) {
         final date = _dates[index];
-        return _buildDaySchedule(date);
+        return _buildDaySchedule(pageContext, date);
       },
     );
   }
 
-  Widget _buildDaySchedule(DateTime targetDate) {
+  Widget _buildDaySchedule(BuildContext context, DateTime targetDate) {
     final subjectProvider = Provider.of<SubjectProvider>(context);
+    final attendanceProvider = Provider.of<AttendanceProvider>(context);
     final semesterProvider = Provider.of<SemesterProvider>(context);
     final timeFormatProvider = Provider.of<TimeFormatProvider>(context);
     final swipeProvider = Provider.of<SwipeActionProvider>(context);
@@ -663,7 +667,7 @@ class TodayScheduleState extends State<TodaySchedule> {
                 final slotKey = timeSlot.slotKey;
                 final isLocked = CalendarUtils.isLockedByManualOverride(subject, targetDate);
                 final overrideDate = subject.manualAttendanceOverride?.effectiveFrom;
-                final attendance = subjectProvider.getAttendanceForSubjectOnDate(
+                final attendance = attendanceProvider.getAttendanceForSubjectOnDate(
                   subject.id,
                   targetDate,
                   slotKey: slotKey,
@@ -703,12 +707,12 @@ class TodayScheduleState extends State<TodaySchedule> {
                   statusIcon = Icons.hourglass_empty;
                 }
 
-                // Show a single button to toggle Holiday / Unmark Attendance
+                // Trailing holiday toggle: 'Mark Holiday' by default (or when attended/absent), and 'X' only when marked as holiday
                 if (showActions) {
-                  if (attendance != null) {
+                  if (attendance?.status == AttendanceStatus.cancelled) {
                     trailingWidget = IconButton(
                       icon: const Icon(Icons.cancel_outlined),
-                      tooltip: 'Unmark Attendance',
+                      tooltip: 'Unmark Holiday',
                       color: Colors.grey,
                       onPressed: () {
                         HapticFeedback.vibrate();

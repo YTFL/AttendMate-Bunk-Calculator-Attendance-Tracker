@@ -44,3 +44,29 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 android/build/reports/problems
+
+# APK files and release outputs
+*.apk
+*.aab
+
+# Local environment and API Keys
+.env
+!.env.example
+
+# Google OAuth Credentials & Secrets
+client_secret*.json
+google-services.json
+
+# Android Keystores & Signing Keys
+*.jks
+*.keystore
+*.key
+android/app-release-key.jks
+
+# Android local configuration & SDK paths
+local.properties
+android/local.properties
+
+# Android credentials documentation & SHA fingerprints
+ANDROID_CREDENTIALS.md
+

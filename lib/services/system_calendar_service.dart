@@ -103,6 +103,76 @@ class SystemCalendarService {
     }
   }
 
+  /// Deep scan and prune all events created by AttendMate across all writable device calendars.
+  /// Strictly verifies descriptions for "imported from attendmate" or "created with attendmate",
+  /// and purges all recorded events from the local SQLite sync table.
+  /// Guarantees that personal, work, and non-AttendMate events are completely untouched.
+  static Future<int> pruneAllAttendMateEvents() async {
+    int prunedCount = 0;
+    try {
+      final plugin = DeviceCalendar.instance;
+      final hasPerm = await checkOrRequestPermissions();
+      if (!hasPerm) {
+        debugPrint('System Calendar prune failed: permissions not granted.');
+        return 0;
+      }
+
+      final Set<String> deletedEventIds = {};
+      final calendars = await getWritableCalendars();
+      final now = DateTime.now();
+      final startDate = now.subtract(const Duration(days: 730)); // 2 years past
+      final endDate = now.add(const Duration(days: 730));       // 2 years future
+
+      for (final cal in calendars) {
+        try {
+          final events = await plugin.listEvents(startDate, endDate, calendarIds: [cal.id]);
+          for (final event in events) {
+            final desc = event.description?.toLowerCase() ?? '';
+
+            // Strict check: only events explicitly stamped with AttendMate metadata
+            final isStrictMatch = desc.contains('imported from attendmate') ||
+                desc.contains('created with attendmate');
+
+            if (isStrictMatch && !deletedEventIds.contains(event.eventId)) {
+              try {
+                await plugin.deleteEvent(eventId: event.eventId);
+                deletedEventIds.add(event.eventId);
+                prunedCount++;
+              } catch (e) {
+                debugPrint('Failed to delete system event ${event.eventId}: $e');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Error scanning calendar ${cal.id}: $e');
+        }
+      }
+
+      // Also clean up any event recorded in SQLite table
+      final db = DatabaseService();
+      final savedEvents = await db.getAllSystemCalendarEvents();
+      for (final eventMap in savedEvents) {
+        final String eventId = eventMap['eventId'] as String;
+        if (!deletedEventIds.contains(eventId)) {
+          try {
+            await plugin.deleteEvent(eventId: eventId);
+            deletedEventIds.add(eventId);
+            prunedCount++;
+          } catch (e) {
+            debugPrint('Failed to delete system event $eventId: $e');
+          }
+        }
+      }
+
+      await db.clearSystemCalendarEvents();
+      debugPrint('Pruned $prunedCount system calendar events.');
+    } catch (e) {
+      debugPrint('Error pruning system calendar events: $e');
+      rethrow;
+    }
+    return prunedCount;
+  }
+
   /// Declaratively synchronizes subjects, slots, holidays, and cancellations to the chosen system calendar.
   static Future<void> syncFullTimetable({
     required List<Subject> subjects,

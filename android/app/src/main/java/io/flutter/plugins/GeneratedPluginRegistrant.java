@@ -16,6 +16,11 @@ public final class GeneratedPluginRegistrant {
   private static final String TAG = "GeneratedPluginRegistrant";
   public static void registerWith(@NonNull FlutterEngine flutterEngine) {
     try {
+      flutterEngine.getPlugins().add(new com.ytfl.attendmate.storage.AttendmateStoragePlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin attendmate_storage, com.ytfl.attendmate.storage.AttendmateStoragePlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new to.bullet.device_calendar_plus_android.DeviceCalendarPlusAndroidPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin device_calendar_plus_android, to.bullet.device_calendar_plus_android.DeviceCalendarPlusAndroidPlugin", e);

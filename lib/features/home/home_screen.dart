@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,8 @@ import '../../main.dart';
 import '../../models/app_update_model.dart';
 import '../../services/app_file_intent_listener.dart';
 import '../../services/backup_service.dart';
+import '../../services/database_service.dart';
+import '../../services/live_timetable_sync_service.dart';
 import '../../services/update_service.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
@@ -18,6 +21,7 @@ import '../attendance/attendance_provider.dart';
 import '../bunk_meter/bunk_meter_screen.dart';
 import '../bunk_meter/what_if_calculator_sheet.dart';
 import '../calendar/calendar_screen.dart';
+import '../import/unified_import_screen.dart';
 import '../planner/leave_planner_screen.dart';
 import '../settings/more_screen.dart';
 import '../semester/semester_provider.dart';
@@ -28,6 +32,9 @@ import '../subject/subject_provider.dart';
 import '../subject/subject_screen.dart';
 import '../tutorial/tutorial_controller.dart';
 import '../tutorial/tutorial_overlay.dart';
+import '../../models/github_discussion_model.dart';
+import '../../services/github_discussions_service.dart';
+import '../settings/discussion_detail_screen.dart';
 import 'todays_schedule.dart';
 import 'update_dialog.dart';
 
@@ -65,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!kDebugMode) {
       _checkForUpdates();
     }
+    _checkForAnnouncements();
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -161,56 +169,137 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Cancel pending 15-minute exit backup if user reopens the app before 15 minutes
       try {
-        Workmanager().cancelByUniqueName('app_close_15min_backup');
+        final backupService = BackupService();
+        backupService.getScheduledBackupTargetTime().then((scheduledTarget) {
+          if (scheduledTarget != null) {
+            final now = DateTime.now();
+            if (scheduledTarget.isAfter(now)) {
+              final remainingSec = scheduledTarget.difference(now).inSeconds;
+              final remainingStr = '${remainingSec ~/ 60}m ${(remainingSec % 60).toString().padLeft(2, '0')}s';
+              final formattedTarget = DateFormat('hh:mm:ss a').format(scheduledTarget);
+              DatabaseService().logAppEvent(
+                tag: 'BackupService',
+                message: 'App resumed. Active 5-minute backup timer running (Target: $formattedTarget, $remainingStr remaining). If changes are made, timer will reset on exit.',
+                level: 'INFO',
+              );
+            } else {
+              backupService.clearScheduledBackupTargetTime();
+            }
+          }
+        });
       } catch (e) {
-        debugPrint('Failed to cancel delayed backup task on resume: $e');
+        debugPrint('Failed to check scheduled backup status on resume: $e');
       }
 
       try {
-        // Only reload attendance — SubjectProvider already listens to AttendanceProvider
-        // via addListener(notifyListeners), so a separate reloadSubjects() call is redundant
-        // and causes a double UI rebuild cascade on every app resume.
         final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
         attendanceProvider.reloadAttendance(showLoading: false);
       } catch (e) {
         debugPrint('Failed to reload database on app resume: $e');
       }
+      try {
+        LiveTimetableSyncService().checkOnAppResume(context);
+      } catch (e) {
+        debugPrint('Failed to check live timetable on resume: $e');
+      }
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
-      // Execute immediate exit backup if backups are enabled and data changes occurred
       try {
         final backupService = BackupService();
         backupService.cancelDebouncedAutoBackup();
+
+        // Check prerequisites
         Future.wait([
           backupService.isBackupEnabled(),
-          backupService.hasUnbackedDataChanges(),
-          backupService.getBackupDirectoryPath(),
+          backupService.hasUserSetBackupDirectory(),
+          DatabaseService().loadSemester(),
         ]).then((results) async {
           final isEnabled = results[0] as bool;
-          final hasChanges = results[1] as bool;
-          final dirPath = results[2] as String?;
-          if (isEnabled && hasChanges && dirPath != null && dirPath.isNotEmpty) {
-            debugPrint('HomeScreen: Executing immediate app exit auto-backup...');
-            await backupService.createBackup(
-              showNotification: false,
-              triggerReason: 'App exit immediate auto-backup',
-              force: false,
+          final hasPath = results[1] as bool;
+          final hasSemester = results[2] != null;
+
+          if (!isEnabled || !hasPath || !hasSemester) {
+            if (backupService.hasChangesInCurrentSession) {
+              final reason = !isEnabled
+                  ? 'Backups disabled in settings'
+                  : !hasPath
+                      ? 'No backup folder selected'
+                      : 'No active semester exists';
+              await DatabaseService().logAppEvent(
+                tag: 'BackupService',
+                message: '5-minute exit backup not scheduled: $reason.',
+                level: 'WARNING',
+              );
+              backupService.resetSessionChangeFlag();
+            }
+            return;
+          }
+
+          if (backupService.hasChangesInCurrentSession) {
+            final oldTarget = await backupService.getScheduledBackupTargetTime();
+            final now = DateTime.now();
+            final isReset = oldTarget != null && oldTarget.isAfter(now);
+
+            final newTarget = now.add(const Duration(minutes: 5));
+
+            if (isReset) {
+              final remainingSec = oldTarget.difference(now).inSeconds;
+              final remainingStr = '${remainingSec ~/ 60}m ${(remainingSec % 60).toString().padLeft(2, '0')}s';
+              await DatabaseService().logAppEvent(
+                tag: 'BackupService',
+                message: '5-minute backup timer RESET: New data changes detected in session. Previous timer (target: ${DateFormat('hh:mm:ss a').format(oldTarget)}, $remainingStr remaining) replaced.',
+                level: 'INFO',
+              );
+            } else {
+              await DatabaseService().logAppEvent(
+                tag: 'BackupService',
+                message: 'Event triggered: Data changed in session. Scheduling 5-minute background backup.',
+                level: 'INFO',
+              );
+            }
+
+            await backupService.setScheduledBackupTargetTime(
+              newTarget,
+              reason: isReset ? 'Session changes reset' : 'Session changes',
             );
+
+            await Workmanager().registerOneOffTask(
+              'app_close_5min_backup',
+              'appCloseBackupTask',
+              initialDelay: const Duration(minutes: 5),
+              existingWorkPolicy: ExistingWorkPolicy.replace,
+              constraints: Constraints(
+                requiresBatteryNotLow: false,
+                requiresCharging: false,
+                requiresDeviceIdle: false,
+                requiresStorageNotLow: false,
+                networkType: NetworkType.notRequired,
+              ),
+            );
+
+            backupService.resetSessionChangeFlag();
           } else {
-            debugPrint('HomeScreen: Skipping exit backup (enabled: $isEnabled, changes: $hasChanges, dir: $dirPath).');
+            // No changes in this session. Check if an existing timer is running.
+            final existingTarget = await backupService.getScheduledBackupTargetTime();
+            if (existingTarget != null && existingTarget.isAfter(DateTime.now())) {
+              final remainingSec = existingTarget.difference(DateTime.now()).inSeconds;
+              final remainingStr = '${remainingSec ~/ 60}m ${(remainingSec % 60).toString().padLeft(2, '0')}s';
+              final formattedTarget = DateFormat('hh:mm:ss a').format(existingTarget);
+              await DatabaseService().logAppEvent(
+                tag: 'BackupService',
+                message: 'App exited without new changes. Keeping existing 5-minute backup timer intact without reset (Target: $formattedTarget, $remainingStr remaining).',
+                level: 'INFO',
+              );
+            }
           }
         });
-
-        // Schedule 15-minute delayed background backup as fallback
-        Workmanager().registerOneOffTask(
-          'app_close_15min_backup',
-          'appCloseBackupTask',
-          initialDelay: const Duration(minutes: 15),
-          existingWorkPolicy: ExistingWorkPolicy.replace,
-        );
       } catch (e) {
-        debugPrint('Failed to execute/schedule exit backup task: $e');
+        debugPrint('Failed to handle 5-minute exit backup task: $e');
+        DatabaseService().logAppEvent(
+          tag: 'BackupService',
+          message: 'Error handling 5-minute exit backup: $e',
+          level: 'ERROR',
+        );
       }
     }
   }
@@ -228,6 +317,79 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Error checking for updates: $e');
     }
+  }
+
+  Future<void> _checkForAnnouncements() async {
+    try {
+      final announcement = await GitHubDiscussionsService().checkForNewAnnouncement();
+      if (announcement != null && mounted) {
+        _showAnnouncementDialog(announcement);
+      }
+    } catch (e) {
+      debugPrint('Error checking for announcements: $e');
+    }
+  }
+
+  void _showAnnouncementDialog(GitHubDiscussion announcement) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.campaign_rounded, color: Colors.deepPurple),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'New Announcement',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              announcement.title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              announcement.markdownContent.length > 200
+                  ? '${announcement.markdownContent.substring(0, 200).replaceAll('\n', ' ')}...'
+                  : announcement.markdownContent,
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              GitHubDiscussionsService().markAnnouncementAsSeen(announcement.id);
+              Navigator.pop(dialogCtx);
+            },
+            child: const Text('Dismiss'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              GitHubDiscussionsService().markAnnouncementAsSeen(announcement.id);
+              Navigator.pop(dialogCtx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DiscussionDetailScreen(discussion: announcement),
+                ),
+              );
+            },
+            child: const Text('Read Full Post'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showUpdateScreen(AppUpdate update) {
@@ -551,10 +713,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   }
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ImportTimetableScreen()),
+                    MaterialPageRoute(
+                      builder: (context) => const UnifiedImportScreen(initialTabIndex: 0),
+                    ),
                   );
                 },
-                tooltip: 'Import Timetable',
+                tooltip: 'Import Data',
+              ),
+            if ((_selectedIndex == 2 && isSemesterSet) || (_selectedIndex == 3 && isSemesterSet && hasSemesterStarted))
+              IconButton(
+                icon: const Icon(Icons.download_for_offline),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const UnifiedImportScreen(initialTabIndex: 1),
+                    ),
+                  );
+                },
+                tooltip: 'Import Data',
               ),
             PopupMenuButton<ThemeMode>(
               tooltip: 'Theme',
@@ -608,7 +785,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               color: Theme.of(context).brightness == Brightness.light ? Colors.black : Colors.white,
             ),
             Expanded(
-              child: widgetOptions.elementAt(_selectedIndex),
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: widgetOptions,
+              ),
             ),
           ],
         ),
