@@ -7,22 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.3.0] - In Development
+## [2.3.0] - 2026-10-25
 
 ### Added
-- **One-Day Extra / Makeup Classes**: Add and track one-off classes for any date without modifying recurring weekly timetables.
-- **Pre-Marked Future Lectures in Bunk Calculator**: Factor future marked attendance and holidays directly into What-If calculations and safe bunk projections.
-- **Differential Google Calendar Sync & Hash Caching**: Added google_calendar_events table in SQLite with 64-bit FNV-1a content hashing. Unchanged slots make 0 API requests; modified slots update directly using cached IDs.
+- **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):
+  - Students can log one-off extra, rescheduled, or makeup classes directly on any date without altering their recurring weekly timetable.
+  - **Quick Add from Daily Views**: Tap **Add Extra Class** directly from **Today's Schedule** or any **Calendar Day Sheet** with intelligent default timings based on the day's existing class schedule.
+  - **Full Attendance & Bunk Tracking**: Extra classes support standard swipe gestures for Present and Absent, can be marked as Holiday, and directly count towards subject attendance, bunk calculations, and required class targets.
+  - **Conflict & Overlap Prevention**: Rejects time slots overlapping with existing scheduled lectures on that date.
+  - **Non-Destructive Deletion**: Removing an extra class card purges only that specific one-off slot and attendance log while preserving the parent subject and regular timetable.
+  - **Timetable Sync Protection**: Editing subjects or syncing/merging timetables preserves all one-off extra classes intact.
+- **Consider Pre-Marked Future Lectures in Bunk Calculator** ([#3](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/3), [@purval26](https://github.com/purval26)):
+  - Students can factor future pre-marked classes (attended, absent, or cancelled holidays) into the Bunk Calculator ("What-If Calculator") and Bunk Meter.
+  - **Accurate Remaining & Safe Bunk Metrics**: Future attended or missed classes credit towards target thresholds, while pre-marked holidays and cancellations deduct from remaining class counts.
+  - **Toggle & Preference Control**: Enable or disable with a dedicated "Consider Future Marked Lectures" checkbox in the Bunk Calculator sheet or globally in More Settings.
+  - **Clear Calculation Feedback**: Summary highlights when pre-marked future classes are factored in, detailing exact counts of pre-marked present, absent, and cancelled lectures.
+- **Developer Portfolio ("More apps by me") in More Tab**:
+  - Added a dedicated "More apps by me" entry under Help & Support on the More tab linking to [ytfl.github.io](https://ytfl.github.io/) with external URL confirmation protection.
 
-- **Developer Portfolio Link in More Tab**: Added "More apps by me" option under Help & Support linking directly to `https://ytfl.github.io/` with external redirection confirmation.
+### Changed & Improved
+- **Calendar Synchronization & Deletion Engine Overhaul**:
+  - **Eliminated Google Calendar API Quota Exhaustion**: Implemented local state tracking and 64-bit FNV-1a content hash diffing (`google_calendar_events` table in SQLite v9). Unchanged slots make 0 API requests; modified slots update directly using cached Event IDs.
+  - **Calm Auto-Sync Debouncing**: Extended the attendance auto-sync debounce window to 8 seconds to prevent burst write limits (`Calendar usage limits exceeded`).
+  - **Explicit Calendar Sync Opt-In**: Google Calendar synchronization strictly defaults to off unless explicitly enabled.
+  - **Guaranteed Cleanup & Mutex Protection**: Enforced two-tier guaranteed cleanup for local and system calendars, execution mutexes (`_isSyncInProgress`), mutual exclusivity warnings, boundary-free deletion, and complete pagination loops.
 
 ### Fixed
-- **Google Calendar API Quota Exhaustion**: Eliminated the 3-request penalty of blind import collisions by maintaining local event mapping and direct updates.
-- **Device Calendar Deletion Bypass**: Added force: true to Device Calendar toggle-off routines and two-tier cleanup (SQLite + direct calendar scan) to guarantee all created calendar entries are deleted.
-- **Duplicate Calendar Entries**: Added sync mutexes (_isSyncInProgress) and dual-sync warnings when Google REST API and Device Calendar target the same account.
-- **Orphaned Recurring Events**: Removed flawed semester date bounding in deletion queries and added pagination loops (pageToken) to safely delete series when semester boundaries shift.
-
----
+- **Attendance Notification Synchronization & Overhaul**:
+  - **Suppress Completed Reminders**: Suppress end-of-class attendance reminders if attendance was already marked earlier in the day or during class.
+  - **Pre-Class Room & Location Reminders Preserved**: 5-minute pre-class classroom navigation notifications continue to deliver reliably even when attendance is marked in advance.
+  - **Next-Instance Recurrence Scheduling**: Scheduler looks ahead to the next unmarked class occurrence across future weeks.
+  - **Notification ID Collision Fix**: Full slot-key based hashing prevents extra classes from colliding with or overwriting regular weekly timetable class alarms.
+  - **Eliminated Duplicate Action Confirmations**: Resolved double confirmation notifications when tapping notification action buttons.
+  - **Background Geofence Task Cleanup**: Manually marking attendance cancels pending delayed GPS check tasks.
+  - **Rescheduling & Sync**: Restored automatic notification rescheduling when attendance is unmarked before class ends.
 
 ## [2.2.0] - 2026-09-11
 
@@ -806,6 +824,7 @@ This is the first public release of AttendMate, a comprehensive attendance track
 
 ## Version History
 
+- **2.3.0** (2026-10-25) - One-day extra/makeup classes directly in daily schedules without modifying weekly timetables, pre-marked future lecture consideration in Bunk Calculator and Bunk Meter, developer portfolio entry in More tab, complete calendar synchronization overhaul with 64-bit FNV-1a differential hashing and calm 8s debouncing to eliminate API quotas, two-tier local and system calendar deletion with mutex protection, and end-of-class notification reminder suppression with lookahead recurrence scheduling.
 - **2.2.0** (2026-09-10) - Centralized Google Integrations hub, Google Drive cloud backup at midnight with smart restore on login, multi-day special class support with arbitrary date ranges, historical attendance import (CSV & JSON) with preview verification, IndexedStack tab flicker elimination, infinite rebuild loop fixes in calendar, deduplicated provider listeners, 5-minute smart app-close backup on session mutations, GitHub Discussions in-app browser & launch announcement checker, Keep Android Open awareness & FreeDroidWarn integration, clean geofencing status badge, universally clickable markdown links, expanded 22-chapter setup guide, privacy & terms updates.
 - **2.1.0** (2026-09-01) - Scrollable 15-day schedule window (-7/+7 days) with dynamic titles & direct attendance marking, short of target continuous recovery calculation fix, future holiday absence pre-marking, removal of auto end-of-day attendance marking, locked status display on today's schedule, background location fetch optimization, interactive projected attendance popup, bunk calculator target date selector & planned leave toggle, calendar baseline status & lock icon display fix, bunk calculator manual baseline calculation fix & max class increment guard, unrestricted background battery access prompt, bunk meter manual baseline reset & interactive tooltip, future day holiday marking in calendar, next immediate planned leave projected attendance calculation, class location JSON import support, pre-marked class notification suppression, mid-semester timetable update overwrite fix, automatic backup fix
 - **2.0.2** (2026-08-11) - Native Android .json file handler ("Open with AttendMate"), smart auto-restore & conditional backup on folder selection, auto-backup semester safeguard, direct classmate data sharing, backup storage location fix, location & planned holiday backup fixes, database clear fixes, setup guide auto-scroll navigation fix

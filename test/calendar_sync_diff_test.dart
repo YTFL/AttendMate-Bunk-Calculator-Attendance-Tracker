@@ -109,17 +109,16 @@ String buildSlotSignature({
     endDateTime.toUtc().toIso8601String(),
     locationStr ?? '',
     subject.targetAttendance.toString(),
-    if (recurrenceRule != null) ...recurrenceRule,
+    ...?recurrenceRule,
   ].join('||');
 }
 
 void main() {
   group('Calendar Sync Differential Hash Tests', () {
     final semester = Semester(
-      id: 'sem-1',
-      name: 'Fall 2026',
       startDate: DateTime(2026, 8, 1),
       endDate: DateTime(2026, 11, 30),
+      targetPercentage: 75.0,
     );
 
     final slotMon = TimeSlot(

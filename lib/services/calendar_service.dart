@@ -490,7 +490,7 @@ class CalendarService {
             endDateTime.toUtc().toIso8601String(),
             locationStr ?? '',
             subject.targetAttendance.toString(),
-            if (recurrenceRule != null) ...recurrenceRule,
+            ...?recurrenceRule,
           ].join('||');
           final currentHash = _computeSlotHash(rawContentSignature);
 

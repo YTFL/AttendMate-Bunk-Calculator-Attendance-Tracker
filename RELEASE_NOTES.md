@@ -1,6 +1,6 @@
 # AttendMate 2.3.0 — Release Notes
 
-**Release Date:** In Development
+**Release Date:** 2026-10-25  
 **Version:** 2.3.0  
 **Platform:** Android  
 **Minimum Android Version:** 7.0 (API 24)
