@@ -632,27 +632,6 @@ class TodayScheduleState extends State<TodaySchedule> {
               ),
             ),
           ),
-        if (!semesterEnded)
-          Padding(
-            padding: rs.insetsSymmetric(horizontal: 16, vertical: 4),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: Size(0, rs.height(44)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(rs.scale(12)),
-                  ),
-                ),
-                onPressed: () => showAddExtraClassSheet(context: context, date: targetDate),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text(
-                  'Add Extra Class',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ),
         if (displayClasses.isEmpty)
           Expanded(
             child: Center(
@@ -675,17 +654,57 @@ class TodayScheduleState extends State<TodaySchedule> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
+                    if (!semesterEnded) ...[
+                      SizedBox(height: rs.height(16)),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size(0, rs.height(44)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(12)),
+                          ),
+                        ),
+                        onPressed: () => showAddExtraClassSheet(context: context, date: targetDate),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text(
+                          'Add Extra Class',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           )
-        else
+        else ...[
           Expanded(
             child: ListView.builder(
               padding: rs.insetsAll(8),
-              itemCount: displayClasses.length,
+              itemCount: displayClasses.length + (!semesterEnded ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == displayClasses.length) {
+                  return Padding(
+                    padding: rs.insetsSymmetric(horizontal: 8, vertical: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size(0, rs.height(44)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(12)),
+                          ),
+                        ),
+                        onPressed: () => showAddExtraClassSheet(context: context, date: targetDate),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text(
+                          'Add Extra Class',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 final subject = displayClasses[index];
                 final timeSlot = subject.schedule.first;
                 final slotKey = timeSlot.slotKey;
@@ -946,6 +965,7 @@ class TodayScheduleState extends State<TodaySchedule> {
               },
             ),
           ),
+        ],
       ],
     );
   }

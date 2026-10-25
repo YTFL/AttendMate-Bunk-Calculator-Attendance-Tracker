@@ -1124,33 +1124,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               );
                             },
                           ),
-                        if (!Provider.of<SemesterProvider>(context).hasSemesterEnded)
-                          Padding(
-                            padding: EdgeInsets.only(bottom: rs.height(8)),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(rs.scale(12)),
-                                  ),
-                                  padding: EdgeInsets.symmetric(vertical: rs.height(12)),
-                                ),
-                                onPressed: () async {
-                                  await showAddExtraClassSheet(
-                                    context: context,
-                                    date: pageDate,
-                                  );
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.add_circle_outline, size: 18),
-                                label: const Text(
-                                  'Add Extra Class',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ),
-                          ),
                         // Copy Timetable Button
                         if (pageDayInfo.state != DayState.futureClasses)
                           Padding(
@@ -1208,16 +1181,71 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                       fontSize: rs.font(14),
                                     ),
                                   ),
+                                  if (!Provider.of<SemesterProvider>(context).hasSemesterEnded) ...[
+                                    SizedBox(height: rs.height(16)),
+                                    FilledButton.icon(
+                                      style: FilledButton.styleFrom(
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(rs.scale(12)),
+                                        ),
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: rs.height(12),
+                                          horizontal: rs.width(20),
+                                        ),
+                                      ),
+                                      onPressed: () async {
+                                        await showAddExtraClassSheet(
+                                          context: context,
+                                          date: pageDate,
+                                        );
+                                        setState(() {});
+                                      },
+                                      icon: const Icon(Icons.add_circle_outline, size: 18),
+                                      label: const Text(
+                                        'Add Extra Class',
+                                        style: TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
                           )
-                        else
+                        else ...[
                           Expanded(
                             child: ListView.builder(
                               physics: const BouncingScrollPhysics(),
-                              itemCount: classesForDay.length,
+                              itemCount: classesForDay.length + (!Provider.of<SemesterProvider>(context).hasSemesterEnded ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (index == classesForDay.length) {
+                                  return Padding(
+                                    padding: EdgeInsets.only(top: rs.height(10), bottom: rs.height(8)),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        style: FilledButton.styleFrom(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(rs.scale(12)),
+                                          ),
+                                          padding: EdgeInsets.symmetric(vertical: rs.height(12)),
+                                        ),
+                                        onPressed: () async {
+                                          await showAddExtraClassSheet(
+                                            context: context,
+                                            date: pageDate,
+                                          );
+                                          setState(() {});
+                                        },
+                                        icon: const Icon(Icons.add_circle_outline, size: 18),
+                                        label: const Text(
+                                          'Add Extra Class',
+                                          style: TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+
                                 final subject = classesForDay[index];
                                 final slotKey = subject.schedule.first.slotKey;
                                 final attendance = attendanceProvider.getAttendanceForSubjectOnDate(
@@ -1240,6 +1268,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               },
                             ),
                           ),
+                        ],
                         SizedBox(height: rs.height(16)),
                       ],
                     );
