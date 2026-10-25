@@ -9,6 +9,8 @@
 
 ## 🚀 AttendMate 2.3.0 Update
 
+> **A Note on the UI Redesign:** The comprehensive UI overhaul promised in the last update is actively underway! It is taking a bit longer than originally anticipated to ensure every screen, animation, and interaction feels polished and intuitive. It will be arriving in the upcoming weeks as part of the next major version release. Thank you for your patience!
+
 AttendMate 2.3.0 introduces one-off extra / makeup class tracking directly into daily schedules, predictive support for factoring pre-marked future lectures and holidays into the Bunk Calculator, alongside continuous refinements, performance enhancements, and codebase modernizations.
 
 ---
