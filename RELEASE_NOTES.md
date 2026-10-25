@@ -18,7 +18,7 @@ AttendMate 2.3.0 introduces one-off extra / makeup class tracking directly into 
 - **Consider Pre-Marked Future Lectures in Bunk Calculator** ([#3](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/3), [@purval26](https://github.com/purval26)):
   - Students can now factor future pre-marked classes (attended, absent, or cancelled holidays) into the Bunk Calculator ("What-If Calculator") and Bunk Meter instead of treating them as undecided future classes.
   - **Accurate Remaining & Safe Bunk Metrics**: Pre-marked attendance directly credits attended or missed classes towards target thresholds, while pre-marked holidays and cancellations are deducted from remaining class counts rather than incorrectly inflating them.
-  - **Toggle & Preference Control**: Easily enable or disable with a dedicated "Consider Future Marked Lectures" checkbox inside the Bunk Calculator sheet or globally in More Settings (defaults to off to preserve standard historical tracking).
+  - **Toggle & Preference Control**: Easily enable or disable with a dedicated "Consider Future Marked Lectures" checkbox directly inside the Bunk Calculator sheet (defaults to off to preserve standard historical tracking).
   - **Clear Feedback**: The calculation summary clearly indicates when pre-marked future classes are factored in, detailing exact counts of pre-marked present, absent, and cancelled lectures.
 
 - **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):

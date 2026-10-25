@@ -118,7 +118,8 @@ lib/
 │   └── update_service.dart
 └── utils/                     # Shared utilities & extensions
 
-git_public/                    # Public-facing docs and release assets
+docs/                          # Privacy policy, terms, and website docs
+RELEASE_NOTES.md               # Version release notes & changelog highlights
 ```
 
 ---

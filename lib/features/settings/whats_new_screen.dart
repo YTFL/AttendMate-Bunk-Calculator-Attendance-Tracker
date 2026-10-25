@@ -63,7 +63,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
   }
 
   Future<String> _loadReleaseNotes() async {
-    final markdown = await rootBundle.loadString('git_public/RELEASE_NOTES.md');
+    final markdown = await rootBundle.loadString('RELEASE_NOTES.md');
     return UpdateService.sanitizeReleaseNotes(markdown);
   }
 }

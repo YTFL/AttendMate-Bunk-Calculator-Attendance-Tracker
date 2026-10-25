@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Consider Pre-Marked Future Lectures in Bunk Calculator** ([#3](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/3), [@purval26](https://github.com/purval26)):
   - Students can factor future pre-marked classes (attended, absent, or cancelled holidays) into the Bunk Calculator ("What-If Calculator") and Bunk Meter.
   - **Accurate Remaining & Safe Bunk Metrics**: Future attended or missed classes credit towards target thresholds, while pre-marked holidays and cancellations deduct from remaining class counts.
-  - **Toggle & Preference Control**: Enable or disable with a dedicated "Consider Future Marked Lectures" checkbox in the Bunk Calculator sheet or globally in More Settings.
+  - **Toggle & Preference Control**: Enable or disable with a dedicated "Consider Future Marked Lectures" checkbox directly in the Bunk Calculator sheet.
   - **Clear Calculation Feedback**: Summary highlights when pre-marked future classes are factored in, detailing exact counts of pre-marked present, absent, and cancelled lectures.
 - **Developer Portfolio ("More apps by me") in More Tab**:
   - Added a dedicated "More apps by me" entry under Help & Support on the More tab linking to [ytfl.github.io](https://ytfl.github.io/) with external URL confirmation protection.

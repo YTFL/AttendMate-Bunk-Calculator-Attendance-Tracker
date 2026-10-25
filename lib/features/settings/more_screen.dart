@@ -58,7 +58,6 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _isCheckingForUpdate = false;
   bool _hasCheckedForUpdate = false;
   bool _devModeCalendarSyncEnabled = false;
-  bool _considerFutureMarkedLectures = false;
   bool? _isBatteryOptimizationIgnoring;
 
   static const String _issuesUrl =
@@ -78,7 +77,6 @@ class _MoreScreenState extends State<MoreScreen> {
     _packageInfoFuture = PackageInfo.fromPlatform();
     _currentVersionReleaseDateFuture = _loadBundledReleaseDate();
     _checkBatteryOptimizationStatus();
-    _loadConsiderFutureMarkedLectures();
     if (kDebugMode) {
       _loadDevModeCalendarSync();
     }
@@ -95,13 +93,17 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<DateTime?> _loadBundledReleaseDate() async {
     try {
-      final releaseNotes = await rootBundle.loadString('git_public/RELEASE_NOTES.md');
+      final releaseNotes = await rootBundle.loadString('RELEASE_NOTES.md');
       final lines = releaseNotes.replaceAll('\r\n', '\n').split('\n');
       for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.startsWith('**Release Date:**')) {
           final dateText = trimmed.replaceFirst('**Release Date:**', '').trim();
-          return DateFormat('MMMM d, y').parseStrict(dateText);
+          try {
+            return DateFormat('yyyy-MM-dd').parseStrict(dateText);
+          } catch (_) {
+            return DateFormat('MMMM d, y').parseStrict(dateText);
+          }
         }
       }
       return null;
@@ -278,29 +280,6 @@ class _MoreScreenState extends State<MoreScreen> {
       });
     } catch (e) {
       debugPrint('Error toggling dev mode calendar sync setting: $e');
-    }
-  }
-
-  Future<void> _loadConsiderFutureMarkedLectures() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _considerFutureMarkedLectures = prefs.getBool('bunk_calc_consider_future_marked') ?? false;
-      });
-    } catch (e) {
-      debugPrint('Error loading consider future marked setting: $e');
-    }
-  }
-
-  Future<void> _toggleConsiderFutureMarkedLectures(bool value) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('bunk_calc_consider_future_marked', value);
-      setState(() {
-        _considerFutureMarkedLectures = value;
-      });
-    } catch (e) {
-      debugPrint('Error saving consider future marked setting: $e');
     }
   }
 
@@ -771,13 +750,6 @@ class _MoreScreenState extends State<MoreScreen> {
             );
           },
         ),
-        SwitchListTile(
-          secondary: const Icon(Icons.event_repeat_outlined),
-          title: const Text('Consider Future Marked Lectures'),
-          subtitle: const Text('Factor pre-marked classes & holidays into Bunk Calculator and Bunk Meter'),
-          value: _considerFutureMarkedLectures,
-          onChanged: _toggleConsiderFutureMarkedLectures,
-        ),
 
         const Divider(),
         _buildSectionHeader('Features & Integrations', colorScheme),
@@ -1192,7 +1164,7 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(
                 builder: (context) => const MarkdownViewerScreen(
                   title: 'Privacy Policy',
-                  assetPath: 'git_public/privacy.md',
+                  assetPath: 'docs/privacy.md',
                 ),
               ),
             );
@@ -1209,7 +1181,7 @@ class _MoreScreenState extends State<MoreScreen> {
               MaterialPageRoute(
                 builder: (context) => const MarkdownViewerScreen(
                   title: 'Terms of Service',
-                  assetPath: 'git_public/terms.md',
+                  assetPath: 'docs/terms.md',
                 ),
               ),
             );
