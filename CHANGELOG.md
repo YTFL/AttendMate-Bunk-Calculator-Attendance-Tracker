@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pre-Marked Future Lectures in Bunk Calculator**: Factor future marked attendance and holidays directly into What-If calculations and safe bunk projections.
 - **Differential Google Calendar Sync & Hash Caching**: Added google_calendar_events table in SQLite with 64-bit FNV-1a content hashing. Unchanged slots make 0 API requests; modified slots update directly using cached IDs.
 
+- **Developer Portfolio Link in More Tab**: Added "More apps by me" option under Help & Support linking directly to `https://ytfl.github.io/` with external redirection confirmation.
+
 ### Fixed
 - **Google Calendar API Quota Exhaustion**: Eliminated the 3-request penalty of blind import collisions by maintaining local event mapping and direct updates.
 - **Device Calendar Deletion Bypass**: Added force: true to Device Calendar toggle-off routines and two-tier cleanup (SQLite + direct calendar scan) to guarantee all created calendar entries are deleted.

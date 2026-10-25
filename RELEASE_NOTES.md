@@ -29,6 +29,10 @@ AttendMate 2.3.0 introduces one-off extra / makeup class tracking directly into 
   - **Non-Destructive Deletion**: Tap the delete icon on an extra class card to remove only that specific one-off slot and its attendance log—preserving the parent subject and regular weekly schedule.
   - **Timetable Sync & Edit Protection**: Editing a subject or syncing/merging timetables via Classroom Timetable Sync keeps all existing one-off extra classes intact.
 
+- **Developer Portfolio ("More apps by me") in More Tab**:
+  - Added a dedicated "More apps by me" entry under Help & Support on the More tab, allowing users to explore other applications and tools by the developer at [ytfl.github.io](https://ytfl.github.io/).
+  - Equipped with standard external URL confirmation dialog protection before launching in the browser.
+
 ---
 
 ## 🐛 Bug Fixes & Refinements

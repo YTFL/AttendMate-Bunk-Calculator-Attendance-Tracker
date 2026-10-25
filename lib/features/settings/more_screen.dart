@@ -64,6 +64,7 @@ class _MoreScreenState extends State<MoreScreen> {
   static const String _issuesUrl =
       'https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues';
   static final String _repoUrl = _issuesUrl.replaceFirst('/issues', '');
+  static const String _moreAppsUrl = 'https://ytfl.github.io/';
 
   final GlobalKey _locationManagerKey = GlobalKey();
   final GlobalKey _calendarSyncKey = GlobalKey();
@@ -991,6 +992,24 @@ class _MoreScreenState extends State<MoreScreen> {
                 );
               },
             );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.apps_rounded),
+          title: const Text('More apps by me'),
+          subtitle: const Text('Explore other apps and projects on ytfl.github.io'),
+          trailing: const Icon(Icons.open_in_new_rounded),
+          onTap: () async {
+            final result = await UrlLauncherUtils.launchExternalUrl(
+              _moreAppsUrl,
+              context: context,
+            );
+            if (!context.mounted) return;
+            if (result == LaunchResult.failed) {
+              ScaffoldMessenger.of(context).showReplacingSnackBar(
+                const SnackBar(content: Text('Could not open the website.')),
+              );
+            }
           },
         ),
         ListTile(
