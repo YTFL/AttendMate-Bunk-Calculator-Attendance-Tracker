@@ -706,16 +706,8 @@ Future<void> main() async {
                   action.status,
                   slotKey: action.slotKey,
                 );
-
-            if (action.notificationId != null) {
-              await notificationService.showAttendanceMarkedNotification(
-                notificationId: action.notificationId!,
-                subjectId: action.subjectId,
-                status: action.status,
-              );
-            }
           } catch (e) {
-            // Silently fail - navigation error
+            // Silently fail - marking error
           }
         });
         

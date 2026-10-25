@@ -91,80 +91,67 @@ class NotificationService {
     for (final subject in subjects) {
       for (final slot in subject.schedule) {
         // --- 1. Schedule Pre-Class Notification (5 minutes before class starts) ---
+        // Always schedule pre-class reminder regardless of marked attendance,
+        // so the user still receives classroom room & block details.
         final preClassTime = _nextPreClassInstanceOfSlot(slot, minutesBefore: 5);
         if (preClassTime != null) {
-          final preClassNotificationId = _preClassNotificationId(subject.id, slot);
+          final preClassNotificationId = getPreClassNotificationId(subject.id, slot);
           if (!_scheduledNotifications.contains(preClassNotificationId)) {
             final scheduleDateOnly = DateTime(preClassTime.year, preClassTime.month, preClassTime.day);
-            final isAlreadyMarked = isClassAlreadyMarked(
-              existingAttendance: existingAttendance,
-              subjectId: subject.id,
-              date: scheduleDateOnly,
-              slotKey: slot.slotKey,
+            final displayName = subject.acronym ?? subject.name;
+            final locId = subject.getEffectiveLocationId(slot);
+            final locConfig = locId != null ? locationMap[locId] : null;
+            final roomName = subject.getEffectiveRoom(slot) ?? locConfig?.name;
+            final blockName = subject.getEffectiveBlock(slot) ?? locConfig?.block;
+            final preClassTitle = _formatPreClassTitle(
+              subjectName: displayName,
+              room: roomName,
+              block: blockName,
             );
 
-            if (!isAlreadyMarked) {
-              final displayName = subject.acronym ?? subject.name;
-              final locId = subject.getEffectiveLocationId(slot);
-              final locConfig = locId != null ? locationMap[locId] : null;
-              final roomName = subject.getEffectiveRoom(slot) ?? locConfig?.name;
-              final blockName = subject.getEffectiveBlock(slot) ?? locConfig?.block;
-              final preClassTitle = _formatPreClassTitle(
-                subjectName: displayName,
-                room: roomName,
-                block: blockName,
+            final preClassPayload = jsonEncode({
+              'type': 'pre_class',
+              'subjectId': subject.id,
+              'date': scheduleDateOnly.toIso8601String(),
+              'slotKey': slot.slotKey,
+            });
+
+            try {
+              await _plugin.zonedSchedule(
+                id: preClassNotificationId,
+                title: preClassTitle,
+                body: null,
+                scheduledDate: preClassTime,
+                notificationDetails: _preClassNotificationDetails(),
+                androidScheduleMode: scheduleMode,
+                payload: preClassPayload,
               );
-
-              final preClassPayload = jsonEncode({
-                'type': 'pre_class',
-                'subjectId': subject.id,
-                'date': scheduleDateOnly.toIso8601String(),
-                'slotKey': slot.slotKey,
-              });
-
-              try {
-                await _plugin.zonedSchedule(
-                  id: preClassNotificationId,
-                  title: preClassTitle,
-                  body: null,
-                  scheduledDate: preClassTime,
-                  notificationDetails: _preClassNotificationDetails(),
-                  androidScheduleMode: scheduleMode,
-                  payload: preClassPayload,
-                );
-                _scheduledNotifications.add(preClassNotificationId);
-                _payloadMap[preClassNotificationId] = preClassPayload;
-              } catch (e) {
-                // Silently fail - notification scheduling error
-              }
+              _scheduledNotifications.add(preClassNotificationId);
+              _payloadMap[preClassNotificationId] = preClassPayload;
+            } catch (e) {
+              // Silently fail - notification scheduling error
             }
           }
         }
 
         // --- 2. Schedule End-Of-Class Notification (at class end) ---
-        final scheduleTime = _nextInstanceOfSlot(slot);
+        // Automatically skips marked occurrences (e.g. today) and schedules the next unmarked occurrence.
+        final scheduleTime = _nextInstanceOfSlot(
+          slot,
+          existingAttendance: existingAttendance,
+          subjectId: subject.id,
+        );
         if (scheduleTime == null) {
           continue;
         }
-        final notificationId = _notificationId(subject.id, slot);
+        final notificationId = getEndOfClassNotificationId(subject.id, slot);
         
         // Skip if already scheduled in this session
         if (_scheduledNotifications.contains(notificationId)) {
           continue;
         }
-        
-        // Check if attendance is already marked for this subject on the scheduled date
+
         final scheduleDateOnly = DateTime(scheduleTime.year, scheduleTime.month, scheduleTime.day);
-        final isAlreadyMarked = isClassAlreadyMarked(
-          existingAttendance: existingAttendance,
-          subjectId: subject.id,
-          date: scheduleDateOnly,
-          slotKey: slot.slotKey,
-        );
-        
-        if (isAlreadyMarked) {
-          continue;
-        }
 
         final displayName = subject.acronym ?? '';
 
@@ -357,7 +344,11 @@ class NotificationService {
     return const NotificationDetails(android: androidDetails);
   }
 
-  tz.TZDateTime? _nextInstanceOfSlot(TimeSlot slot) {
+  tz.TZDateTime? _nextInstanceOfSlot(
+    TimeSlot slot, {
+    List<Attendance>? existingAttendance,
+    String? subjectId,
+  }) {
     final now = tz.TZDateTime.now(tz.local);
     final today = DateTime(now.year, now.month, now.day);
 
@@ -378,6 +369,18 @@ class NotificationService {
 
       if (now.isAfter(scheduledEnd)) {
         return null;
+      }
+
+      if (existingAttendance != null && subjectId != null) {
+        final isMarked = isClassAlreadyMarked(
+          existingAttendance: existingAttendance,
+          subjectId: subjectId,
+          date: scheduledDate,
+          slotKey: slot.slotKey,
+        );
+        if (isMarked) {
+          return null;
+        }
       }
 
       return scheduledEnd;
@@ -406,6 +409,18 @@ class NotificationService {
 
       if (dayOffset == 0 && now.isAfter(candidateEnd)) {
         continue;
+      }
+
+      if (existingAttendance != null && subjectId != null) {
+        final isMarked = isClassAlreadyMarked(
+          existingAttendance: existingAttendance,
+          subjectId: subjectId,
+          date: candidateDate,
+          slotKey: slot.slotKey,
+        );
+        if (isMarked) {
+          continue;
+        }
       }
 
       return candidateEnd;
@@ -491,10 +506,99 @@ class NotificationService {
     return null;
   }
 
-  int _preClassNotificationId(String subjectId, TimeSlot slot) {
-    final key =
-        'pre-$subjectId-${slot.day.index}-${slot.startTime.hour}-${slot.startTime.minute}-${slot.endTime.hour}-${slot.endTime.minute}';
-    return _stableId(key);
+  int getPreClassNotificationIdFromSlotKey(String subjectId, String slotKey) {
+    return _stableId('pre-$subjectId-$slotKey');
+  }
+
+  int getEndOfClassNotificationIdFromSlotKey(String subjectId, String slotKey) {
+    return _stableId('end-$subjectId-$slotKey');
+  }
+
+  int getPreClassNotificationId(String subjectId, TimeSlot slot) {
+    return getPreClassNotificationIdFromSlotKey(subjectId, slot.slotKey);
+  }
+
+  int getEndOfClassNotificationId(String subjectId, TimeSlot slot) {
+    return getEndOfClassNotificationIdFromSlotKey(subjectId, slot.slotKey);
+  }
+
+  String getGeofenceTaskKey(String subjectId, String slotKey, DateTime date) {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    return 'geofence_${subjectId}_${slotKey}_${dateOnly.millisecondsSinceEpoch}';
+  }
+
+  int _preClassNotificationId(String subjectId, TimeSlot slot) =>
+      getPreClassNotificationId(subjectId, slot);
+
+  int _notificationId(String subjectId, TimeSlot slot) =>
+      getEndOfClassNotificationId(subjectId, slot);
+
+  /// Cancels only the end-of-class reminder and any pending background geofence check
+  /// for a specific subject slot on a specific date.
+  /// Pre-class reminders are deliberately kept active so the user receives room/location info.
+  Future<void> cancelEndOfClassReminder({
+    required String subjectId,
+    required DateTime date,
+    String? slotKey,
+  }) async {
+    try {
+      if (slotKey != null && slotKey.isNotEmpty) {
+        final notifId = getEndOfClassNotificationIdFromSlotKey(subjectId, slotKey);
+        await _plugin.cancel(id: notifId);
+        _scheduledNotifications.remove(notifId);
+        _payloadMap.remove(notifId);
+
+        final taskKey = getGeofenceTaskKey(subjectId, slotKey, date);
+        try {
+          await Workmanager().cancelByUniqueName(taskKey);
+        } catch (_) {}
+      } else {
+        // If slotKey is not specified, cancel for all slots of this subject occurring on date
+        final subjects = await DatabaseService().loadSubjects();
+        Subject? targetSubject;
+        for (final s in subjects) {
+          if (s.id == subjectId) {
+            targetSubject = s;
+            break;
+          }
+        }
+        if (targetSubject != null) {
+          for (final slot in targetSubject.schedule) {
+            if (slot.occursOnDate(date)) {
+              final notifId = getEndOfClassNotificationId(subjectId, slot);
+              await _plugin.cancel(id: notifId);
+              _scheduledNotifications.remove(notifId);
+              _payloadMap.remove(notifId);
+
+              final taskKey = getGeofenceTaskKey(subjectId, slot.slotKey, date);
+              try {
+                await Workmanager().cancelByUniqueName(taskKey);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error canceling end-of-class reminder: $e');
+    }
+  }
+
+  /// Cancels all scheduled reminders (both pre-class and end-of-class) for a deleted subject.
+  Future<void> cancelAllRemindersForSubject(Subject subject) async {
+    try {
+      for (final slot in subject.schedule) {
+        final preId = getPreClassNotificationId(subject.id, slot);
+        final endId = getEndOfClassNotificationId(subject.id, slot);
+        await _plugin.cancel(id: preId);
+        await _plugin.cancel(id: endId);
+        _scheduledNotifications.remove(preId);
+        _scheduledNotifications.remove(endId);
+        _payloadMap.remove(preId);
+        _payloadMap.remove(endId);
+      }
+    } catch (e) {
+      debugPrint('Error canceling reminders for subject ${subject.id}: $e');
+    }
   }
 
   String _formatPreClassTitle({
@@ -536,12 +640,6 @@ class NotificationService {
     }
 
     return 'Next Class: $subjectName$locationPart';
-  }
-
-  int _notificationId(String subjectId, TimeSlot slot) {
-    final key =
-        '$subjectId-${slot.day.index}-${slot.startTime.hour}-${slot.startTime.minute}-${slot.endTime.hour}-${slot.endTime.minute}';
-    return _stableId(key);
   }
 
   int _stableId(String input) {

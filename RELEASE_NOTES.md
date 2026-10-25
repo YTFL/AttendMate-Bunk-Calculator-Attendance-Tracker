@@ -31,9 +31,18 @@ AttendMate 2.3.0 introduces one-off extra / makeup class tracking directly into 
 
 ---
 
+## 🐛 Bug Fixes & Refinements
 
+- **Attendance Notification Synchronization & Overhaul**:
+  - **Suppress Completed Reminders When Already Marked**: Fixed an issue where end-of-class attendance reminders ("Mark attendance - Class ended: [Subject]") still popped up after class completion even though the student had already marked attendance earlier in the day or during class.
+  - **Pre-Class Room & Location Reminders Preserved**: 5-minute pre-class notifications ("Next Class: [Subject] in [Block], [Room]") continue to be reliably delivered even if attendance is marked in advance, ensuring students never miss their classroom navigation details.
+  - **Next-Instance Recurrence Scheduling**: Fixed an issue where marking today's class caused the scheduler to skip future weeks entirely. The scheduler now automatically looks ahead to the next unmarked class occurrence (e.g. next week) and schedules it into Android AlarmManager.
+  - **Notification ID Collision Fix for Extra & Special Classes**: Replaced simple weekday-based hash IDs with complete slot-key based stable hashing (`end-[subjectId]-[slotKey]` and `pre-[subjectId]-[slotKey]`), preventing one-day extra classes on specific dates from colliding with or overwriting regular weekly timetable class alarms.
+  - **Eliminated Duplicate Action Confirmations**: Resolved an issue where tapping "Mark Present" or "Mark Absent" on the notification action button triggered two confirmation notifications in the foreground.
+  - **Background Geofence Task Cleanup**: Manually marking attendance now automatically cancels pending 5-minute delayed background GPS check tasks (`geofenceCheckTask`), conserving battery and background location permissions.
+  - **App Resume & Unmarking Synchronization**: Restored automatic notification rescheduling when attendance is unmarked before class ends, and synchronized schedules on app resume.
 
-## 📥 Installation & Upgrade
+---
 
 1. Download **AttendMate-v2.3.0.apk**
 2. Install directly over your existing app (all subjects, logs, and settings are preserved)

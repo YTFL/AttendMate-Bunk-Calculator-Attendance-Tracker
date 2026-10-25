@@ -66,6 +66,7 @@ class SubjectProvider with ChangeNotifier {
   void dispose() {
     _attendanceProvider.removeListener(_onAttendanceChanged);
     _autoSyncTimer?.cancel();
+    _notificationSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -656,6 +657,7 @@ class SubjectProvider with ChangeNotifier {
   Future<void> deleteSubject(Subject subject) async {
     _subjects.removeWhere((s) => s.id == subject.id);
     await _databaseService.saveSubjects(_subjects);
+    await NotificationService().cancelAllRemindersForSubject(subject);
     await _refreshAttendanceReminders();
     await _attendanceProvider.deleteRecordsForSubject(subject.id);
     await BackupService().notifyDataChanged();
@@ -892,10 +894,20 @@ class SubjectProvider with ChangeNotifier {
   }
 
   Timer? _autoSyncTimer;
+  Timer? _notificationSyncTimer;
 
   void _onAttendanceChanged() {
     notifyListeners();
     scheduleAutoSync();
+    _scheduleNotificationRefresh();
+  }
+
+  void _scheduleNotificationRefresh() {
+    if (_isLoading) return;
+    _notificationSyncTimer?.cancel();
+    _notificationSyncTimer = Timer(const Duration(milliseconds: 1000), () {
+      _refreshAttendanceReminders();
+    });
   }
 
   void _scheduleAutoSync() => scheduleAutoSync();

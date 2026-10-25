@@ -69,7 +69,7 @@ TestRemainingResult countClassesUpToDate({
     for (final slot in subject.schedule) {
       if (slot.occursOnDate(cur)) {
         final slotStart = DateTime(cur.year, cur.month, cur.day, slot.startTime.hour, slot.startTime.minute);
-        if (slotStart.isAfter(horizonDate)) continue;
+        if (slotStart.isAfter(horizonDay)) continue;
 
         AttendanceStatus? markedStatus;
         if (considerFutureMarked) {
