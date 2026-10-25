@@ -34,23 +34,32 @@ class _SemesterScreenState extends State<SemesterScreen> {
   DateTime? _endDate;
   double? _targetPercentage;
   late TextEditingController _targetPercentageController;
-  bool _isEditingParameters = false;
   List<PlannedLeave> _plannedLeaves = [];
 
   @override
   void initState() {
     super.initState();
-    final semester = Provider.of<SemesterProvider>(
-      context,
-      listen: false,
-    ).semester;
-    _startDate = semester?.startDate;
-    _endDate = semester?.endDate;
-    _targetPercentage = semester?.targetPercentage ?? 75.0;
-    _targetPercentageController = TextEditingController(
-      text: _targetPercentage?.toStringAsFixed(0) ?? '75',
-    );
+    _targetPercentage = 75.0;
+    _targetPercentageController = TextEditingController(text: '75');
     _loadPlannedLeaves();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final semester = Provider.of<SemesterProvider>(context, listen: false).semester;
+    if (semester != null) {
+      _startDate = semester.startDate;
+      _endDate = semester.endDate;
+      _targetPercentage = semester.targetPercentage;
+      _targetPercentageController.text = semester.targetPercentage.toStringAsFixed(0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _targetPercentageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPlannedLeaves() async {
@@ -62,43 +71,73 @@ class _SemesterScreenState extends State<SemesterScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _targetPercentageController.dispose();
-    super.dispose();
-  }
-
-  bool _isEndDateAfterStart(DateTime? startDate, DateTime? endDate) {
-    if (startDate == null || endDate == null) {
-      return true;
+  Future<void> _saveSemesterParameters({
+    required DateTime startDate,
+    required DateTime endDate,
+    required double targetPercentage,
+  }) async {
+    if (!endDate.isAfter(startDate)) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(content: Text('End date must be after start date.')),
+      );
+      return;
     }
-    return endDate.isAfter(startDate);
+    final updatedSemester = Semester(
+      startDate: startDate,
+      endDate: endDate,
+      targetPercentage: targetPercentage,
+    );
+    try {
+      await Provider.of<SemesterProvider>(
+        context,
+        listen: false,
+      ).updateSemester(updatedSemester);
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showErrorSnackBar(
+          context,
+          'Failed to update semester: ${formatUserFriendlyErrorMessage(e)}',
+        );
+      }
+    }
   }
 
-  void _updateSemester() {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-      if (!_isEndDateAfterStart(_startDate, _endDate)) {
-        ScaffoldMessenger.of(context).showReplacingSnackBar(
-          const SnackBar(content: Text('End date must be after start date.')),
-        );
-        return;
-      }
-      if (_startDate != null && _endDate != null && _targetPercentage != null) {
-        final updatedSemester = Semester(
-          startDate: _startDate!,
-          endDate: _endDate!,
-          targetPercentage: _targetPercentage!,
-        );
-        Provider.of<SemesterProvider>(
-          context,
-          listen: false,
-        ).updateSemester(updatedSemester);
+  Future<void> _createSemesterFromSetup() async {
+    if (_startDate == null || _endDate == null) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(content: Text('Please select both start date and end date.')),
+      );
+      return;
+    }
+    if (!_endDate!.isAfter(_startDate!)) {
+      ScaffoldMessenger.of(context).showReplacingSnackBar(
+        const SnackBar(content: Text('End date must be after start date.')),
+      );
+      return;
+    }
+    final target = _targetPercentage ?? 75.0;
+    final newSemester = Semester(
+      startDate: _startDate!,
+      endDate: _endDate!,
+      targetPercentage: target,
+    );
+    try {
+      await Provider.of<SemesterProvider>(
+        context,
+        listen: false,
+      ).createNewSemester(newSemester);
 
-        final tutorialController = Provider.of<TutorialController>(context, listen: false);
-        if (tutorialController.isActive && tutorialController.currentStepIndex <= 2) {
-          tutorialController.nextStep();
-        }
+      if (!mounted) return;
+      final tutorialController = Provider.of<TutorialController>(context, listen: false);
+      if (tutorialController.isActive && tutorialController.currentStepIndex <= 2) {
+        tutorialController.nextStep();
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showErrorSnackBar(
+          context,
+          'Failed to create semester: ${formatUserFriendlyErrorMessage(e)}',
+        );
       }
     }
   }
@@ -109,6 +148,10 @@ class _SemesterScreenState extends State<SemesterScreen> {
     tutorialController.registerKey('btn_setup_semester', _setupFormKey);
 
     final semesterProvider = Provider.of<SemesterProvider>(context);
+
+    if (semesterProvider.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     if (semesterProvider.semester == null) {
       return _buildCreateSemesterForm();
@@ -124,11 +167,9 @@ class _SemesterScreenState extends State<SemesterScreen> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(
-        rs.width(16),
-        rs.height(12),
-        rs.width(16),
-        rs.height(24),
+      padding: EdgeInsets.symmetric(
+        horizontal: rs.width(16),
+        vertical: rs.height(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -355,7 +396,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _updateSemester,
+                      onPressed: _createSemesterFromSetup,
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(rs.scale(12)),
@@ -403,11 +444,9 @@ class _SemesterScreenState extends State<SemesterScreen> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(
-        rs.width(16),
-        rs.height(8),
-        rs.width(16),
-        rs.height(24),
+      padding: EdgeInsets.symmetric(
+        horizontal: rs.width(16),
+        vertical: rs.height(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -431,89 +470,13 @@ class _SemesterScreenState extends State<SemesterScreen> {
           SizedBox(height: rs.height(14)),
 
           // 3. Seamless Semester Parameters Section (Dates & Target %)
-          _buildSemesterParametersCard(),
+          _buildSemesterParametersCard(semester),
 
-          // 4. Share Semester with Classmate Card
-          _buildShareSemesterCard(context),
-
-          // 5. Semester Ended Warning / New Semester Trigger
+          // 4. Semester Ended Warning / New Semester Trigger
           if (semesterEnded) ...[
             SizedBox(height: rs.height(14)),
             _buildSemesterEndedAlert(),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShareSemesterCard(BuildContext context) {
-    final rs = context.rs;
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
-
-    return Container(
-      margin: EdgeInsets.only(top: rs.height(14)),
-      padding: EdgeInsets.all(rs.scale(16)),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
-            : theme.colorScheme.primaryContainer.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(rs.scale(18)),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-          width: 1.2,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(rs.scale(8)),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.send_rounded,
-                  color: theme.colorScheme.primary,
-                  size: rs.scale(20),
-                ),
-              ),
-              SizedBox(width: rs.width(10)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Share Semester with Friend',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: rs.font(15),
-                      ),
-                    ),
-                    Text(
-                      'Shares dates & timetable without your attendance data',
-                      style: TextStyle(
-                        fontSize: rs.font(11.5),
-                        color: theme.textTheme.bodySmall?.color,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: rs.height(12)),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonalIcon(
-              onPressed: () => SemesterShareService().shareSemesterWithFriend(context),
-              icon: const Icon(Icons.share_rounded, size: 18),
-              label: const Text('Share Semester Data'),
-            ),
-          ),
         ],
       ),
     );
@@ -885,15 +848,34 @@ class _SemesterScreenState extends State<SemesterScreen> {
                     ),
                     SizedBox(width: rs.width(8)),
                     Expanded(
-                      child: Text(
-                        'Projected (After Leave): ${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: rs.font(13),
-                          fontWeight: FontWeight.bold,
-                          color: semesterProjection.projectedSlack >= 0
-                              ? (isDarkMode ? Colors.green.shade300 : Colors.green.shade900)
-                              : (isDarkMode ? Colors.red.shade300 : Colors.red.shade900),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Projected (After Leave): ${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: rs.font(13),
+                              fontWeight: FontWeight.bold,
+                              color: semesterProjection.projectedSlack >= 0
+                                  ? (isDarkMode ? Colors.green.shade300 : Colors.green.shade900)
+                                  : (isDarkMode ? Colors.red.shade300 : Colors.red.shade900),
+                            ),
+                          ),
+                          if (semesterProjection.latestLeaveEndDate != null) ...[
+                            SizedBox(height: rs.height(2)),
+                            Text(
+                              'Projected date: ${DateFormat('d MMM yyyy').format(semesterProjection.latestLeaveEndDate!)}',
+                              style: TextStyle(
+                                fontSize: rs.font(11),
+                                fontWeight: FontWeight.w500,
+                                color: semesterProjection.projectedSlack >= 0
+                                    ? (isDarkMode ? Colors.green.shade400 : Colors.green.shade800)
+                                    : (isDarkMode ? Colors.red.shade400 : Colors.red.shade800),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     Icon(
@@ -922,6 +904,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
     final isDarkMode = theme.brightness == Brightness.dark;
 
     final latestLeaveEnd = semesterProjection.latestLeaveEndDate ?? DateTime.now();
+    final formattedProjectedDate = DateFormat('d MMM yyyy').format(latestLeaveEnd);
 
     final recoveryResult = ProjectedAttendanceCalculator.calculateClassesNeededAfterLeave(
       subjects: subjects,
@@ -957,12 +940,29 @@ class _SemesterScreenState extends State<SemesterScreen> {
             ),
             SizedBox(width: rs.width(10)),
             Expanded(
-              child: Text(
-                'Projected Leave Overview',
-                style: TextStyle(
-                  fontSize: rs.font(16),
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Projected Leave Overview',
+                    style: TextStyle(
+                      fontSize: rs.font(16),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: rs.height(2)),
+                  Text(
+                    'Projected as of $formattedProjectedDate',
+                    style: TextStyle(
+                      fontSize: rs.font(12),
+                      fontWeight: FontWeight.w500,
+                      color: isBelowTarget
+                          ? (isDarkMode ? Colors.red.shade300 : Colors.red.shade700)
+                          : (isDarkMode ? Colors.green.shade300 : Colors.green.shade700),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -985,27 +985,13 @@ class _SemesterScreenState extends State<SemesterScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Projected After Leave',
-                          style: TextStyle(
-                            fontSize: rs.font(11),
-                            color: theme.textTheme.bodySmall?.color,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        SizedBox(height: rs.height(4)),
-                        Text(
-                          '${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: rs.font(24),
-                            fontWeight: FontWeight.bold,
-                            color: isBelowTarget ? Colors.red : Colors.green,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      '${semesterProjection.projectedPercentage.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: rs.font(24),
+                        fontWeight: FontWeight.bold,
+                        color: isBelowTarget ? Colors.red : Colors.green,
+                      ),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1017,7 +1003,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(height: rs.height(4)),
+                        SizedBox(height: rs.height(2)),
                         Text(
                           '${semesterProjection.projectedSlack >= 0 ? '+' : ''}${semesterProjection.projectedSlack.toStringAsFixed(1)}%',
                           style: TextStyle(
@@ -1032,15 +1018,6 @@ class _SemesterScreenState extends State<SemesterScreen> {
                 ),
               ),
               SizedBox(height: rs.height(14)),
-
-              Text(
-                'Breakdown up to Leave End',
-                style: TextStyle(
-                  fontSize: rs.font(13),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: rs.height(8)),
               _buildDetailRow(
                 rs: rs,
                 theme: theme,
@@ -1105,47 +1082,103 @@ class _SemesterScreenState extends State<SemesterScreen> {
                           ),
                         ],
                       ),
-                      SizedBox(height: rs.height(6)),
+                      SizedBox(height: rs.height(8)),
                       Text(
                         recoveryResult.isAchievable
-                            ? 'Attending ${recoveryResult.classesNeeded} classes continuously after ${DateFormat.yMMMd().format(latestLeaveEnd)} will restore your overall attendance to the ${semester.targetPercentage.toStringAsFixed(0)}% target.'
-                            : 'Even attending all ${recoveryResult.remainingAfterLeave} remaining classes after leave will only reach ${recoveryResult.maxAchievablePercentage.toStringAsFixed(1)}%.',
+                            ? 'Your attendance is projected to drop to ${semesterProjection.projectedPercentage.toStringAsFixed(1)}% (${semesterProjection.projectedSlack.abs().toStringAsFixed(1)}% below target).\n\nAttending ${recoveryResult.classesNeeded} classes continuously after leave will restore your overall attendance to the ${semester.targetPercentage.toStringAsFixed(0)}% target${recoveryResult.targetRecoveryDate != null ? ' by ${DateFormat('d MMM yyyy').format(recoveryResult.targetRecoveryDate!)}' : ''}.'
+                            : 'Your attendance is projected to drop to ${semesterProjection.projectedPercentage.toStringAsFixed(1)}% (${semesterProjection.projectedSlack.abs().toStringAsFixed(1)}% below target).\n\nEven attending all ${recoveryResult.remainingAfterLeave} remaining classes after leave will only reach ${recoveryResult.maxAchievablePercentage.toStringAsFixed(1)}%.',
                         style: TextStyle(
                           fontSize: rs.font(12),
                           color: theme.textTheme.bodySmall?.color,
                         ),
                       ),
+                      if (recoveryResult.isAchievable && recoveryResult.targetRecoveryDate != null) ...[
+                        SizedBox(height: rs.height(8)),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: rs.width(8),
+                            vertical: rs.height(6),
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(rs.scale(8)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.event_available_rounded,
+                                size: rs.scale(15),
+                                color: Colors.amber.shade800,
+                              ),
+                              SizedBox(width: rs.width(6)),
+                              Expanded(
+                                child: Text(
+                                  'Target Recovery Date: ${DateFormat('d MMM yyyy').format(recoveryResult.targetRecoveryDate!)}',
+                                  style: TextStyle(
+                                    fontSize: rs.font(11),
+                                    fontWeight: FontWeight.bold,
+                                    color: isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ] else ...[
-                Container(
-                  padding: EdgeInsets.all(rs.scale(12)),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: isDarkMode ? 0.15 : 0.08),
-                    borderRadius: BorderRadius.circular(rs.scale(12)),
-                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        color: Colors.green,
-                        size: rs.scale(20),
+                Builder(
+                  builder: (context) {
+                    final bunkableAfterLeave = AttendanceMath.calculateBunkableClasses(
+                      attended: semesterProjection.totalAttended,
+                      marked: semesterProjection.totalMarked,
+                      targetPercentage: semester.targetPercentage,
+                    );
+
+                    return Container(
+                      padding: EdgeInsets.all(rs.scale(12)),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: isDarkMode ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(rs.scale(12)),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                       ),
-                      SizedBox(width: rs.width(8)),
-                      Expanded(
-                        child: Text(
-                          'Your attendance remains on track above the target after the leave!',
-                          style: TextStyle(
-                            fontSize: rs.font(12),
-                            fontWeight: FontWeight.w600,
-                            color: isDarkMode ? Colors.green.shade200 : Colors.green.shade900,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.green,
+                                size: rs.scale(20),
+                              ),
+                              SizedBox(width: rs.width(8)),
+                              Expanded(
+                                child: Text(
+                                  'On Track',
+                                  style: TextStyle(
+                                    fontSize: rs.font(13),
+                                    fontWeight: FontWeight.bold,
+                                    color: isDarkMode ? Colors.green.shade200 : Colors.green.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          SizedBox(height: rs.height(8)),
+                          Text(
+                            'Your attendance is projected to be ${semesterProjection.projectedPercentage.toStringAsFixed(1)}% (+${semesterProjection.projectedSlack.toStringAsFixed(1)}% above your ${semester.targetPercentage.toStringAsFixed(0)}% target).\n\n${bunkableAfterLeave > 0 ? 'You will still have a buffer of $bunkableAfterLeave class${bunkableAfterLeave > 1 ? 'es' : ''} to safely bunk after leave while remaining on or above target.' : 'You will be right at target with no extra classes to bunk after leave.'}',
+                            style: TextStyle(
+                              fontSize: rs.font(12),
+                              color: theme.textTheme.bodySmall?.color,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ],
             ],
@@ -1285,9 +1318,13 @@ class _SemesterScreenState extends State<SemesterScreen> {
     );
   }
 
-  Widget _buildSemesterParametersCard() {
+  Widget _buildSemesterParametersCard(Semester semester) {
     final rs = context.rs;
     final theme = Theme.of(context);
+
+    final effectiveStartDate = _startDate ?? semester.startDate;
+    final effectiveEndDate = _endDate ?? semester.endDate;
+    final effectiveTarget = _targetPercentage ?? semester.targetPercentage;
 
     return Container(
       decoration: BoxDecoration(
@@ -1303,44 +1340,38 @@ class _SemesterScreenState extends State<SemesterScreen> {
         child: ExpansionTile(
           shape: const Border(),
           collapsedShape: const Border(),
-        initiallyExpanded: _isEditingParameters,
-        onExpansionChanged: (expanded) {
-          setState(() {
-            _isEditingParameters = expanded;
-          });
-        },
-        tilePadding: EdgeInsets.symmetric(
-          horizontal: rs.width(16),
-          vertical: rs.height(4),
-        ),
-        leading: Icon(
-          Icons.tune_rounded,
-          color: theme.colorScheme.primary,
-          size: rs.scale(20),
-        ),
-        title: Text(
-          'Semester Parameters',
-          style: TextStyle(
-            fontSize: rs.font(15),
-            fontWeight: FontWeight.bold,
+          initiallyExpanded: false,
+          tilePadding: EdgeInsets.symmetric(
+            horizontal: rs.width(16),
+            vertical: rs.height(4),
           ),
-        ),
-        subtitle: Text(
-          'Tap to modify dates or target percentage',
-          style: TextStyle(
-            fontSize: rs.font(11),
-            color: theme.textTheme.bodySmall?.color,
+          leading: Icon(
+            Icons.tune_rounded,
+            color: theme.colorScheme.primary,
+            size: rs.scale(20),
           ),
-        ),
-        children: [
-          Padding(
-            padding: EdgeInsets.only(
-              left: rs.width(16),
-              right: rs.width(16),
-              bottom: rs.height(16),
+          title: Text(
+            'Semester Parameters',
+            style: TextStyle(
+              fontSize: rs.font(15),
+              fontWeight: FontWeight.bold,
             ),
-            child: Form(
-              key: _formKey,
+          ),
+          subtitle: Text(
+            '${DateFormat.yMMMd().format(effectiveStartDate)} – ${DateFormat.yMMMd().format(effectiveEndDate)}\n${effectiveTarget.round()}% Target',
+            style: TextStyle(
+              fontSize: rs.font(12),
+              color: theme.textTheme.bodySmall?.color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          children: [
+            Padding(
+              padding: EdgeInsets.only(
+                left: rs.width(16),
+                right: rs.width(16),
+                bottom: rs.height(16),
+              ),
               child: Column(
                 children: [
                   Row(
@@ -1349,85 +1380,60 @@ class _SemesterScreenState extends State<SemesterScreen> {
                       Expanded(
                         child: _buildDatePickerField(
                           title: 'Start Date',
-                          date: _startDate,
-                          onPressed: _startDate == null
-                              ? null
-                              : () async {
-                                  final date = await showDatePicker(
-                                    context: context,
-                                    initialDate: _startDate!,
-                                    firstDate: DateTime(2000),
-                                    lastDate: _endDate != null
-                                        ? (_endDate!
-                                                  .subtract(
-                                                    const Duration(days: 1),
-                                                  )
-                                                  .isBefore(DateTime(2000))
-                                              ? DateTime(2000)
-                                              : _endDate!.subtract(
-                                                  const Duration(days: 1),
-                                                ))
-                                        : DateTime(2100),
-                                    helpText: 'Select Start Date',
-                                  );
-                                  if (date != null) {
-                                    final bool willBeNull = _endDate == null || !_endDate!.isAfter(date);
-                                    setState(() {
-                                      _startDate = date;
-                                      if (_endDate != null &&
-                                          !_endDate!.isAfter(date)) {
-                                        _endDate = null;
-                                      }
-                                    });
-                                    _updateSemester();
-                                    if (willBeNull && mounted) {
-                                      final firstAllowed = date.add(
-                                        const Duration(days: 1),
-                                      );
-                                      final endDate = await showDatePicker(
-                                        context: context,
-                                        initialDate: firstAllowed,
-                                        firstDate: firstAllowed,
-                                        lastDate: DateTime(2100),
-                                        helpText: 'Select End Date',
-                                      );
-                                      if (endDate != null) {
-                                        setState(() {
-                                          _endDate = endDate;
-                                        });
-                                        _updateSemester();
-                                      }
-                                    }
-                                  }
-                                },
+                          date: effectiveStartDate,
+                          onPressed: () async {
+                            final maxStart = effectiveEndDate.subtract(const Duration(days: 1));
+                            final initial = effectiveStartDate.isBefore(maxStart)
+                                ? effectiveStartDate
+                                : maxStart;
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: initial,
+                              firstDate: DateTime(2000),
+                              lastDate: maxStart.isBefore(DateTime(2000)) ? DateTime(2000) : maxStart,
+                              helpText: 'Select Start Date',
+                            );
+                            if (date != null) {
+                              setState(() {
+                                _startDate = date;
+                              });
+                              _saveSemesterParameters(
+                                startDate: date,
+                                endDate: effectiveEndDate,
+                                targetPercentage: effectiveTarget,
+                              );
+                            }
+                          },
                         ),
                       ),
                       SizedBox(width: rs.width(12)),
                       Expanded(
                         child: _buildDatePickerField(
                           title: 'End Date',
-                          date: _endDate,
-                          onPressed: _endDate == null
-                              ? null
-                              : () async {
-                                  final date = await showDatePicker(
-                                    context: context,
-                                    initialDate: _endDate!,
-                                    firstDate: _startDate != null
-                                        ? _startDate!.add(
-                                            const Duration(days: 1),
-                                          )
-                                        : DateTime(2000),
-                                    lastDate: DateTime(2100),
-                                    helpText: 'Select End Date',
-                                  );
-                                  if (date != null) {
-                                    setState(() {
-                                      _endDate = date;
-                                    });
-                                    _updateSemester();
-                                  }
-                                },
+                          date: effectiveEndDate,
+                          onPressed: () async {
+                            final firstAllowed = effectiveStartDate.add(const Duration(days: 1));
+                            final initial = effectiveEndDate.isAfter(firstAllowed)
+                                ? effectiveEndDate
+                                : firstAllowed;
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: initial,
+                              firstDate: firstAllowed,
+                              lastDate: DateTime(2100),
+                              helpText: 'Select End Date',
+                            );
+                            if (date != null) {
+                              setState(() {
+                                _endDate = date;
+                              });
+                              _saveSemesterParameters(
+                                startDate: effectiveStartDate,
+                                endDate: date,
+                                targetPercentage: effectiveTarget,
+                              );
+                            }
+                          },
                         ),
                       ),
                     ],
@@ -1481,7 +1487,7 @@ class _SemesterScreenState extends State<SemesterScreen> {
                                 borderRadius: BorderRadius.circular(rs.scale(12)),
                               ),
                               child: Text(
-                                '${(_targetPercentage ?? 75).round()}%',
+                                '${effectiveTarget.round()}%',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: rs.font(14),
@@ -1492,20 +1498,24 @@ class _SemesterScreenState extends State<SemesterScreen> {
                           ],
                         ),
                         Slider(
-                          value: (_targetPercentage ?? 75).clamp(50.0, 100.0),
+                          value: effectiveTarget.clamp(50.0, 100.0),
                           min: 50,
                           max: 100,
                           divisions: 50,
-                          label: '${(_targetPercentage ?? 75).round()}%',
+                          label: '${effectiveTarget.round()}%',
                           onChanged: (val) {
                             final newTarget = val.roundToDouble();
-                            if (newTarget != _targetPercentage) {
+                            if (newTarget != effectiveTarget) {
                               HapticFeedback.vibrate();
                               setState(() {
                                 _targetPercentage = newTarget;
                                 _targetPercentageController.text = newTarget.toStringAsFixed(0);
                               });
-                              _updateSemester();
+                              _saveSemesterParameters(
+                                startDate: effectiveStartDate,
+                                endDate: effectiveEndDate,
+                                targetPercentage: newTarget,
+                              );
                             }
                           },
                         ),
@@ -1515,12 +1525,11 @@ class _SemesterScreenState extends State<SemesterScreen> {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildMetricsGrid({
     required Semester semester,

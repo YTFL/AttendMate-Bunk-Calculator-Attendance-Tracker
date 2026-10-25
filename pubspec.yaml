@@ -81,9 +81,9 @@ flutter:
   uses-material-design: true
 
   assets:
-    - git_public/RELEASE_NOTES.md
-    - git_public/privacy.md
-    - git_public/terms.md
+    - RELEASE_NOTES.md
+    - docs/privacy.md
+    - docs/terms.md
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

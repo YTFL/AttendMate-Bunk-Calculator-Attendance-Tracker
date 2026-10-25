@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../models/app_update_model.dart';
+import '../../utils/markdown_link_helper.dart';
 
 class UpdateFullScreen extends StatelessWidget {
   final AppUpdate update;
@@ -239,6 +240,9 @@ class _UpdateContent extends StatelessWidget {
                       fontFamily: 'monospace',
                     ),
               ),
+              onTapLink: (text, href, title) {
+                MarkdownLinkHelper.openLink(context, href);
+              },
             ),
           ),
         ],

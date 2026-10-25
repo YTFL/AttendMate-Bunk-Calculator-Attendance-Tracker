@@ -1192,6 +1192,12 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => _toggleDevModeCalendarSync(!_devModeCalendarSyncEnabled),
           ),
           ListTile(
+            leading: const Icon(Icons.cleaning_services_rounded, color: Colors.red),
+            title: const Text('Prune All AttendMate Calendar Events'),
+            subtitle: const Text('Deep scan & purge all ghost/imported events from Google & Device calendars'),
+            onTap: _pruneAllAttendMateCalendarEvents,
+          ),
+          ListTile(
             leading: const Icon(Icons.meeting_room_outlined, color: Colors.red),
             title: const Text('Trigger Test Pre-Class Notification (15s)'),
             subtitle: const Text('Schedules a 5-min location reminder for today\'s next class in 15 seconds'),
@@ -1298,6 +1304,119 @@ class _MoreScreenState extends State<MoreScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _pruneAllAttendMateCalendarEvents() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.cleaning_services_rounded, color: Colors.red, size: 36),
+        title: const Text('Prune AttendMate Calendar Events'),
+        content: const Text(
+          'This will perform a deep scan across both Google Calendar and all writable Device Calendars strictly for events created by AttendMate ("Imported from AttendMate", "Created with AttendMate", or ending with "@attendmate.app") and permanently delete them.\n\n'
+          'Your personal calendar entries, work meetings, and non-AttendMate events will not be touched.\n\n'
+          'Use this to purge all ghost events, duplicates, or obsolete schedule entries.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Prune All Events'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(
+                child: Text('Scanning and pruning AttendMate events...'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    int googlePruned = 0;
+    int systemPruned = 0;
+    String? errorMsg;
+
+    try {
+      // 1. Prune Google Calendar events
+      try {
+        googlePruned = await CalendarService.pruneAllAttendMateEvents();
+      } catch (e) {
+        debugPrint('Google Calendar prune error: $e');
+        errorMsg = 'Google Calendar error: $e';
+      }
+
+      // 2. Prune System / Device Calendar events
+      try {
+        systemPruned = await SystemCalendarService.pruneAllAttendMateEvents();
+      } catch (e) {
+        debugPrint('System Calendar prune error: $e');
+        errorMsg = errorMsg != null
+            ? '$errorMsg\nDevice Calendar error: $e'
+            : 'Device Calendar error: $e';
+      }
+    } finally {
+      if (mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
+      }
+    }
+
+    if (!mounted) return;
+
+    if (errorMsg != null && googlePruned == 0 && systemPruned == 0) {
+      SnackbarUtils.showErrorSnackBar(context, 'Pruning failed: $errorMsg');
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 36),
+          title: const Text('Calendar Pruning Complete'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('• Google Calendar events pruned: $googlePruned', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text('• Device Calendar events pruned: $systemPruned', style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (errorMsg != null) ...[
+                const SizedBox(height: 12),
+                Text('Warnings / Issues:\n$errorMsg', style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+              const SizedBox(height: 16),
+              const Text(
+                'Note: For Google Calendar, deleted events are moved to your online Trash (Bin). Open Google Calendar on the web (calendar.google.com) > Settings > Trash > "Empty Trash" to immediately purge tombstones from external sync adapters.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildSectionHeader(String title, ColorScheme colorScheme) {
