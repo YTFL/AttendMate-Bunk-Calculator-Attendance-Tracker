@@ -293,6 +293,9 @@ class TimeSlot {
   final String? room;
   final String? block;
 
+  /// A one-off class added to a single date, on top of the weekly timetable.
+  final bool isExtra;
+
   TimeSlot({
     required this.day,
     required this.startTime,
@@ -303,6 +306,7 @@ class TimeSlot {
     this.locationId,
     this.room,
     this.block,
+    this.isExtra = false,
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
@@ -327,6 +331,7 @@ class TimeSlot {
       locationId: json['locationId'] as String?,
       room: json['room'] as String?,
       block: json['block'] as String?,
+      isExtra: json['isExtra'] as bool? ?? false,
     );
   }
 
@@ -340,6 +345,7 @@ class TimeSlot {
         if (locationId != null) 'locationId': locationId,
         if (room != null) 'room': room,
         if (block != null) 'block': block,
+        if (isExtra) 'isExtra': true,
       };
 
   TimeSlot copyWith({
@@ -352,6 +358,7 @@ class TimeSlot {
     String? locationId,
     String? room,
     String? block,
+    bool? isExtra,
     bool clearSpecificDate = false,
     bool clearEffectiveFrom = false,
     bool clearEffectiveUntil = false,
@@ -373,6 +380,7 @@ class TimeSlot {
       locationId: clearLocation ? null : (locationId ?? this.locationId),
       room: clearLocation ? null : (room ?? this.room),
       block: clearLocation ? null : (block ?? this.block),
+      isExtra: isExtra ?? this.isExtra,
     );
   }
 
@@ -384,6 +392,14 @@ class TimeSlot {
   }
 
   bool get isSpecialClass => specificDate != null;
+
+  int get startMinutes => startTime.hour * 60 + startTime.minute;
+
+  int get endMinutes => endTime.hour * 60 + endTime.minute;
+
+  bool overlapsMinutes(int start, int end) {
+    return start < endMinutes && end > startMinutes;
+  }
 
   bool occursOnDate(DateTime date) {
     final normalizedDate = normalizeDate(date) ?? date;
@@ -501,6 +517,18 @@ DateTime? normalizeDate(DateTime? date) {
     return null;
   }
   return DateTime(date.year, date.month, date.day);
+}
+
+/// Keeps one-off extra classes when a weekly timetable is replaced or edited.
+List<TimeSlot> schedulePreservingExtraClasses({
+  required List<TimeSlot> replacement,
+  required List<TimeSlot> existing,
+}) {
+  final replacementKeys = replacement.map((slot) => slot.slotKey).toSet();
+  final keptExtras = existing.where(
+    (slot) => slot.isExtra && !replacementKeys.contains(slot.slotKey),
+  );
+  return [...replacement, ...keptExtras];
 }
 
 extension SubjectSearchExtension on Subject {

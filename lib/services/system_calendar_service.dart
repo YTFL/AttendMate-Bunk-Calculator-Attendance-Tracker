@@ -218,11 +218,19 @@ class SystemCalendarService {
             if (currentDate.weekday == targetWeekday) {
               final dateOnly = DateTime(currentDate.year, currentDate.month, currentDate.day);
 
-              // Check if date falls in slot's effective dates range
+              // Check if date falls in slot's effective dates range.
+              // One-off slots (special classes and extra classes) occur on a single date.
               final slotFrom = slot.effectiveFrom;
               final slotUntil = slot.effectiveUntil;
+              final specificDate = slot.specificDate;
 
               bool withinValidity = true;
+              if (specificDate != null &&
+                  (dateOnly.year != specificDate.year ||
+                      dateOnly.month != specificDate.month ||
+                      dateOnly.day != specificDate.day)) {
+                withinValidity = false;
+              }
               if (slotFrom != null && dateOnly.isBefore(DateTime(slotFrom.year, slotFrom.month, slotFrom.day))) {
                 withinValidity = false;
               }

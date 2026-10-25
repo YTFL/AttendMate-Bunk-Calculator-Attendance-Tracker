@@ -16,6 +16,7 @@ import '../attendance/attendance_provider.dart';
 import '../calendar/calendar_utils.dart';
 import '../location/location_model.dart';
 import '../../services/database_service.dart';
+import 'add_extra_class_sheet.dart';
 
 typedef DayChangedCallback = void Function(String title, bool canGoPrevious, bool canGoNext);
 
@@ -647,21 +648,63 @@ class TodayScheduleState extends State<TodaySchedule> {
                     ),
                     SizedBox(height: rs.height(8)),
                     Text(
-                      'There are no classes scheduled for this day of the week.',
+                      semesterEnded
+                          ? 'There are no classes scheduled for this day of the week.'
+                          : 'No classes on the weekly timetable. Add an extra class if a makeup lecture was scheduled.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
+                    if (!semesterEnded) ...[
+                      SizedBox(height: rs.height(16)),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size(0, rs.height(44)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(12)),
+                          ),
+                        ),
+                        onPressed: () => showAddExtraClassSheet(context: context, date: targetDate),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text(
+                          'Add Extra Class',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           )
-        else
+        else ...[
           Expanded(
             child: ListView.builder(
               padding: rs.insetsAll(8),
-              itemCount: displayClasses.length,
+              itemCount: displayClasses.length + (!semesterEnded ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == displayClasses.length) {
+                  return Padding(
+                    padding: rs.insetsSymmetric(horizontal: 8, vertical: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: Size(0, rs.height(44)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(rs.scale(12)),
+                          ),
+                        ),
+                        onPressed: () => showAddExtraClassSheet(context: context, date: targetDate),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text(
+                          'Add Extra Class',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 final subject = displayClasses[index];
                 final timeSlot = subject.schedule.first;
                 final slotKey = timeSlot.slotKey;
@@ -786,17 +829,29 @@ class TodayScheduleState extends State<TodaySchedule> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(() {
-                              final effectiveLocId = subject.getEffectiveLocationId(timeSlot);
-                              final locConfig = effectiveLocId != null ? _locationById[effectiveLocId] : null;
-                              // Prefer slot/subject plain-text room; fall back to LocationConfig name
-                              final room = subject.getEffectiveRoom(timeSlot) ?? locConfig?.name;
-                              final block = subject.getEffectiveBlock(timeSlot) ?? locConfig?.block;
-                              final roomStr = room != null
-                                  ? ' • $room${block != null && block.isNotEmpty ? " ($block)" : ""}'
-                                  : '';
-                              return timeSlot.formatTimeRange(timeFormatProvider.timeFormat) + roomStr;
-                            }()),
+                            Row(
+                              children: [
+                                if (timeSlot.isExtra) ...[
+                                  const ExtraClassBadge(),
+                                  SizedBox(width: rs.width(6)),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    () {
+                                      final effectiveLocId = subject.getEffectiveLocationId(timeSlot);
+                                      final locConfig = effectiveLocId != null ? _locationById[effectiveLocId] : null;
+                                      final room = subject.getEffectiveRoom(timeSlot) ?? locConfig?.name;
+                                      final block = subject.getEffectiveBlock(timeSlot) ?? locConfig?.block;
+                                      final roomStr = room != null
+                                          ? ' • $room${block != null && block.isNotEmpty ? " ($block)" : ""}'
+                                          : '';
+                                      return timeSlot.formatTimeRange(timeFormatProvider.timeFormat) + roomStr;
+                                    }(),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                             if (isLocked && overrideDate != null)
                               Padding(
                                 padding: EdgeInsets.only(top: rs.height(2)),
@@ -830,7 +885,29 @@ class TodayScheduleState extends State<TodaySchedule> {
                             ),
                           ],
                         ),
-                        trailing: trailingWidget,
+                        trailing: timeSlot.isExtra && !semesterEnded && !isLocked
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    tooltip: 'Remove extra class',
+                                    color: Colors.red.shade400,
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () {
+                                      confirmAndRemoveExtraClass(
+                                        context: context,
+                                        subjectId: subject.id,
+                                        subjectName: subject.name,
+                                        date: targetDate,
+                                        slotKey: slotKey,
+                                      );
+                                    },
+                                  ),
+                                  ?trailingWidget,
+                                ],
+                              )
+                            : trailingWidget,
                       ),
                     ),
                   ),
@@ -888,6 +965,7 @@ class TodayScheduleState extends State<TodaySchedule> {
               },
             ),
           ),
+        ],
       ],
     );
   }

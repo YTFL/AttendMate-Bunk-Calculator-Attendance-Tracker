@@ -225,6 +225,11 @@ Bulk actions are available for a full day:
 - **Mark Holiday**
 - **Skip Day**
 - **Mark Today as Present**
+
+---
+
+## Extra / Makeup Classes
+Tap **Add Extra Class** on Today's schedule or inside a calendar day to add a one-off lecture for that date. Pick the subject and the start and end time. The class shows up with an **Extra** badge, can be marked like any other class, and counts toward that subject's attendance. Removing it does not change the weekly timetable.
 ''',
     ),
     _GuideSection(
