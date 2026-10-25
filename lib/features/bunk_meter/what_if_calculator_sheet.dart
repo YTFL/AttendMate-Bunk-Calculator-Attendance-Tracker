@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/database_service.dart';
 import '../../utils/responsive_scale.dart';
@@ -32,10 +33,16 @@ class WhatIfCalculatorSheet extends StatefulWidget {
 class _RemainingClassesResult {
   final int remainingClasses;
   final int leaveMissedClasses;
+  final int futureAttendedClasses;
+  final int futureMissedClasses;
+  final int futureCancelledClasses;
 
   const _RemainingClassesResult({
     required this.remainingClasses,
     required this.leaveMissedClasses,
+    this.futureAttendedClasses = 0,
+    this.futureMissedClasses = 0,
+    this.futureCancelledClasses = 0,
   });
 }
 
@@ -46,6 +53,7 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
   bool _isMaxActive = false;
   DateTime? _selectedTargetDate;
   bool _considerPlannedLeave = false;
+  bool _considerFutureMarked = false;
   List<PlannedLeave> _plannedLeaves = [];
 
   final GlobalKey _bunkCalculatorCardKey = GlobalKey();
@@ -56,6 +64,7 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     _selectedSubjectId = widget.initialSubjectId ?? 'all';
     _selectedTargetDate = widget.semester.endDate;
     _loadPlannedLeaves();
+    _loadConsiderFutureMarked();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -63,6 +72,29 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
         tutorialController.addListener(_onTutorialStepChanged);
       }
     });
+  }
+
+  Future<void> _loadConsiderFutureMarked() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final val = prefs.getBool('bunk_calc_consider_future_marked') ?? false;
+      if (mounted) {
+        setState(() {
+          _considerFutureMarked = val;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading consider future marked pref: $e');
+    }
+  }
+
+  Future<void> _saveConsiderFutureMarkedPref(bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('bunk_calc_consider_future_marked', value);
+    } catch (e) {
+      debugPrint('Error saving consider future marked pref: $e');
+    }
   }
 
   Future<void> _loadPlannedLeaves() async {
@@ -156,7 +188,13 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     return baselineAttended + attendedPostOverride;
   }
 
-  _RemainingClassesResult _countClassesUpToDate(Subject subject, DateTime targetDate, bool considerLeave) {
+  _RemainingClassesResult _countClassesUpToDate(
+    Subject subject,
+    DateTime targetDate,
+    bool considerLeave,
+    bool considerFutureMarked,
+    List<Attendance> subjectRecords,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final horizonDate = targetDate.isAfter(widget.semester.endDate) ? widget.semester.endDate : targetDate;
@@ -187,8 +225,24 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
           }).toList()
         : const <PlannedLeave>[];
 
+    // Pre-index explicit attendance records for this subject if considering future marked classes
+    final Map<String, AttendanceStatus> futureRecordLookup = {};
+    if (considerFutureMarked) {
+      for (final r in subjectRecords) {
+        final normDate = DateTime(r.date.year, r.date.month, r.date.day);
+        if (normDate.isBefore(startDay) || normDate.isAfter(horizonDate)) continue;
+        if (r.slotKey != null && r.slotKey!.isNotEmpty) {
+          futureRecordLookup['${normDate.year}-${normDate.month}-${normDate.day}_${r.slotKey}'] = r.status;
+        }
+        futureRecordLookup['${normDate.year}-${normDate.month}-${normDate.day}'] = r.status;
+      }
+    }
+
     int remaining = 0;
     int leaveMissed = 0;
+    int futureAttended = 0;
+    int futureMissed = 0;
+    int futureCancelled = 0;
 
     DateTime cur = startDay;
     while (!cur.isAfter(horizonDay)) {
@@ -199,13 +253,30 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
 
           if (slotStart.isAfter(horizonDate)) continue;
 
-          final isCoveredByLeave = activeLeaves.any((leave) =>
-            slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate));
+          AttendanceStatus? markedStatus;
+          if (considerFutureMarked) {
+            final dateKeyWithSlot = '${cur.year}-${cur.month}-${cur.day}_${slot.slotKey}';
+            final dateKeyNoSlot = '${cur.year}-${cur.month}-${cur.day}';
+            markedStatus = futureRecordLookup[dateKeyWithSlot] ?? futureRecordLookup[dateKeyNoSlot];
+          }
 
-          if (isCoveredByLeave) {
-            leaveMissed++;
+          if (markedStatus != null) {
+            if (markedStatus == AttendanceStatus.attended) {
+              futureAttended++;
+            } else if (markedStatus == AttendanceStatus.absent || markedStatus == AttendanceStatus.plannedAbsent) {
+              futureMissed++;
+            } else if (markedStatus == AttendanceStatus.cancelled) {
+              futureCancelled++;
+            }
           } else {
-            remaining++;
+            final isCoveredByLeave = activeLeaves.any((leave) =>
+              slotStart.isBefore(leave.endDate) && slotEnd.isAfter(leave.startDate));
+
+            if (isCoveredByLeave) {
+              leaveMissed++;
+            } else {
+              remaining++;
+            }
           }
         }
       }
@@ -215,6 +286,9 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     return _RemainingClassesResult(
       remainingClasses: remaining,
       leaveMissedClasses: leaveMissed,
+      futureAttendedClasses: futureAttended,
+      futureMissedClasses: futureMissed,
+      futureCancelledClasses: futureCancelled,
     );
   }
 
@@ -241,6 +315,9 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     int currentHeld = 0;
     int leaveMissedTotal = 0;
     int totalRemaining = 0;
+    int futureAttendedTotal = 0;
+    int futureMissedTotal = 0;
+    int futureCancelledTotal = 0;
 
     final targetHorizon = _selectedTargetDate ?? widget.semester.endDate;
     Subject? selectedSubject;
@@ -261,9 +338,18 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
           endDate: endDate,
         );
 
-        final res = _countClassesUpToDate(subject, targetHorizon, _considerPlannedLeave);
+        final res = _countClassesUpToDate(
+          subject,
+          targetHorizon,
+          _considerPlannedLeave,
+          _considerFutureMarked,
+          records,
+        );
         totalRemaining += res.remainingClasses;
         leaveMissedTotal += res.leaveMissedClasses;
+        futureAttendedTotal += res.futureAttendedClasses;
+        futureMissedTotal += res.futureMissedClasses;
+        futureCancelledTotal += res.futureCancelledClasses;
       }
     } else {
       selectedSubject = widget.subjects.firstWhere(
@@ -284,9 +370,18 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
         endDate: endDate,
       );
 
-      final res = _countClassesUpToDate(selectedSubject, targetHorizon, _considerPlannedLeave);
+      final res = _countClassesUpToDate(
+        selectedSubject,
+        targetHorizon,
+        _considerPlannedLeave,
+        _considerFutureMarked,
+        records,
+      );
       totalRemaining = res.remainingClasses;
       leaveMissedTotal = res.leaveMissedClasses;
+      futureAttendedTotal += res.futureAttendedClasses;
+      futureMissedTotal += res.futureMissedClasses;
+      futureCancelledTotal += res.futureCancelledClasses;
     }
 
     final double targetPercentage = selectedSubject != null
@@ -295,10 +390,11 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     final double targetRatio = targetPercentage / 100.0;
 
     // Target breakdown calculations up to selected horizon
-    final int effectiveCurrentHeld = currentHeld + leaveMissedTotal;
+    final int effectiveCurrentAttended = currentAttended + futureAttendedTotal;
+    final int effectiveCurrentHeld = currentHeld + futureAttendedTotal + futureMissedTotal + leaveMissedTotal;
     final int endHorizonTotalHeld = effectiveCurrentHeld + totalRemaining;
     final int targetAttendedNeeded = (targetRatio * endHorizonTotalHeld).ceil();
-    final int mustAttend = (targetAttendedNeeded - currentAttended).clamp(0, totalRemaining);
+    final int mustAttend = (targetAttendedNeeded - effectiveCurrentAttended).clamp(0, totalRemaining);
     final int canBunk = (totalRemaining - mustAttend).clamp(0, totalRemaining);
 
     // Auto-adjust values if MAX is active or if total simulated exceeds total remaining
@@ -313,10 +409,10 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
     final bool canIncrementMore = (_attendNext + _bunkNext) < totalRemaining;
 
     // Simulated totals
-    final int simulatedAttended = currentAttended + _attendNext;
+    final int simulatedAttended = effectiveCurrentAttended + _attendNext;
     final int simulatedHeld = effectiveCurrentHeld + _attendNext + _bunkNext;
 
-    final double currentRatio = effectiveCurrentHeld > 0 ? (currentAttended / effectiveCurrentHeld) * 100 : 100.0;
+    final double currentRatio = effectiveCurrentHeld > 0 ? (effectiveCurrentAttended / effectiveCurrentHeld) * 100 : 100.0;
     final double simulatedRatio = simulatedHeld > 0 ? (simulatedAttended / simulatedHeld) * 100 : 100.0;
     final double delta = simulatedRatio - currentRatio;
 
@@ -572,55 +668,58 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
                   ],
                 ),
 
-                SizedBox(height: rs.height(8)),
+                SizedBox(height: rs.height(10)),
 
-                // Consider Planned Leave Checkbox
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _considerPlannedLeave = !_considerPlannedLeave;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(rs.scale(10)),
-                  child: Padding(
-                    padding: rs.insetsSymmetric(vertical: 2, horizontal: 2),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: rs.scale(22),
-                          height: rs.scale(22),
-                          child: Checkbox(
-                            value: _considerPlannedLeave,
-                            onChanged: (val) {
-                              setState(() {
-                                _considerPlannedLeave = val ?? false;
-                              });
-                            },
-                          ),
-                        ),
-                        SizedBox(width: rs.width(8)),
-                        Expanded(
-                          child: Text(
-                            'Consider Planned Leaves',
-                            style: TextStyle(
-                              fontSize: rs.font(13),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
+                // Planning Options Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildPlanningOptionToggle(
+                        context: context,
+                        rs: rs,
+                        isDarkMode: isDarkMode,
+                        icon: Icons.event_busy_outlined,
+                        label: 'Planned Leaves',
+                        isSelected: _considerPlannedLeave,
+                        onChanged: (val) {
+                          setState(() {
+                            _considerPlannedLeave = val;
+                          });
+                        },
+                      ),
                     ),
-                  ),
+                    SizedBox(width: rs.width(8)),
+                    Expanded(
+                      child: _buildPlanningOptionToggle(
+                        context: context,
+                        rs: rs,
+                        isDarkMode: isDarkMode,
+                        icon: Icons.event_repeat_outlined,
+                        label: 'Future Marked',
+                        isSelected: _considerFutureMarked,
+                        onChanged: (val) {
+                          setState(() {
+                            _considerFutureMarked = val;
+                            _saveConsiderFutureMarkedPref(_considerFutureMarked);
+                            if (!_isMaxActive) {
+                              _attendNext = 0;
+                              _bunkNext = 0;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
                 ),
 
-                SizedBox(height: rs.height(14)),
+                SizedBox(height: rs.height(12)),
 
                 // Target Horizon Breakdown Card
                 Container(
-                  padding: rs.insetsAll(12),
+                  padding: rs.insetsAll(14),
                   decoration: BoxDecoration(
                     color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(rs.scale(12)),
+                    borderRadius: BorderRadius.circular(rs.scale(14)),
                     border: Border.all(
                       color: isDarkMode ? Colors.white12 : Colors.grey.shade300,
                     ),
@@ -628,64 +727,225 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Header Stat Row: Conducted & Remaining
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Flexible(
-                            child: Text(
-                              'Classes Conducted: $currentHeld',
-                              style: TextStyle(
-                                fontSize: rs.font(12),
-                                fontWeight: FontWeight.bold,
-                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.school_outlined,
+                                size: rs.scale(16),
+                                color: isDarkMode ? Colors.white60 : Colors.black54,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              SizedBox(width: rs.width(6)),
+                              Text(
+                                'Conducted: ',
+                                style: TextStyle(
+                                  fontSize: rs.font(12),
+                                  color: isDarkMode ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
+                              Text(
+                                '${currentHeld + futureAttendedTotal + futureMissedTotal}',
+                                style: TextStyle(
+                                  fontSize: rs.font(12.5),
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ],
                           ),
-                          SizedBox(width: rs.width(8)),
-                          Flexible(
-                            child: Text(
-                              'Remaining: $totalRemaining classes',
-                              style: TextStyle(
-                                fontSize: rs.font(12),
-                                fontWeight: FontWeight.bold,
-                                color: isDarkMode ? Colors.white70 : Colors.black87,
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.schedule_outlined,
+                                size: rs.scale(16),
+                                color: isDarkMode ? Colors.white60 : Colors.black54,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.end,
-                            ),
+                              SizedBox(width: rs.width(6)),
+                              Text(
+                                'Remaining: ',
+                                style: TextStyle(
+                                  fontSize: rs.font(12),
+                                  color: isDarkMode ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
+                              Text(
+                                '$totalRemaining',
+                                style: TextStyle(
+                                  fontSize: rs.font(12.5),
+                                  fontWeight: FontWeight.bold,
+                                  color: isDarkMode ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      if (_considerPlannedLeave && leaveMissedTotal > 0) ...[
-                        SizedBox(height: rs.height(2)),
-                        Text(
-                          'Includes $leaveMissedTotal planned leave class${leaveMissedTotal == 1 ? '' : 'es'} (counted as missed)',
-                          style: TextStyle(
-                            fontSize: rs.font(11),
-                            color: isDarkMode ? Colors.amber.shade300 : Colors.amber.shade900,
-                            fontWeight: FontWeight.w500,
+                      if (_considerFutureMarked && (futureAttendedTotal > 0 || futureMissedTotal > 0 || futureCancelledTotal > 0)) ...[
+                        SizedBox(height: rs.height(8)),
+                        Container(
+                          padding: rs.insetsSymmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: isDarkMode ? 0.14 : 0.08),
+                            borderRadius: BorderRadius.circular(rs.scale(8)),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: isDarkMode ? 0.35 : 0.25),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.event_repeat_rounded,
+                                size: rs.scale(15),
+                                color: theme.colorScheme.primary,
+                              ),
+                              SizedBox(width: rs.width(8)),
+                              Expanded(
+                                child: Text(
+                                  _buildFutureMarkedSummary(
+                                    futureAttendedTotal,
+                                    futureMissedTotal,
+                                    futureCancelledTotal,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: rs.font(11.5),
+                                    fontWeight: FontWeight.w500,
+                                    color: isDarkMode ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                      SizedBox(height: rs.height(4)),
-                      Row(
-                        children: [
-                          Text(
-                            'Must Attend: $mustAttend',
-                            style: TextStyle(
-                              fontSize: rs.font(12),
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade700,
+                      if (_considerPlannedLeave && leaveMissedTotal > 0) ...[
+                        SizedBox(height: rs.height(8)),
+                        Container(
+                          padding: rs.insetsSymmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: isDarkMode ? 0.14 : 0.08),
+                            borderRadius: BorderRadius.circular(rs.scale(8)),
+                            border: Border.all(
+                              color: Colors.amber.withValues(alpha: isDarkMode ? 0.35 : 0.25),
                             ),
                           ),
-                          SizedBox(width: rs.width(16)),
-                          Text(
-                            'Can Bunk: $canBunk',
-                            style: TextStyle(
-                              fontSize: rs.font(12),
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red.shade700,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.event_busy_rounded,
+                                size: rs.scale(15),
+                                color: isDarkMode ? Colors.amber.shade300 : Colors.amber.shade800,
+                              ),
+                              SizedBox(width: rs.width(8)),
+                              Expanded(
+                                child: Text(
+                                  'Includes $leaveMissedTotal planned leave class${leaveMissedTotal == 1 ? '' : 'es'} (counted as missed)',
+                                  style: TextStyle(
+                                    fontSize: rs.font(11.5),
+                                    fontWeight: FontWeight.w500,
+                                    color: isDarkMode ? Colors.amber.shade200 : Colors.amber.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: rs.height(10)),
+                      // Must Attend & Can Bunk Cards
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: rs.insetsSymmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: isDarkMode ? 0.14 : 0.08),
+                                borderRadius: BorderRadius.circular(rs.scale(10)),
+                                border: Border.all(
+                                  color: Colors.green.withValues(alpha: isDarkMode ? 0.35 : 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: rs.scale(18),
+                                    color: Colors.green.shade600,
+                                  ),
+                                  SizedBox(width: rs.width(8)),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Must Attend',
+                                          style: TextStyle(
+                                            fontSize: rs.font(11),
+                                            fontWeight: FontWeight.w500,
+                                            color: isDarkMode ? Colors.white60 : Colors.black54,
+                                          ),
+                                        ),
+                                        Text(
+                                          '$mustAttend classes',
+                                          style: TextStyle(
+                                            fontSize: rs.font(13),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: rs.width(8)),
+                          Expanded(
+                            child: Container(
+                              padding: rs.insetsSymmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: isDarkMode ? 0.14 : 0.08),
+                                borderRadius: BorderRadius.circular(rs.scale(10)),
+                                border: Border.all(
+                                  color: Colors.red.withValues(alpha: isDarkMode ? 0.35 : 0.25),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.cancel_outlined,
+                                    size: rs.scale(18),
+                                    color: Colors.red.shade400,
+                                  ),
+                                  SizedBox(width: rs.width(8)),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Can Bunk',
+                                          style: TextStyle(
+                                            fontSize: rs.font(11),
+                                            fontWeight: FontWeight.w500,
+                                            color: isDarkMode ? Colors.white60 : Colors.black54,
+                                          ),
+                                        ),
+                                        Text(
+                                          '$canBunk classes',
+                                          style: TextStyle(
+                                            fontSize: rs.font(13),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade400,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -917,6 +1177,74 @@ class _WhatIfCalculatorSheetState extends State<WhatIfCalculatorSheet> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  String _buildFutureMarkedSummary(int present, int absent, int cancelled) {
+    final total = present + absent + cancelled;
+    final parts = <String>[];
+    if (present > 0) parts.add('$present present');
+    if (absent > 0) parts.add('$absent absent');
+    if (cancelled > 0) parts.add('$cancelled holiday${cancelled == 1 ? '' : 's'}');
+    final details = parts.isNotEmpty ? ' (${parts.join(', ')})' : '';
+    return 'Includes $total pre-marked class${total == 1 ? '' : 'es'}$details';
+  }
+
+  Widget _buildPlanningOptionToggle({
+    required BuildContext context,
+    required ResponsiveScale rs,
+    required bool isDarkMode,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required ValueChanged<bool> onChanged,
+  }) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
+    return InkWell(
+      onTap: () => onChanged(!isSelected),
+      borderRadius: BorderRadius.circular(rs.scale(12)),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: rs.insetsSymmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primaryColor.withValues(alpha: isDarkMode ? 0.2 : 0.12)
+              : (isDarkMode ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(rs.scale(12)),
+          border: Border.all(
+            color: isSelected
+                ? primaryColor.withValues(alpha: isDarkMode ? 0.6 : 0.5)
+                : (isDarkMode ? Colors.white12 : Colors.grey.shade300),
+            width: isSelected ? 1.4 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.check_circle_rounded : icon,
+              size: rs.scale(16),
+              color: isSelected ? primaryColor : (isDarkMode ? Colors.white60 : Colors.black54),
+            ),
+            SizedBox(width: rs.width(8)),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: rs.font(12),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? (isDarkMode ? Colors.white : primaryColor)
+                      : (isDarkMode ? Colors.white70 : Colors.black87),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

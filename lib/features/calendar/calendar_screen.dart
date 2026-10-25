@@ -1074,9 +1074,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 }
                                 await attendanceProvider.markMultipleAttendance(records);
 
+                                final now = DateTime.now();
+                                final today = DateTime(now.year, now.month, now.day);
+                                final isFuture = pageDate.isAfter(today);
+
+                                String finalSuccessMessage = successMessage;
+                                if (isFuture) {
+                                  if (targetStatus == AttendanceStatus.attended) {
+                                    finalSuccessMessage = 'All classes pre-marked as present';
+                                  } else if (targetStatus == AttendanceStatus.absent) {
+                                    finalSuccessMessage = 'All classes pre-marked as absent';
+                                  } else if (targetStatus == AttendanceStatus.cancelled) {
+                                    finalSuccessMessage = 'Day pre-marked as holiday';
+                                  }
+                                }
+
                                 final message = lockedCount > 0
                                     ? 'Marked ${records.length} class(es). $lockedCount locked.'
-                                    : successMessage;
+                                    : finalSuccessMessage;
                                 scaffoldMessenger.showReplacingSnackBar(
                                   SnackBar(content: Text(message)),
                                 );
