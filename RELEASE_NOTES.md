@@ -42,6 +42,14 @@ AttendMate 2.3.0 introduces one-off extra / makeup class tracking directly into 
   - **Background Geofence Task Cleanup**: Manually marking attendance now automatically cancels pending 5-minute delayed background GPS check tasks (`geofenceCheckTask`), conserving battery and background location permissions.
   - **App Resume & Unmarking Synchronization**: Restored automatic notification rescheduling when attendance is unmarked before class ends, and synchronized schedules on app resume.
 
+- **Calendar Synchronization & Deletion Engine Overhaul**:
+  - **Eliminated Google Calendar API Quota Exhaustion**: Implemented local state tracking and 64-bit FNV-1a content hash diffing (`google_calendar_events` table in SQLite v9). Unchanged timetable slots are skipped completely (**0 API requests**). Modified slots update directly using their cached Google Event ID (**exactly 1 API request**), eliminating the previous 3-request penalty of blind import collisions.
+  - **Calm Auto-Sync Debouncing**: Extended the attendance auto-sync debounce window from 1.5 seconds to 8 seconds, enabling students to log all classes for the day without spamming the cloud API or tripping Google's burst write limits (`Calendar usage limits exceeded`).
+  - **Explicit Calendar Sync Opt-In**: Google Calendar synchronization now strictly defaults to off unless explicitly enabled, ensuring that signing into Google for Google Drive backups never triggers background calendar synchronization unintentionally.
+  - **Guaranteed Local & System Calendar Deletion**: Fixed an issue where disabling Device Calendar sync or switching calendar targets bypassed event deletion in debug/testing builds due to a missing force flag. Introduced two-tier guaranteed cleanup: deletes tracked SQLite records and directly inspects the device calendar (`plugin.listEvents`) to cleanly purge all events stamped with AttendMate metadata.
+  - **Resolved Duplicate Calendar Entries**: Added execution mutexes (`_isSyncInProgress`) across both Google and Device calendar sync routines to eliminate race conditions. Added a mutual exclusivity warning banner in Calendar Sync settings when both Google REST API sync and Device Calendar sync target the same Google account.
+  - **Boundary-Free Deletion & Pagination**: Removed restrictive semester date range filters on recurring master events and added complete pagination (`pageToken`) loops across Google Calendar queries, ensuring shifts to semester start/end dates never leave orphaned calendar entries behind.
+
 ---
 
 1. Download **AttendMate-v2.3.0.apk**

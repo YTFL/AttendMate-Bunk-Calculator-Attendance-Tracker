@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - In Development
+
+### Added
+- **One-Day Extra / Makeup Classes**: Add and track one-off classes for any date without modifying recurring weekly timetables.
+- **Pre-Marked Future Lectures in Bunk Calculator**: Factor future marked attendance and holidays directly into What-If calculations and safe bunk projections.
+- **Differential Google Calendar Sync & Hash Caching**: Added google_calendar_events table in SQLite with 64-bit FNV-1a content hashing. Unchanged slots make 0 API requests; modified slots update directly using cached IDs.
+
+### Fixed
+- **Google Calendar API Quota Exhaustion**: Eliminated the 3-request penalty of blind import collisions by maintaining local event mapping and direct updates.
+- **Device Calendar Deletion Bypass**: Added force: true to Device Calendar toggle-off routines and two-tier cleanup (SQLite + direct calendar scan) to guarantee all created calendar entries are deleted.
+- **Duplicate Calendar Entries**: Added sync mutexes (_isSyncInProgress) and dual-sync warnings when Google REST API and Device Calendar target the same account.
+- **Orphaned Recurring Events**: Removed flawed semester date bounding in deletion queries and added pagination loops (pageToken) to safely delete series when semester boundaries shift.
+
+---
+
 ## [2.2.0] - 2026-09-11
 
 ### Added

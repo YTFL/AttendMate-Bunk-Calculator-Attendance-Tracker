@@ -204,6 +204,7 @@ class BackupService {
     final locations = await db.query('locations');
     final plannedLeaves = await db.query('planned_leaves');
     final systemCalendarEvents = await db.query('system_calendar_events');
+    final googleCalendarEvents = await db.query('google_calendar_events');
     final appUpdates = await db.query('app_updates');
 
     // Collect SharedPreferences settings
@@ -228,6 +229,7 @@ class BackupService {
         'locations': locations,
         'planned_leaves': plannedLeaves,
         'system_calendar_events': systemCalendarEvents,
+        'google_calendar_events': googleCalendarEvents,
         'app_updates': appUpdates,
       },
       'preferences': preferencesMap,
@@ -544,6 +546,7 @@ class BackupService {
       final locations = (dbMap['locations'] as List? ?? []).cast<Map<String, dynamic>>();
       final plannedLeaves = (dbMap['planned_leaves'] as List? ?? []).cast<Map<String, dynamic>>();
       final systemCalendarEvents = (dbMap['system_calendar_events'] as List? ?? []).cast<Map<String, dynamic>>();
+      final googleCalendarEvents = (dbMap['google_calendar_events'] as List? ?? []).cast<Map<String, dynamic>>();
       final appUpdates = (dbMap['app_updates'] as List? ?? []).cast<Map<String, dynamic>>();
 
       // Execute atomic transaction for database restoration
@@ -554,6 +557,7 @@ class BackupService {
         await txn.delete('locations');
         await txn.delete('planned_leaves');
         await txn.delete('system_calendar_events');
+        await txn.delete('google_calendar_events');
         await txn.delete('app_updates');
 
         for (final row in subjects) {
@@ -573,6 +577,9 @@ class BackupService {
         }
         for (final row in systemCalendarEvents) {
           await txn.insert('system_calendar_events', row, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        for (final row in googleCalendarEvents) {
+          await txn.insert('google_calendar_events', row, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         for (final row in appUpdates) {
           await txn.insert('app_updates', row, conflictAlgorithm: ConflictAlgorithm.replace);

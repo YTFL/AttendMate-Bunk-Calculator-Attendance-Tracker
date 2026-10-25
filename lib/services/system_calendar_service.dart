@@ -7,6 +7,9 @@ import '../features/attendance/attendance_model.dart';
 import 'database_service.dart';
 
 class SystemCalendarService {
+  /// Concurrency mutex to prevent parallel overlapping sync cycles
+  static bool _isSyncInProgress = false;
+
   /// Checks and requests permissions to read/write device calendars.
   static Future<bool> checkOrRequestPermissions() async {
     final plugin = DeviceCalendar.instance;
@@ -74,7 +77,9 @@ class SystemCalendarService {
   }
 
   /// Deletes all events synced by AttendMate from the system calendar and purges SQLite mappings.
-  static Future<void> deleteSyncedEvents({bool force = false}) async {
+  /// Employs a two-tier cleanup: deletes mapped SQLite entries and inspects the device calendar
+  /// directly to ensure zero orphaned events remain.
+  static Future<void> deleteSyncedEvents({bool force = false, String? calendarId}) async {
     try {
       if (kDebugMode && !force) {
         final prefs = await SharedPreferences.getInstance();
@@ -84,20 +89,67 @@ class SystemCalendarService {
           return;
         }
       }
+
+      final hasPerm = await checkOrRequestPermissions();
+      if (!hasPerm) {
+        debugPrint('System Calendar delete skipped: calendar permissions not granted.');
+        return;
+      }
+
       final plugin = DeviceCalendar.instance;
       final db = DatabaseService();
-      final events = await db.getAllSystemCalendarEvents();
+      final Set<String> deletedEventIds = {};
 
+      // 1. Delete all events recorded in local SQLite database
+      final events = await db.getAllSystemCalendarEvents();
       for (final eventMap in events) {
         final String eventId = eventMap['eventId'] as String;
         try {
           await plugin.deleteEvent(eventId: eventId);
+          deletedEventIds.add(eventId);
         } catch (e) {
           debugPrint('Failed to delete system event $eventId: $e');
         }
       }
-
       await db.clearSystemCalendarEvents();
+
+      // 2. Direct calendar inspection safety-net:
+      // Even if SQLite was cleared, restored, or out of sync, scan the calendar
+      // to ensure all AttendMate events are deleted.
+      final targetCalId = calendarId ?? await getSystemCalendarId();
+      final List<String> calIdsToScan = [];
+      if (targetCalId != null) {
+        calIdsToScan.add(targetCalId);
+      } else {
+        final allCals = await getWritableCalendars();
+        calIdsToScan.addAll(allCals.map((c) => c.id).whereType<String>());
+      }
+
+      if (calIdsToScan.isNotEmpty) {
+        final now = DateTime.now();
+        final startDate = now.subtract(const Duration(days: 730));
+        final endDate = now.add(const Duration(days: 730));
+
+        for (final calId in calIdsToScan) {
+          try {
+            final listedEvents = await plugin.listEvents(startDate, endDate, calendarIds: [calId]);
+            for (final ev in listedEvents) {
+              final desc = ev.description?.toLowerCase() ?? '';
+              final isMatch = desc.contains('imported from attendmate') || desc.contains('created with attendmate');
+              if (isMatch && !deletedEventIds.contains(ev.eventId)) {
+                try {
+                  await plugin.deleteEvent(eventId: ev.eventId);
+                  deletedEventIds.add(ev.eventId);
+                } catch (e) {
+                  debugPrint('Failed to delete device calendar event ${ev.eventId}: $e');
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('Error inspecting calendar $calId during deletion: $e');
+          }
+        }
+      }
     } catch (e) {
       debugPrint('Error deleting synced system events: $e');
     }
@@ -179,6 +231,12 @@ class SystemCalendarService {
     required Semester? semester,
     required bool Function(DateTime) isHoliday,
   }) async {
+    if (_isSyncInProgress) {
+      debugPrint('System Calendar sync skipped: another sync cycle is already in progress.');
+      return;
+    }
+    _isSyncInProgress = true;
+
     try {
       if (kDebugMode) {
         final prefs = await SharedPreferences.getInstance();
@@ -372,6 +430,8 @@ class SystemCalendarService {
     } catch (e) {
       debugPrint('SystemCalendarService sync error: $e');
       rethrow;
+    } finally {
+      _isSyncInProgress = false;
     }
   }
 }

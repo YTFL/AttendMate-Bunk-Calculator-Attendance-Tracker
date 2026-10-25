@@ -62,7 +62,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
 
       // 1. Google Status
       _isGoogleConnected = await GoogleAuthService.instance.isSignedIn();
-      _isGoogleSyncEnabled = prefs.getBool(_prefGoogleCalendarSyncEnabledKey) ?? _isGoogleConnected;
+      _isGoogleSyncEnabled = prefs.getBool(_prefGoogleCalendarSyncEnabledKey) ?? false;
 
       // 2. System Status
       _isSystemSyncEnabled = await SystemCalendarService.isSystemSyncEnabled();
@@ -286,7 +286,8 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
       });
 
       try {
-        await SystemCalendarService.deleteSyncedEvents();
+        final currentCalId = _selectedSystemCalendarId;
+        await SystemCalendarService.deleteSyncedEvents(force: true, calendarId: currentCalId);
         await SystemCalendarService.setSystemSyncEnabled(false);
         setState(() {
           _isSystemSyncEnabled = false;
@@ -314,7 +315,8 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     });
 
     try {
-      await SystemCalendarService.deleteSyncedEvents();
+      final oldCalId = _selectedSystemCalendarId;
+      await SystemCalendarService.deleteSyncedEvents(force: true, calendarId: oldCalId);
       await SystemCalendarService.setSystemSyncEnabled(true, calendarId: calendarId, calendarName: calendarName);
       setState(() {
         _selectedSystemCalendarId = calendarId;
@@ -417,6 +419,33 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                 ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (_isGoogleSyncEnabled && _isSystemSyncEnabled) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline_rounded, color: Colors.amber.shade800, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Both Google Calendar and Device Calendar sync are active. If your device calendar syncs with your Google Account, duplicate entries will appear in Google Calendar. We recommend enabling only one.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     // Card: Google Calendar Sync Option
                     Card(
                       elevation: 0,

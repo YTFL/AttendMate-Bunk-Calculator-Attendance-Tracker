@@ -28,7 +28,7 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 8,
+        version: 9,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -138,6 +138,17 @@ class DatabaseService {
           affectedSubjectIds TEXT NOT NULL
         )
       ''');
+
+      // Google Calendar Events mapping table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS google_calendar_events (
+          subjectId TEXT NOT NULL,
+          slotKey TEXT NOT NULL,
+          googleEventId TEXT NOT NULL,
+          contentHash TEXT NOT NULL,
+          PRIMARY KEY (subjectId, slotKey)
+        )
+      ''');
     } catch (e) {
       debugPrint('DatabaseService onCreate error: $e');
       rethrow;
@@ -233,6 +244,17 @@ class DatabaseService {
         if (!existing.contains('block')) {
           await db.execute('ALTER TABLE subjects ADD COLUMN block TEXT');
         }
+      }
+      if (oldVersion < 9) {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS google_calendar_events (
+            subjectId TEXT NOT NULL,
+            slotKey TEXT NOT NULL,
+            googleEventId TEXT NOT NULL,
+            contentHash TEXT NOT NULL,
+            PRIMARY KEY (subjectId, slotKey)
+          )
+        ''');
       }
     } catch (e) {
       debugPrint('DatabaseService onUpgrade error: $e');
@@ -640,6 +662,102 @@ class DatabaseService {
       await db.delete('system_calendar_events');
     } catch (e) {
       debugPrint('DatabaseService clearSystemCalendarEvents error: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== GOOGLE CALENDAR SYNC MAPPINGS ====================
+
+  Future<void> saveGoogleCalendarEvent({
+    required String subjectId,
+    required String slotKey,
+    required String googleEventId,
+    required String contentHash,
+  }) async {
+    try {
+      final db = _getDb();
+      await db.insert(
+        'google_calendar_events',
+        {
+          'subjectId': subjectId,
+          'slotKey': slotKey,
+          'googleEventId': googleEventId,
+          'contentHash': contentHash,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('DatabaseService saveGoogleCalendarEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getGoogleCalendarEvent({
+    required String subjectId,
+    required String slotKey,
+  }) async {
+    try {
+      final db = _getDb();
+      final maps = await db.query(
+        'google_calendar_events',
+        where: 'subjectId = ? AND slotKey = ?',
+        whereArgs: [subjectId, slotKey],
+      );
+      if (maps.isEmpty) return null;
+      return maps.first;
+    } catch (e) {
+      debugPrint('DatabaseService getGoogleCalendarEvent error: $e');
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllGoogleCalendarEvents() async {
+    try {
+      final db = _getDb();
+      return await db.query('google_calendar_events');
+    } catch (e) {
+      debugPrint('DatabaseService getAllGoogleCalendarEvents error: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteGoogleCalendarEvent({
+    required String subjectId,
+    required String slotKey,
+  }) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'google_calendar_events',
+        where: 'subjectId = ? AND slotKey = ?',
+        whereArgs: [subjectId, slotKey],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteGoogleCalendarEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteGoogleCalendarEventsForSubject(String subjectId) async {
+    try {
+      final db = _getDb();
+      await db.delete(
+        'google_calendar_events',
+        where: 'subjectId = ?',
+        whereArgs: [subjectId],
+      );
+    } catch (e) {
+      debugPrint('DatabaseService deleteGoogleCalendarEventsForSubject error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> clearGoogleCalendarEvents() async {
+    try {
+      final db = _getDb();
+      await db.delete('google_calendar_events');
+    } catch (e) {
+      debugPrint('DatabaseService clearGoogleCalendarEvents error: $e');
       rethrow;
     }
   }

@@ -895,6 +895,7 @@ class SubjectProvider with ChangeNotifier {
 
   Timer? _autoSyncTimer;
   Timer? _notificationSyncTimer;
+  bool _isAutoSyncRunning = false;
 
   void _onAttendanceChanged() {
     notifyListeners();
@@ -915,12 +916,20 @@ class SubjectProvider with ChangeNotifier {
   void scheduleAutoSync() {
     if (_isLoading) return;
     _autoSyncTimer?.cancel();
-    _autoSyncTimer = Timer(const Duration(milliseconds: 1500), () {
+    // 8-second debounce window allows students to mark attendance across all classes
+    // without triggering multiple rapid sync cycles or exhausting cloud API quotas.
+    _autoSyncTimer = Timer(const Duration(milliseconds: 8000), () {
       _runAutoSync();
     });
   }
 
   Future<void> _runAutoSync() async {
+    if (_isAutoSyncRunning) {
+      debugPrint("Auto-sync skipped: previous auto-sync execution is still active.");
+      return;
+    }
+    _isAutoSyncRunning = true;
+
     try {
       final semester = await _databaseService.loadSemester();
       if (semester == null) {
@@ -937,24 +946,34 @@ class SubjectProvider with ChangeNotifier {
       }).toList();
 
       // 1. Google Calendar Auto-Sync
-      if (await CalendarService.isUserSignedIn() && await CalendarService.isGoogleCalendarSyncEnabled()) {
-        await CalendarService.syncFullTimetable(
-          subjects: syncedSubjects,
-          semester: semester,
-          isHoliday: isHoliday,
-        );
+      try {
+        if (await CalendarService.isUserSignedIn() && await CalendarService.isGoogleCalendarSyncEnabled()) {
+          await CalendarService.syncFullTimetable(
+            subjects: syncedSubjects,
+            semester: semester,
+            isHoliday: isHoliday,
+          );
+        }
+      } catch (e) {
+        debugPrint("Google Calendar auto-sync error: $e");
       }
 
       // 2. System Calendar Auto-Sync
-      if (await SystemCalendarService.isSystemSyncEnabled()) {
-        await SystemCalendarService.syncFullTimetable(
-          subjects: syncedSubjects,
-          semester: semester,
-          isHoliday: isHoliday,
-        );
+      try {
+        if (await SystemCalendarService.isSystemSyncEnabled()) {
+          await SystemCalendarService.syncFullTimetable(
+            subjects: syncedSubjects,
+            semester: semester,
+            isHoliday: isHoliday,
+          );
+        }
+      } catch (e) {
+        debugPrint("System Calendar auto-sync error: $e");
       }
     } catch (e) {
       debugPrint("Auto-sync background error: $e");
+    } finally {
+      _isAutoSyncRunning = false;
     }
   }
 }
