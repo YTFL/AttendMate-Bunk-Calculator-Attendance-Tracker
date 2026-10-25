@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/plugins/attendmate_storage/android/.gradle/
+/plugins/attendmate_storage/android/build/
 
 # Symbolication related
 app.*.symbols
