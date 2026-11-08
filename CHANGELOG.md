@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.3.0] - 2026-10-25
+## [2.4.0] - 2026-11-08
 
 ### Added
 - **Native Maps App Redirection & Smart Coordinate Parser**:
@@ -17,13 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added a non-dismissible `SyncProgressDialog` modal displaying exact completion percentage (`%`) and real-time progress for each subject slot.
   - Integrated `PopScope` blocking back dismissal during active synchronization, preventing partial or corrupted sync states.
   - Added an automated system status bar notification upon calendar sync completion.
-- **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):
-  - Students can log one-off extra, rescheduled, or makeup classes directly on any date without altering their recurring weekly timetable.
-  - Quick Add from Daily Views, swipe gestures for attendance, bunk tracking, and non-destructive deletion.
-- **Consider Pre-Marked Future Lectures in Bunk Calculator** ([#3](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/3), [@purval26](https://github.com/purval26)):
-  - Students can factor future pre-marked classes (attended, absent, or cancelled holidays) into the Bunk Calculator ("What-If Calculator") and Bunk Meter.
-- **Developer Portfolio ("More apps by me") in More Tab**:
-  - Added a dedicated "More apps by me" entry under Help & Support on the More tab linking to [ytfl.github.io](https://ytfl.github.io/).
 
 ### Changed & Improved
 - **High-Speed Calendar Synchronization**:
@@ -39,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Pre-Class Notification Filtering**:
   - Automatically suppress 5-minute pre-class room reminders if a future or current class is marked absent or holiday (cancelled), eliminating unnecessary notifications for cancelled or missed classes.
   - Pre-class reminders remain active for classes marked present (attended) or unmarked.
+
+## [2.3.0] - 2026-10-25
 
 ### Added
 - **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):
