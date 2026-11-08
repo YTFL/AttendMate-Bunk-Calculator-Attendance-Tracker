@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -195,6 +194,57 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     }
   }
 
+  Future<void> _clearSyncedEvents() async {
+    final semester = Provider.of<SemesterProvider>(context, listen: false).semester;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Synced Events?'),
+        content: const Text(
+          'This will remove all AttendMate class schedule events from your Google Calendar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear Events'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isSyncing = true);
+    try {
+      final ok = await SyncProgressDialog.show(
+        context: context,
+        title: 'Clearing Google Calendar Events',
+        action: (onProgress) => CalendarService.deleteAllSyncedEvents(
+          semester,
+          force: true,
+          onProgress: onProgress,
+        ),
+      );
+
+      if (ok == true && mounted) {
+        SnackbarUtils.showSuccessSnackBar(context, 'Synced Google Calendar events removed.');
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarUtils.showErrorSnackBar(context, 'Error clearing events: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
   String _getMonthName(int month) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return months[month - 1];
@@ -219,12 +269,18 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
         title: const Text('Google Calendar Sync'),
         elevation: 0,
         actions: [
-          if (_isConnected && !_isLoading)
+          if (_isConnected && !_isLoading && !_isSyncing) ...[
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
+              tooltip: 'Clear Synced Events',
+              onPressed: _clearSyncedEvents,
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Check Status',
               onPressed: _checkStatus,
             ),
+          ],
         ],
       ),
       body: _isLoading
@@ -285,54 +341,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                   ),
                 ),
                 
-                // Loading Overlay with Backdrop Filter
-                if (_isSyncing)
-                  Positioned.fill(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        child: Center(
-                          child: Card(
-                            elevation: 8,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            color: Theme.of(context).colorScheme.surface,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 32.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    height: 48,
-                                    width: 48,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 4,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Text(
-                                    'Syncing Calendar...',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Updating events and exclusions...',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                // Progress is displayed deterministically via SyncProgressDialog modal
               ],
             ),
       ),
@@ -471,7 +480,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                           ),
                         ),
                       ),
-                      onPressed: _sync,
+                      onPressed: (_isSyncing || _isLoading) ? null : _sync,
                     ),
                   ),
                   const SizedBox(width: 12),

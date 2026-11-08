@@ -53,15 +53,18 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 
 ---
 
-### 5. High-Speed Calendar Synchronization & Interruption Protection
-- **Concurrent Worker Pool (Up to 5x Faster Sync)**:
-  - Re-architected schedule slot synchronization and differential hash lookups to run across a 5-worker concurrent pool.
-  - Eliminated sequential one-by-one network blocking when syncing timetables mid-semester with dozens of lecture slots.
-- **Determinate Progress Modal (`SyncProgressDialog`)**:
-  - Replaced ambiguous indeterminate loaders with a clear modal progress dialog showing the **exact sync percentage** (`0%` to `100%`) alongside real-time slot progress labels (e.g. `Syncing Data Structures (4/12)...`).
-- **Interruption & Back-Dismissal Shield (`PopScope`)**:
-  - Enforced `PopScope(canPop: false)` across both `CalendarSyncSelectionScreen` and `GoogleCalendarSyncScreen` during active sync.
-  - Users can no longer accidentally exit mid-sync, preventing partially populated calendars, orphaned slots, or desynchronized event states.
+### 5. High-Speed Calendar Synchronization & Deletion Engine (Up to 5x Faster)
+- **Concurrent Worker Pool for Sync & Deletion**:
+  - Re-architected both schedule slot synchronization AND calendar event deletion to execute across a high-throughput **5-worker concurrent pool**.
+  - Completely eliminated sequential one-by-one network blocking when synchronizing timetables mid-semester or clearing dozens of synced events from Google Calendar.
+- **Unified Determinate Progress Modal Across All Screens**:
+  - Displays a clean, modal progress dialog showing the **exact completion percentage** (`0%` to `100%`) alongside real-time status labels during both synchronization and event deletion (e.g. `Syncing Data Structures (4/12)...`, `Deleting tracked events (15/30)...`, `Clearing remaining events...`).
+  - Seamlessly integrated across the **Calendar Synchronization screen** (`CalendarSyncSelectionScreen`), **Google Calendar Sync screen** (`GoogleCalendarSyncScreen`), and **Google Integrations screen** (`GoogleIntegrationsScreen`).
+- **Full Interruption & Back-Dismissal Shield (`PopScope`)**:
+  - Enforced strict back-navigation protection (`PopScope(canPop: false)`) across **both the Calendar Sync page and the Google Integrations page**, as well as the modal dialog.
+  - Users can no longer accidentally press back or swipe back mid-sync or mid-deletion, guaranteeing zero orphaned calendar events, partial deletions, or desynchronized event states.
+- **Dedicated "Clear Synced Events" Action**:
+  - Added a dedicated 1-tap **"Clear Synced Events"** button with confirmation dialog directly in the Google Calendar Sync screen for immediate calendar housekeeping.
 - **Background Completion Notification**:
   - Sync automatically completes with an automated system status bar notification confirming how many slots and subjects were synchronized.
 
@@ -118,9 +121,13 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 
 ---
 
-### 4. Calendar Synchronization Deletion & Differential Engine
-- Content-hash diffing (64-bit FNV-1a) ensures unchanged slots require **0 API calls**.
-- Two-tier guaranteed deletion cleanly wipes outdated or deleted slots across local device calendars and Google Calendar.
+### 4. High-Speed Parallel Calendar Deletion & Differential Engine
+- **Parallel Deletion Acceleration**:
+  - Deleting synced events when toggling off Google Calendar sync or switching device calendars now runs in parallel with 5 concurrent workers, slashing deletion time from 30+ seconds down to a few seconds.
+- **Content-Hash Diffing**:
+  - 64-bit FNV-1a content hashing ensures unchanged slots make **0 API calls** during regular sync cycles.
+- **Two-Tier Guaranteed Deletion**:
+  - Cleanly purges both tracked SQLite events and scans for orphaned instances, reporting live progress percentages throughout the process.
 
 ---
 

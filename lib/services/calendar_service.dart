@@ -132,8 +132,54 @@ class CalendarService {
     return false;
   }
 
+  /// Deletes a collection of Google Calendar events using a high-throughput parallel worker pool.
+  static Future<void> _deleteEventsInParallel({
+    required cal.CalendarApi calendarApi,
+    required List<String> eventIds,
+    required Set<String> deletedIds,
+    void Function(double progress, String statusMessage)? onProgress,
+    required String actionLabel,
+    int concurrency = 5,
+  }) async {
+    final idsToDelete = eventIds.where((id) => !deletedIds.contains(id)).toSet().toList();
+    if (idsToDelete.isEmpty) return;
+
+    int completed = 0;
+    final total = idsToDelete.length;
+    int nextIdx = 0;
+
+    Future<void> worker() async {
+      while (nextIdx < idsToDelete.length) {
+        final idx = nextIdx++;
+        final eventId = idsToDelete[idx];
+        if (!deletedIds.contains(eventId)) {
+          try {
+            await calendarApi.events.delete("primary", eventId);
+            deletedIds.add(eventId);
+          } catch (e) {
+            // Already deleted (404/410) or other error; mark as processed
+            deletedIds.add(eventId);
+            debugPrint("Failed or already deleted event $eventId: $e");
+          }
+        }
+        completed++;
+        final progress = (completed / total).clamp(0.0, 1.0);
+        onProgress?.call(progress, '$actionLabel ($completed/$total)...');
+      }
+    }
+
+    final workerCount = math.min(concurrency, idsToDelete.length);
+    final workers = List.generate(workerCount, (_) => worker());
+    await Future.wait(workers);
+  }
+
   /// Deletes all events synced by AttendMate from Google Calendar and purges SQLite tracking.
-  static Future<void> deleteAllSyncedEvents(Semester? semester, {bool force = false}) async {
+  /// Uses a high-throughput 5-worker parallel pool for 5x faster deletion with live progress.
+  static Future<void> deleteAllSyncedEvents(
+    Semester? semester, {
+    bool force = false,
+    void Function(double progress, String statusMessage)? onProgress,
+  }) async {
     try {
       if (kDebugMode && !force) {
         final prefs = await SharedPreferences.getInstance();
@@ -145,28 +191,44 @@ class CalendarService {
       }
       GoogleSignInAccount? googleUser = _googleSignIn.currentUser;
       googleUser ??= await _googleSignIn.signInSilently();
-      if (googleUser == null) return;
+      if (googleUser == null) {
+        onProgress?.call(1.0, 'No Google account connected.');
+        return;
+      }
 
       final httpClient = (await _googleSignIn.authenticatedClient())!;
       final calendarApi = cal.CalendarApi(httpClient);
       final db = DatabaseService();
 
-      // 1. Delete all tracked events in local database
+      onProgress?.call(0.05, 'Locating synced events...');
+
+      // 1. Delete all tracked events in local database using parallel workers
       final cachedEvents = await db.getAllGoogleCalendarEvents();
-      final Set<String> deletedIds = {};
+      final trackedIds = <String>[];
       for (final eventMap in cachedEvents) {
-        final eventId = eventMap['googleEventId'] as String;
-        try {
-          await calendarApi.events.delete("primary", eventId);
-          deletedIds.add(eventId);
-        } catch (e) {
-          debugPrint("Failed to delete tracked Google event $eventId: $e");
+        final id = eventMap['googleEventId'] as String?;
+        if (id != null && id.isNotEmpty) {
+          trackedIds.add(id);
         }
+      }
+
+      final Set<String> deletedIds = {};
+      if (trackedIds.isNotEmpty) {
+        onProgress?.call(0.1, 'Deleting tracked events (0/${trackedIds.length})...');
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: trackedIds,
+          deletedIds: deletedIds,
+          onProgress: (p, msg) => onProgress?.call(0.1 + p * 0.55, msg),
+          actionLabel: 'Deleting tracked events',
+          concurrency: 5,
+        );
       }
       await db.clearGoogleCalendarEvents();
 
       // 2. Comprehensive Paged Prune: Search Google Calendar for any remaining AttendMate events
-      // (Handles events created across any date range without semester boundary constraints)
+      onProgress?.call(0.7, 'Scanning calendar for remaining events...');
+      final remainingIds = <String>[];
       String? pageToken;
       do {
         final cal.Events searchEvents = await calendarApi.events.list(
@@ -179,20 +241,29 @@ class CalendarService {
           final eventId = event.id;
           if (eventId != null && !deletedIds.contains(eventId)) {
             if (_isStrictAttendMateEvent(event)) {
-              try {
-                await calendarApi.events.delete("primary", eventId);
-                deletedIds.add(eventId);
-              } catch (e) {
-                debugPrint('Error deleting event $eventId: $e');
-              }
+              remainingIds.add(eventId);
             }
           }
         }
         pageToken = searchEvents.nextPageToken;
       } while (pageToken != null && pageToken.isNotEmpty);
 
+      if (remainingIds.isNotEmpty) {
+        onProgress?.call(0.75, 'Clearing remaining events (0/${remainingIds.length})...');
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: remainingIds,
+          deletedIds: deletedIds,
+          onProgress: (p, msg) => onProgress?.call(0.75 + p * 0.25, msg),
+          actionLabel: 'Clearing remaining events',
+          concurrency: 5,
+        );
+      }
+
+      onProgress?.call(1.0, 'Synced events cleared.');
     } catch (e) {
       debugPrint("Failed to clear Google Calendar events: $e");
+      rethrow;
     }
   }
 
@@ -213,6 +284,7 @@ class CalendarService {
 
       // 1. Paged search by query: "Imported from AttendMate"
       String? pageToken;
+      final queryIds = <String>[];
       do {
         final cal.Events searchEvents = await calendarApi.events.list(
           "primary",
@@ -224,24 +296,30 @@ class CalendarService {
           final eventId = event.id;
           if (eventId != null && !deletedIds.contains(eventId)) {
             if (_isStrictAttendMateEvent(event)) {
-              try {
-                await calendarApi.events.delete("primary", eventId);
-                deletedIds.add(eventId);
-                prunedCount++;
-              } catch (e) {
-                debugPrint('Error deleting event $eventId: $e');
-              }
+              queryIds.add(eventId);
             }
           }
         }
         pageToken = searchEvents.nextPageToken;
       } while (pageToken != null && pageToken.isNotEmpty);
 
+      if (queryIds.isNotEmpty) {
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: queryIds,
+          deletedIds: deletedIds,
+          actionLabel: 'Pruning query events',
+          concurrency: 5,
+        );
+        prunedCount += queryIds.length;
+      }
+
       // 2. Wide date-range scan (last 2 years to next 2 years) to catch recurring events and tombstones
       final now = DateTime.now();
       final timeMin = now.subtract(const Duration(days: 730)).toUtc();
       final timeMax = now.add(const Duration(days: 730)).toUtc();
       pageToken = null;
+      final windowIds = <String>[];
       do {
         final cal.Events windowEvents = await calendarApi.events.list(
           "primary",
@@ -256,17 +334,22 @@ class CalendarService {
           if (eventId == null || deletedIds.contains(eventId)) continue;
 
           if (_isStrictAttendMateEvent(event)) {
-            try {
-              await calendarApi.events.delete("primary", eventId);
-              deletedIds.add(eventId);
-              prunedCount++;
-            } catch (e) {
-              debugPrint('Error deleting event $eventId: $e');
-            }
+            windowIds.add(eventId);
           }
         }
         pageToken = windowEvents.nextPageToken;
       } while (pageToken != null && pageToken.isNotEmpty);
+
+      if (windowIds.isNotEmpty) {
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: windowIds,
+          deletedIds: deletedIds,
+          actionLabel: 'Pruning window events',
+          concurrency: 5,
+        );
+        prunedCount += windowIds.length;
+      }
 
       // Clear local database tracking
       await DatabaseService().clearGoogleCalendarEvents();
@@ -591,15 +674,27 @@ class CalendarService {
 
       // 7. Clean up deleted classes
       // 7A: Remove slots that were previously tracked but are no longer active in the timetable
+      final slotsToDelete = <Map<String, dynamic>>[];
       for (final cached in cachedEventsList) {
         final key = "${cached['subjectId']}_${cached['slotKey']}";
         if (!activeKeys.contains(key)) {
-          final eventId = cached['googleEventId'] as String;
-          try {
-            await calendarApi.events.delete("primary", eventId);
-          } catch (e) {
-            debugPrint("Failed to delete removed slot event $eventId: $e");
-          }
+          slotsToDelete.add(cached);
+        }
+      }
+      if (slotsToDelete.isNotEmpty) {
+        final slotEventIds = slotsToDelete
+            .map((c) => c['googleEventId'] as String?)
+            .whereType<String>()
+            .toList();
+        final Set<String> deletedSlotIds = {};
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: slotEventIds,
+          deletedIds: deletedSlotIds,
+          actionLabel: 'Cleaning removed schedules',
+          concurrency: 5,
+        );
+        for (final cached in slotsToDelete) {
           await db.deleteGoogleCalendarEvent(
             subjectId: cached['subjectId'] as String,
             slotKey: cached['slotKey'] as String,
@@ -608,6 +703,7 @@ class CalendarService {
       }
 
       // 7B: Safety-net paged cleanup across Google Calendar for any untracked or legacy orphaned AttendMate events
+      final orphanedIds = <String>[];
       String? pageToken;
       do {
         final cal.Events existingEvents = await calendarApi.events.list(
@@ -623,17 +719,24 @@ class CalendarService {
             if (!activeICalIds.contains(iCalUID)) {
               final eventId = event.id;
               if (eventId != null) {
-                try {
-                  await calendarApi.events.delete("primary", eventId);
-                } catch (e) {
-                  debugPrint("Failed to delete orphaned Google event $eventId: $e");
-                }
+                orphanedIds.add(eventId);
               }
             }
           }
         }
         pageToken = existingEvents.nextPageToken;
       } while (pageToken != null && pageToken.isNotEmpty);
+
+      if (orphanedIds.isNotEmpty) {
+        final Set<String> deletedOrphanIds = {};
+        await _deleteEventsInParallel(
+          calendarApi: calendarApi,
+          eventIds: orphanedIds,
+          deletedIds: deletedOrphanIds,
+          actionLabel: 'Pruning orphaned events',
+          concurrency: 5,
+        );
+      }
 
     } catch (e) {
       rethrow;

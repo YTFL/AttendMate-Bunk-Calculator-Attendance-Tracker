@@ -79,7 +79,11 @@ class SystemCalendarService {
   /// Deletes all events synced by AttendMate from the system calendar and purges SQLite mappings.
   /// Employs a two-tier cleanup: deletes mapped SQLite entries and inspects the device calendar
   /// directly to ensure zero orphaned events remain.
-  static Future<void> deleteSyncedEvents({bool force = false, String? calendarId}) async {
+  static Future<void> deleteSyncedEvents({
+    bool force = false,
+    String? calendarId,
+    void Function(double progress, String statusMessage)? onProgress,
+  }) async {
     try {
       if (kDebugMode && !force) {
         final prefs = await SharedPreferences.getInstance();
@@ -93,6 +97,7 @@ class SystemCalendarService {
       final hasPerm = await checkOrRequestPermissions();
       if (!hasPerm) {
         debugPrint('System Calendar delete skipped: calendar permissions not granted.');
+        onProgress?.call(1.0, 'Calendar permissions not granted.');
         return;
       }
 
@@ -100,8 +105,12 @@ class SystemCalendarService {
       final db = DatabaseService();
       final Set<String> deletedEventIds = {};
 
+      onProgress?.call(0.05, 'Locating device calendar events...');
+
       // 1. Delete all events recorded in local SQLite database
       final events = await db.getAllSystemCalendarEvents();
+      int completed = 0;
+      final total = events.length;
       for (final eventMap in events) {
         final String eventId = eventMap['eventId'] as String;
         try {
@@ -110,12 +119,16 @@ class SystemCalendarService {
         } catch (e) {
           debugPrint('Failed to delete system event $eventId: $e');
         }
+        completed++;
+        final p = total > 0 ? (0.1 + (completed / total) * 0.5) : 0.6;
+        onProgress?.call(p, 'Deleting device events ($completed/$total)...');
       }
       await db.clearSystemCalendarEvents();
 
       // 2. Direct calendar inspection safety-net:
       // Even if SQLite was cleared, restored, or out of sync, scan the calendar
       // to ensure all AttendMate events are deleted.
+      onProgress?.call(0.65, 'Scanning calendars for leftovers...');
       final targetCalId = calendarId ?? await getSystemCalendarId();
       final List<String> calIdsToScan = [];
       if (targetCalId != null) {
@@ -130,6 +143,7 @@ class SystemCalendarService {
         final startDate = now.subtract(const Duration(days: 730));
         final endDate = now.add(const Duration(days: 730));
 
+        final orphanedList = <String>[];
         for (final calId in calIdsToScan) {
           try {
             final listedEvents = await plugin.listEvents(startDate, endDate, calendarIds: [calId]);
@@ -137,19 +151,28 @@ class SystemCalendarService {
               final desc = ev.description?.toLowerCase() ?? '';
               final isMatch = desc.contains('imported from attendmate') || desc.contains('created with attendmate');
               if (isMatch && !deletedEventIds.contains(ev.eventId)) {
-                try {
-                  await plugin.deleteEvent(eventId: ev.eventId);
-                  deletedEventIds.add(ev.eventId);
-                } catch (e) {
-                  debugPrint('Failed to delete device calendar event ${ev.eventId}: $e');
-                }
+                orphanedList.add(ev.eventId);
               }
             }
           } catch (e) {
             debugPrint('Error inspecting calendar $calId during deletion: $e');
           }
         }
+
+        int orphanCompleted = 0;
+        for (final evId in orphanedList) {
+          try {
+            await plugin.deleteEvent(eventId: evId);
+            deletedEventIds.add(evId);
+          } catch (e) {
+            debugPrint('Failed to delete device calendar event $evId: $e');
+          }
+          orphanCompleted++;
+          final p = orphanedList.isNotEmpty ? (0.7 + (orphanCompleted / orphanedList.length) * 0.3) : 1.0;
+          onProgress?.call(p, 'Cleaning remaining events ($orphanCompleted/${orphanedList.length})...');
+        }
       }
+      onProgress?.call(1.0, 'Device calendar cleared.');
     } catch (e) {
       debugPrint('Error deleting synced system events: $e');
     }

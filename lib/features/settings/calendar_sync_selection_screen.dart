@@ -188,10 +188,28 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     } else {
       final semester = Provider.of<SemesterProvider>(context, listen: false).semester;
       setState(() => _isActionInProgress = true);
-      await CalendarService.deleteAllSyncedEvents(semester, force: true);
-      if (!mounted) return;
-      setState(() => _isActionInProgress = false);
-      SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar sync disabled. Synced events cleared.');
+      try {
+        final ok = await SyncProgressDialog.show(
+          context: context,
+          title: 'Clearing Google Calendar Events',
+          action: (onProgress) => CalendarService.deleteAllSyncedEvents(
+            semester,
+            force: true,
+            onProgress: onProgress,
+          ),
+        );
+        if (mounted && ok == true) {
+          SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar sync disabled. Synced events cleared.');
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackbarUtils.showErrorSnackBar(context, 'Error clearing Google Calendar events: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isActionInProgress = false);
+        }
+      }
     }
   }
 
@@ -302,14 +320,22 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
 
       try {
         final currentCalId = _selectedSystemCalendarId;
-        await SystemCalendarService.deleteSyncedEvents(force: true, calendarId: currentCalId);
+        final ok = await SyncProgressDialog.show(
+          context: context,
+          title: 'Clearing Device Calendar Events',
+          action: (onProgress) => SystemCalendarService.deleteSyncedEvents(
+            force: true,
+            calendarId: currentCalId,
+            onProgress: onProgress,
+          ),
+        );
         await SystemCalendarService.setSystemSyncEnabled(false);
         setState(() {
           _isSystemSyncEnabled = false;
           _selectedSystemCalendarId = null;
           _selectedSystemCalendarName = null;
         });
-        if (mounted) {
+        if (mounted && ok == true) {
           SnackbarUtils.showSuccessSnackBar(context, 'Device Calendar sync disabled.');
         }
       } catch (e) {
@@ -331,7 +357,17 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
 
     try {
       final oldCalId = _selectedSystemCalendarId;
-      await SystemCalendarService.deleteSyncedEvents(force: true, calendarId: oldCalId);
+      if (oldCalId != null && oldCalId != calendarId) {
+        await SyncProgressDialog.show(
+          context: context,
+          title: 'Clearing Previous Calendar Events',
+          action: (onProgress) => SystemCalendarService.deleteSyncedEvents(
+            force: true,
+            calendarId: oldCalId,
+            onProgress: onProgress,
+          ),
+        );
+      }
       await SystemCalendarService.setSystemSyncEnabled(true, calendarId: calendarId, calendarName: calendarName);
       setState(() {
         _selectedSystemCalendarId = calendarId;

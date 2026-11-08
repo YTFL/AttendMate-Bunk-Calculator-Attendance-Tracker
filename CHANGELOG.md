@@ -32,12 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added an intelligent coordinate parser supporting decimal coordinates (`lat, lng`), DMS format (Degrees Minutes Seconds), Google Maps URLs (`maps.app.goo.gl`, `?q=`, `/@lat,lng`), and dropped pin clipboard text with 1-tap clipboard paste and live coordinate preview.
 - **Calendar Sync Progress Dialog & Interruption Protection**:
   - Added a non-dismissible `SyncProgressDialog` modal displaying exact completion percentage (`%`) and real-time progress for each subject slot.
-  - Integrated `PopScope` blocking back dismissal during active synchronization, preventing partial or corrupted sync states.
+  - Integrated `PopScope` blocking back dismissal during active synchronization and deletion across both the Calendar Sync screen and the Google Integrations screen, preventing partial or corrupted sync states.
+  - Added a dedicated 1-tap "Clear Synced Events" action with confirmation dialog directly in the Google Calendar Sync screen.
   - Added an automated system status bar notification upon calendar sync completion.
 
 ### Changed & Improved
-- **High-Speed Calendar Synchronization**:
-  - Re-architected schedule slot sync and differential hash lookups using a 5-worker concurrent pool, speeding up calendar synchronization up to 5x mid-semester without sequential API bottlenecking.
+- **High-Speed Calendar Synchronization & Parallel Deletion Engine**:
+  - Re-architected both schedule slot synchronization AND calendar event deletion using a 5-worker concurrent pool, accelerating both timetable sync and event clearing up to 5x without sequential API bottlenecking.
+  - Unified determinate progress reporting across the Calendar Sync screen, Google Calendar Sync screen, and Google Integrations screen with exact percentages and live status messages during both sync and event deletion.
 - **Clean Build Number Display**:
   - Automatically strip architecture offsets (+1000, +2000, +3000) injected by Flutter's split-per-ABI build system so the More tab, update engine, and logs display the clean canonical build number (e.g. `Build 33` instead of `Build 2033`).
 - **Streamlined Interactive Tutorial**:

@@ -7,6 +7,8 @@ import '../../services/google_drive_backup_service.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/sync_progress_dialog.dart';
+import '../../services/notification_service.dart';
 
 class GoogleIntegrationsScreen extends StatefulWidget {
   const GoogleIntegrationsScreen({super.key});
@@ -24,6 +26,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
   DateTime? _lastDriveBackupTime = GoogleDriveBackupService.lastBackupTimeSync;
   DriveBackupFileInfo? _existingDriveBackup = GoogleDriveBackupService.cachedExistingBackup;
   bool _isLoading = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -129,11 +132,29 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
       await _forceCalendarSync();
     } else {
       final semester = Provider.of<SemesterProvider>(context, listen: false).semester;
-      setState(() => _isLoading = true);
-      await CalendarService.deleteAllSyncedEvents(semester, force: true);
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar sync disabled. Synced events cleared.');
+      setState(() => _isSyncing = true);
+      try {
+        final ok = await SyncProgressDialog.show(
+          context: context,
+          title: 'Clearing Google Calendar Events',
+          action: (onProgress) => CalendarService.deleteAllSyncedEvents(
+            semester,
+            force: true,
+            onProgress: onProgress,
+          ),
+        );
+        if (mounted && ok == true) {
+          SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar sync disabled. Synced events cleared.');
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackbarUtils.showErrorSnackBar(context, 'Error clearing Google Calendar events: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isSyncing = false);
+        }
+      }
     }
   }
 
@@ -237,26 +258,37 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isSyncing = true);
     try {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
 
-      await CalendarService.syncFullTimetable(
-        subjects: subjects,
-        semester: semester,
-        isHoliday: subjectProvider.isHoliday,
+      final ok = await SyncProgressDialog.show(
+        context: context,
+        title: 'Syncing Google Calendar',
+        action: (onProgress) => CalendarService.syncFullTimetable(
+          subjects: subjects,
+          semester: semester,
+          isHoliday: subjectProvider.isHoliday,
+          onProgress: onProgress,
+        ),
       );
 
-      if (mounted) {
+      if (ok == true && mounted) {
         SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar synchronized successfully.');
+        try {
+          await NotificationService().showBackupNotification(
+            title: 'Calendar Sync Complete',
+            body: 'Your timetable was synchronized with Google Calendar.',
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showErrorSnackBar(context, 'Calendar sync failed: $e');
+        SnackbarUtils.showErrorSnackBar(context, 'Google Calendar Sync Error: $e');
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isSyncing = false);
       }
     }
   }
@@ -264,11 +296,15 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
+    final canPop = !_isLoading && !_isSyncing;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Google Integrations'),
-      ),
+    return PopScope(
+      canPop: canPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Google Integrations'),
+          automaticallyImplyLeading: canPop,
+        ),
       body: Stack(
         children: [
           ListView(
@@ -321,7 +357,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                         IconButton(
                           icon: const Icon(Icons.logout_rounded, color: Colors.red),
                           tooltip: 'Log Out',
-                          onPressed: _handleSignOut,
+                          onPressed: (_isLoading || _isSyncing) ? null : _handleSignOut,
                         ),
                       ],
                     ),
@@ -358,7 +394,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                         ),
                         const SizedBox(height: 16),
                         FilledButton.icon(
-                          onPressed: _isLoading ? null : _handleSignIn,
+                          onPressed: (_isLoading || _isSyncing) ? null : _handleSignIn,
                           icon: const Icon(Icons.login),
                           label: const Text('Sign in with Google'),
                         ),
@@ -415,7 +451,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                           ),
                           Switch(
                             value: user != null && _isCalendarSyncEnabled,
-                            onChanged: user == null
+                            onChanged: (user == null || _isLoading || _isSyncing)
                                 ? null
                                 : (val) async {
                                     await _toggleCalendarSync(val);
@@ -428,7 +464,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: OutlinedButton.icon(
-                            onPressed: (_isLoading || !_isCalendarSyncEnabled) ? null : _forceCalendarSync,
+                            onPressed: (_isLoading || _isSyncing || !_isCalendarSyncEnabled) ? null : _forceCalendarSync,
                             icon: const Icon(Icons.sync, size: 16),
                             label: const Text('Force Sync Calendar'),
                           ),
@@ -479,7 +515,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                           ),
                           Switch(
                             value: user != null && _isDriveBackupEnabled,
-                            onChanged: user == null
+                            onChanged: (user == null || _isLoading || _isSyncing)
                                 ? null
                                 : (val) async {
                                     setState(() => _isDriveBackupEnabled = val);
@@ -508,7 +544,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: _isLoading ? null : _forceDriveBackup,
+                                onPressed: (_isLoading || _isSyncing) ? null : _forceDriveBackup,
                                 icon: const Icon(Icons.backup_outlined, size: 16),
                                 label: const Text('Backup Now', maxLines: 1, overflow: TextOverflow.ellipsis),
                                 style: OutlinedButton.styleFrom(
@@ -520,7 +556,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: OutlinedButton.icon(
-                                  onPressed: _isLoading
+                                  onPressed: (_isLoading || _isSyncing)
                                       ? null
                                       : () {
                                           showDialog(
@@ -611,6 +647,7 @@ class _GoogleIntegrationsScreenState extends State<GoogleIntegrationsScreen> {
             ),
         ],
       ),
+    ),
     );
   }
 }
