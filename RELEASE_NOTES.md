@@ -10,13 +10,50 @@
 
 ## 🚀 AttendMate 2.4.0 Update
 
-AttendMate 2.4.0 delivers major performance improvements to calendar synchronization, fully replaces the external Google Maps SDK with phone-native map app redirection and intelligent coordinate parsing, guarantees dependable midnight Google Drive cloud backups, and refines smart pre-class notifications alongside extra class tracking and future lecture predictions.
+AttendMate 2.4.0 delivers major enhancements including flexible elective subject support and interactive timetable sharing, mid-semester new subject imports, dedicated one-off special class scheduling, performance-optimized parallel calendar synchronization, phone-native map app redirection, dependable midnight Google Drive backups, and smart pre-class notifications.
 
 ---
 
 ## 🚀 New Features & Enhancements
 
-### 1. High-Speed Calendar Synchronization & Interruption Protection
+### 1. Elective Subject Support & Interactive Timetable Selection
+- **Elective Subject Management**:
+  - Mark any subject as an elective with a single toggle when adding or editing subjects, and optionally assign an elective group name (e.g. *Professional Elective I*).
+  - Clear visual `Elective • <Group>` chip badges on subject cards for immediate recognition.
+  - Upgraded SQLite database to version 10 with seamless automated migration for existing user data.
+- **Interactive Elective Picker on Import**:
+  - When importing a shared timetable or semester package that contains elective slots, AttendMate presents an interactive selection dialog allowing you to pick your specific elective for each slot or skip if not enrolled.
+- **Structured Elective JSON Sharing**:
+  - Timetable exports and imports now support dedicated `"electives": [{ "name": "...", "subjects": [...] }]` blocks with support for single or multiple choices per elective slot.
+
+---
+
+### 2. Mid-Semester New Subjects Import
+- **Non-Destructive Course Additions**:
+  - Import new subjects that start mid-semester (modular classes, late-start electives) without clearing or altering existing subjects, recurring timetables, or past attendance records.
+- **Effective Date Tracking (`effectiveFrom`)**:
+  - Supports top-level or per-subject `"effectiveFrom": "YYYY-MM-DD"`. Attendance calculations and schedule displays before the effective date automatically disregard the new subject.
+
+---
+
+### 3. Special One-Off Classes JSON Import
+- **Dedicated Special Class Schema**:
+  - Import single-date makeup, rescheduled, or extra classes directly via JSON (`"specialClasses": [{ "subject": "...", "date": "YYYY-MM-DD", ... }]`).
+  - Automatically parses single dates, infers the day of the week, and flags slots as extra classes (`isExtra: true`).
+- **Intelligent Merging**:
+  - Classes for existing courses merge directly into the subject's schedule, while new courses are automatically created with unique colors and acronyms.
+
+---
+
+### 4. Dedicated AI Prompts & In-App JSON Templates
+- **4 Precision AI Prompts**:
+  - Built-in prompts tailored for LLMs to generate valid JSON: Master Timetable, Electives Only, Mid-Semester Subjects, and Special Classes Only.
+- **One-Touch Template Copying**:
+  - Enhanced format guide in the Timetable Import screen with chip-selectable categories and instant clipboard copying for prompts, JSON schemas, and CSV templates.
+
+---
+
+### 5. High-Speed Calendar Synchronization & Interruption Protection
 - **Concurrent Worker Pool (Up to 5x Faster Sync)**:
   - Re-architected schedule slot synchronization and differential hash lookups to run across a 5-worker concurrent pool.
   - Eliminated sequential one-by-one network blocking when syncing timetables mid-semester with dozens of lecture slots.
@@ -30,7 +67,7 @@ AttendMate 2.4.0 delivers major performance improvements to calendar synchroniza
 
 ---
 
-### 2. Native Maps App Redirection & Smart Coordinate Parser (Zero API Costs)
+### 6. Native Maps App Redirection & Smart Coordinate Parser (Zero API Costs)
 - **Zero API Costs & SDK Bloat Removed**:
   - Completely stripped out the proprietary Google Maps SDK (`google_maps_flutter`), native platform interfaces, and manifest API key dependencies.
   - Shrank the application binary by over **1.2 MB** and removed all third-party tracking or billing constraints.
@@ -47,7 +84,7 @@ AttendMate 2.4.0 delivers major performance improvements to calendar synchroniza
 
 ---
 
-### 3. Streamlined Interactive Tutorial
+### 7. Streamlined Interactive Tutorial
 - **Distraction-Free Onboarding**:
   - Replaced the intimidating numeric step counter (`"STEP 1 OF 9"`) with a sleek, minimalist `"QUICK GUIDE"` chip.
   - Significantly reduces onboarding drop-off and encourages new users to explore key app interactions naturally.
@@ -74,7 +111,14 @@ AttendMate 2.4.0 delivers major performance improvements to calendar synchroniza
 
 ---
 
-### 3. Calendar Synchronization Deletion & Differential Engine
+### 3. Clean Build Number Display (Architecture Offset Stripping)
+- **Automatic ABI Prefix Normalization**:
+  - When building split-per-ABI APKs (`arm64-v8a`, `armeabi-v7a`, `x86_64`), Android package tooling injects architecture offsets (`+2000`, `+1000`, `+3000`) into the internal `versionCode`.
+  - Added automated build number normalization (`AppUpdate.cleanBuildNumber` / `AppUpdate.normalizeBuildNumber`) across the More tab, in-app update comparisons, and diagnostic report logs so users consistently see their true clean build number (e.g., `Build 33` instead of `Build 2033`).
+
+---
+
+### 4. Calendar Synchronization Deletion & Differential Engine
 - Content-hash diffing (64-bit FNV-1a) ensures unchanged slots require **0 API calls**.
 - Two-tier guaranteed deletion cleanly wipes outdated or deleted slots across local device calendars and Google Calendar.
 

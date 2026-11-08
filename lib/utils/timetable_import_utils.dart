@@ -4,6 +4,50 @@ import 'package:flutter/material.dart';
 
 import '../features/subject/subject_model.dart';
 
+class SpecialClassImportItem {
+  final String? subjectName;
+  final String? subjectAcronym;
+  final TimeSlot slot;
+  final bool isStandaloneSpecialSubject;
+
+  SpecialClassImportItem({
+    this.subjectName,
+    this.subjectAcronym,
+    required this.slot,
+    this.isStandaloneSpecialSubject = false,
+  });
+
+  String get displayName => subjectName ?? subjectAcronym ?? 'Special Class';
+}
+
+class ParsedTimetableImportPackage {
+  final List<Subject> standardSubjects;
+  final List<ElectiveSlot> electiveSlots;
+  final List<SpecialClassImportItem> specialClasses;
+  final DateTime? effectiveFrom;
+
+  ParsedTimetableImportPackage({
+    required this.standardSubjects,
+    required this.electiveSlots,
+    required this.specialClasses,
+    this.effectiveFrom,
+  });
+
+  bool get hasElectives => electiveSlots.isNotEmpty;
+  bool get hasSpecialClasses => specialClasses.isNotEmpty;
+  bool get hasStandardSubjects => standardSubjects.isNotEmpty;
+  int get totalSubjectsCount => standardSubjects.length + electiveSlots.fold<int>(0, (sum, e) => sum + e.subjects.length);
+
+  /// Flatten all standard subjects + all subjects in all elective slots
+  List<Subject> get allSubjects {
+    final list = <Subject>[...standardSubjects];
+    for (final slot in electiveSlots) {
+      list.addAll(slot.subjects);
+    }
+    return list;
+  }
+}
+
 class TimetableImportUtils {
   // Available colors for subjects
   static const List<Color> availableColors = [
@@ -49,66 +93,237 @@ class TimetableImportUtils {
     return availableColorsSet[Random().nextInt(availableColorsSet.length)];
   }
 
-  /// Parse JSON string and return list of subjects
+  /// Parse JSON string and return flat list of subjects (backward compatibility)
   static List<Subject> parseJsonToSubjects(String jsonString, Set<Color> usedColors) {
-    try {
-      final jsonData = jsonDecode(jsonString);
-      final List<Subject> subjects = [];
-      Set<Color> currentUsedColors = Set.from(usedColors);
-
-      // Check if it's a subjects array or an object with subjects key
-      List<dynamic> subjectsList = [];
-      
-      if (jsonData is List) {
-        subjectsList = jsonData;
-      } else if (jsonData is Map && jsonData.containsKey('subjects')) {
-        subjectsList = jsonData['subjects'] as List<dynamic>;
-      } else {
-        throw Exception('Invalid JSON format. Expected an array of subjects or an object with a "subjects" key.');
-      }
-
-      for (var subjectData in subjectsList) {
-        try {
-          final subject = _parseSubjectFromJson(subjectData, currentUsedColors);
-          subjects.add(subject);
-          currentUsedColors.add(subject.color);
-        } catch (e) {
-          // Continue parsing other subjects even if one fails
-          continue;
-        }
-      }
-
-      if (subjects.isEmpty) {
-        throw Exception('No valid subjects found in the JSON.');
-      }
-
-      return subjects;
-    } catch (e) {
-      throw Exception('Error parsing JSON: ${e.toString()}');
+    final pkg = parseJsonToImportPackage(jsonString, usedColors);
+    final subjects = <Subject>[...pkg.standardSubjects];
+    for (final elective in pkg.electiveSlots) {
+      subjects.addAll(elective.subjects);
     }
+    return subjects;
   }
 
-  /// Parse pasted input and auto-detect JSON or CSV format.
-  static List<Subject> parseInputToSubjects(String input, Set<Color> usedColors) {
+  /// Parse pasted input (JSON or CSV) and return a rich package with standard subjects,
+  /// elective slots, special one-off classes, and effectiveFrom dates.
+  static ParsedTimetableImportPackage parseInputToImportPackage(String input, Set<Color> usedColors) {
     final normalized = input.trim();
     if (normalized.isEmpty) {
       throw Exception('Please paste JSON or CSV data.');
     }
 
     final startsLikeJson = normalized.startsWith('{') || normalized.startsWith('[');
-
     if (startsLikeJson) {
-      return parseJsonToSubjects(normalized, usedColors);
+      return parseJsonToImportPackage(normalized, usedColors);
     }
 
-    return parseCsvToSubjects(normalized, usedColors);
+    final csvSubjects = parseCsvToSubjects(normalized, usedColors);
+    return ParsedTimetableImportPackage(
+      standardSubjects: csvSubjects,
+      electiveSlots: const [],
+      specialClasses: const [],
+    );
+  }
+
+  /// Parse pasted input and auto-detect JSON or CSV format (backward compatibility)
+  static List<Subject> parseInputToSubjects(String input, Set<Color> usedColors) {
+    final pkg = parseInputToImportPackage(input, usedColors);
+    final subjects = <Subject>[...pkg.standardSubjects];
+    for (final elective in pkg.electiveSlots) {
+      subjects.addAll(elective.subjects);
+    }
+    return subjects;
+  }
+
+  /// Comprehensive JSON parser handling:
+  /// - Full master timetable JSON
+  /// - Electives-only JSON
+  /// - Special one-off classes only JSON
+  /// - Mid-semester new subjects JSON
+  /// - Legacy subjects list/map
+  static ParsedTimetableImportPackage parseJsonToImportPackage(String jsonString, Set<Color> usedColors) {
+    try {
+      final jsonData = jsonDecode(jsonString);
+      final List<Subject> standardSubjects = [];
+      final List<ElectiveSlot> electiveSlots = [];
+      final List<SpecialClassImportItem> specialClasses = [];
+      DateTime? effectiveFrom;
+      Set<Color> currentUsedColors = Set.from(usedColors);
+
+      // Handle raw array: could be array of subjects or array of special one-off classes
+      if (jsonData is List) {
+        final list = jsonData;
+        for (var item in list) {
+          if (item is Map) {
+            final isOneOff = (item.containsKey('date') || item.containsKey('specificDate')) &&
+                !item.containsKey('schedule');
+            if (isOneOff) {
+              final parsed = _parseSpecialClassItem(item);
+              if (parsed != null) specialClasses.add(parsed);
+            } else {
+              try {
+                final s = _parseSubjectFromJson(item, currentUsedColors);
+                standardSubjects.add(s);
+                currentUsedColors.add(s.color);
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (standardSubjects.isEmpty && specialClasses.isEmpty) {
+          throw Exception('No valid subjects or special classes found in the JSON list.');
+        }
+
+        return ParsedTimetableImportPackage(
+          standardSubjects: standardSubjects,
+          electiveSlots: electiveSlots,
+          specialClasses: specialClasses,
+        );
+      }
+
+      if (jsonData is! Map<String, dynamic>) {
+        throw Exception('Invalid JSON format. Expected an object or array.');
+      }
+
+      // 1. Parse effectiveFrom date if present (mid-semester support)
+      if (jsonData.containsKey('effectiveFrom')) {
+        final effStr = jsonData['effectiveFrom'] as String?;
+        if (effStr != null && effStr.trim().isNotEmpty) {
+          effectiveFrom = normalizeDate(DateTime.tryParse(effStr.trim()));
+        }
+      }
+
+      // 2. Parse standard subjects if present
+      if (jsonData.containsKey('subjects') && jsonData['subjects'] is List) {
+        final subjectsList = jsonData['subjects'] as List<dynamic>;
+        for (var subjectData in subjectsList) {
+          try {
+            final subject = _parseSubjectFromJson(subjectData, currentUsedColors, defaultEffectiveFrom: effectiveFrom);
+            if (subject.isElective && subject.electiveGroupName != null && subject.electiveGroupName!.isNotEmpty) {
+              // Group into elective slots if marked as elective
+              final groupName = subject.electiveGroupName!;
+              final existingSlotIdx = electiveSlots.indexWhere((e) => e.name.toLowerCase() == groupName.toLowerCase());
+              if (existingSlotIdx != -1) {
+                electiveSlots[existingSlotIdx].subjects.add(subject);
+              } else {
+                electiveSlots.add(ElectiveSlot(name: groupName, subjects: [subject]));
+              }
+            } else {
+              standardSubjects.add(subject);
+            }
+            currentUsedColors.add(subject.color);
+          } catch (_) {}
+        }
+      }
+
+      // 3. Parse explicit electives array
+      if (jsonData.containsKey('electives') && jsonData['electives'] is List) {
+        final electivesList = jsonData['electives'] as List<dynamic>;
+        for (var electiveData in electivesList) {
+          if (electiveData is Map<String, dynamic>) {
+            final slotName = electiveData['name'] as String? ?? 'Elective';
+            final rawSubjects = electiveData['subjects'] as List<dynamic>? ?? [];
+            final List<Subject> slotSubjects = [];
+
+            for (var subData in rawSubjects) {
+              try {
+                final s = _parseSubjectFromJson(
+                  subData,
+                  currentUsedColors,
+                  forceElective: true,
+                  defaultElectiveGroup: slotName,
+                  defaultEffectiveFrom: effectiveFrom,
+                );
+                slotSubjects.add(s);
+                currentUsedColors.add(s.color);
+              } catch (_) {}
+            }
+
+            if (slotSubjects.isNotEmpty) {
+              // Check if already exists from subject list grouping
+              final existingIdx = electiveSlots.indexWhere((e) => e.name.toLowerCase() == slotName.toLowerCase());
+              if (existingIdx != -1) {
+                electiveSlots[existingIdx].subjects.addAll(slotSubjects);
+              } else {
+                electiveSlots.add(ElectiveSlot(
+                  id: electiveData['id'] as String?,
+                  name: slotName,
+                  subjects: slotSubjects,
+                ));
+              }
+            }
+          }
+        }
+      }
+
+      // 4. Parse specialClasses / oneOffClasses array
+      final specialListRaw = jsonData['specialClasses'] ?? jsonData['oneOffClasses'];
+      if (specialListRaw is List) {
+        for (var item in specialListRaw) {
+          if (item is Map) {
+            final parsed = _parseSpecialClassItem(item);
+            if (parsed != null) specialClasses.add(parsed);
+          }
+        }
+      }
+
+      if (standardSubjects.isEmpty && electiveSlots.isEmpty && specialClasses.isEmpty) {
+        throw Exception('No valid subjects, electives, or special one-off classes found in JSON.');
+      }
+
+      return ParsedTimetableImportPackage(
+        standardSubjects: standardSubjects,
+        electiveSlots: electiveSlots,
+        specialClasses: specialClasses,
+        effectiveFrom: effectiveFrom,
+      );
+    } catch (e) {
+      throw Exception('Error parsing JSON: ${e.toString()}');
+    }
+  }
+
+  static SpecialClassImportItem? _parseSpecialClassItem(Map item) {
+    try {
+      final dateStr = item['date'] ?? item['specificDate'];
+      if (dateStr == null) return null;
+      final parsedDate = normalizeDate(DateTime.tryParse(dateStr.toString()));
+      if (parsedDate == null) return null;
+
+      final startStr = item['startTime']?.toString();
+      final endStr = item['endTime']?.toString();
+      if (startStr == null || endStr == null) return null;
+
+      final startTime = _parseTimeOfDay(startStr);
+      final endTime = _parseTimeOfDay(endStr);
+      if (startTime == null || endTime == null) return null;
+
+      final day = DayOfWeek.values[parsedDate.weekday - 1];
+      final slot = TimeSlot(
+        day: day,
+        startTime: startTime,
+        endTime: endTime,
+        specificDate: parsedDate,
+        room: item['room']?.toString(),
+        block: item['block']?.toString(),
+        locationId: item['locationId']?.toString(),
+        isExtra: item['isExtra'] as bool? ?? true,
+      );
+
+      final subjectName = (item['subject'] ?? item['name'] ?? item['subjectName'])?.toString().trim();
+      final acronym = (item['acronym'] ?? item['code'])?.toString().trim();
+      final isStandalone = item['isSpecialClass'] as bool? ?? false;
+
+      return SpecialClassImportItem(
+        subjectName: subjectName?.isNotEmpty == true ? subjectName : null,
+        subjectAcronym: acronym?.isNotEmpty == true ? acronym : null,
+        slot: slot,
+        isStandaloneSpecialSubject: isStandalone,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Parse CSV grid exported by AttendMate and return list of subjects.
-  /// Expected structure:
-  /// Day,09:00-10:30,10:00-11:30
-  /// Monday,MTH,-
-  /// Tuesday,-,PHY
   static List<Subject> parseCsvToSubjects(String csvString, Set<Color> usedColors) {
     try {
       final cleaned = csvString
@@ -263,7 +478,13 @@ class TimetableImportUtils {
   }
 
   /// Parse individual subject from JSON
-  static Subject _parseSubjectFromJson(dynamic subjectData, Set<Color> usedColors) {
+  static Subject _parseSubjectFromJson(
+    dynamic subjectData,
+    Set<Color> usedColors, {
+    bool forceElective = false,
+    String? defaultElectiveGroup,
+    DateTime? defaultEffectiveFrom,
+  }) {
     if (subjectData is! Map) {
       throw Exception('Subject must be an object');
     }
@@ -282,7 +503,6 @@ class TimetableImportUtils {
       if (colorValue is int) {
         color = Color(colorValue);
       } else if (colorValue is String) {
-        // Parse hex color string like "0xFFFF0000"
         try {
           color = Color(int.parse(colorValue.replaceFirst('0x', ''), radix: 16));
         } catch (e) {
@@ -295,6 +515,15 @@ class TimetableImportUtils {
       color = getRandomUnusedColor(usedColors);
     }
 
+    // Parse subject-level effectiveFrom if given
+    DateTime? subEffFrom = defaultEffectiveFrom;
+    if (subjectData.containsKey('effectiveFrom')) {
+      final s = subjectData['effectiveFrom'] as String?;
+      if (s != null && s.trim().isNotEmpty) {
+        subEffFrom = normalizeDate(DateTime.tryParse(s.trim())) ?? subEffFrom;
+      }
+    }
+
     // Parse schedule
     final scheduleData = subjectData['schedule'];
     if (scheduleData == null || scheduleData is! List) {
@@ -304,10 +533,9 @@ class TimetableImportUtils {
     final List<TimeSlot> schedule = [];
     for (var slotData in scheduleData) {
       try {
-        final slot = _parseTimeSlot(slotData);
+        final slot = _parseTimeSlot(slotData, defaultEffectiveFrom: subEffFrom);
         schedule.add(slot);
       } catch (e) {
-        // Continue parsing other slots
         continue;
       }
     }
@@ -317,6 +545,9 @@ class TimetableImportUtils {
     }
 
     final targetAttendance = subjectData['targetAttendance'] as int? ?? 75;
+    final isElective = forceElective || (subjectData['isElective'] as bool? ?? false);
+    final electiveGroup = defaultElectiveGroup ??
+        (subjectData['electiveGroupName'] as String? ?? subjectData['electiveGroup'] as String?);
 
     return Subject(
       name: name.trim(),
@@ -327,23 +558,34 @@ class TimetableImportUtils {
       locationId: subjectData['locationId'] as String?,
       room: subjectData['room'] as String?,
       block: subjectData['block'] as String?,
+      isElective: isElective,
+      electiveGroupName: electiveGroup?.trim().isNotEmpty == true ? electiveGroup!.trim() : null,
     );
   }
 
   /// Parse individual time slot from JSON
-  static TimeSlot _parseTimeSlot(dynamic slotData) {
+  static TimeSlot _parseTimeSlot(dynamic slotData, {DateTime? defaultEffectiveFrom}) {
     if (slotData is! Map) {
       throw Exception('Time slot must be an object');
     }
 
-    final dayString = slotData['day'] as String?;
-    if (dayString == null || dayString.isEmpty) {
-      throw Exception('Day is required for time slot');
+    // Date can be 'date' or 'specificDate'
+    final dateStr = (slotData['date'] ?? slotData['specificDate']) as String?;
+    DateTime? specificDate;
+    if (dateStr != null && dateStr.trim().isNotEmpty) {
+      specificDate = normalizeDate(DateTime.tryParse(dateStr.trim()));
     }
 
-    final day = _parseDayOfWeek(dayString);
+    final dayString = slotData['day'] as String?;
+    DayOfWeek? day;
+    if (dayString != null && dayString.trim().isNotEmpty) {
+      day = _parseDayOfWeek(dayString);
+    } else if (specificDate != null) {
+      day = DayOfWeek.values[specificDate.weekday - 1];
+    }
+
     if (day == null) {
-      throw Exception('Invalid day: "$dayString". Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday');
+      throw Exception('Day or specific date is required for time slot');
     }
 
     final startTimeStr = slotData['startTime'] as String?;
@@ -360,13 +602,29 @@ class TimetableImportUtils {
       throw Exception('Invalid time format. Use HH:MM format (e.g., "09:00", "14:30")');
     }
 
+    // Effective range
+    final effFromStr = slotData['effectiveFrom'] as String?;
+    final effUntilStr = slotData['effectiveUntil'] as String?;
+    final effFrom = effFromStr != null
+        ? normalizeDate(DateTime.tryParse(effFromStr.trim()))
+        : defaultEffectiveFrom;
+    final effUntil = effUntilStr != null
+        ? normalizeDate(DateTime.tryParse(effUntilStr.trim()))
+        : null;
+
+    final isExtra = slotData['isExtra'] as bool? ?? (specificDate != null);
+
     return TimeSlot(
       day: day,
       startTime: startTime,
       endTime: endTime,
+      specificDate: specificDate,
+      effectiveFrom: effFrom,
+      effectiveUntil: effUntil,
       locationId: slotData['locationId'] as String?,
       room: slotData['room'] as String?,
       block: slotData['block'] as String?,
+      isExtra: isExtra,
     );
   }
 
@@ -401,50 +659,134 @@ class TimetableImportUtils {
     }
   }
 
-  /// Generate template JSON format
-  static String generateTemplateJson() {
+  // ==================== TEMPLATE JSON GENERATORS ====================
+
+  /// Generate template Master Timetable JSON
+  static String generateTemplateJsonMaster() {
     final template = {
       "subjects": [
         {
-          "name": "Mathematics",
-          "acronym": "MTH",
+          "name": "Operating Systems",
+          "acronym": "OS",
+          "room": "Room 201",
+          "block": "Block A",
           "schedule": [
+            {"day": "monday", "startTime": "09:00", "endTime": "10:30", "room": "Room 201"},
+            {"day": "wednesday", "startTime": "14:00", "endTime": "15:30", "room": "Room 201"}
+          ]
+        }
+      ],
+      "electives": [
+        {
+          "name": "Professional Elective I",
+          "subjects": [
             {
-              "day": "monday",
-              "startTime": "09:00",
-              "endTime": "10:30"
+              "name": "Machine Learning",
+              "acronym": "ML",
+              "schedule": [
+                {"day": "tuesday", "startTime": "11:00", "endTime": "12:30", "room": "Lab 3"}
+              ]
             },
             {
-              "day": "wednesday",
-              "startTime": "14:00",
-              "endTime": "15:30"
-            },
-            {
-              "day": "friday",
-              "startTime": "10:00",
-              "endTime": "11:30"
+              "name": "Cloud Computing",
+              "acronym": "CC",
+              "schedule": [
+                {"day": "tuesday", "startTime": "11:00", "endTime": "12:30", "room": "Room 105"}
+              ]
             }
           ]
+        }
+      ],
+      "specialClasses": [
+        {
+          "subject": "Operating Systems",
+          "date": "2026-11-20",
+          "startTime": "14:00",
+          "endTime": "16:00",
+          "room": "Lab 1",
+          "isExtra": true
+        }
+      ]
+    };
+    return jsonEncode(template);
+  }
+
+  /// Legacy alias for template JSON
+  static String generateTemplateJson() => generateTemplateJsonMaster();
+
+  /// Generate template Special One-Off Classes JSON
+  static String generateTemplateJsonSpecialClasses() {
+    final template = {
+      "specialClasses": [
+        {
+          "subject": "Mathematics",
+          "acronym": "MTH",
+          "date": "2026-11-20",
+          "startTime": "14:00",
+          "endTime": "15:30",
+          "room": "Room 302",
+          "block": "Block B",
+          "isExtra": true
         },
         {
-          "name": "Physics",
-          "acronym": "PHY",
+          "name": "AI & Robotics Workshop",
+          "acronym": "ROBO",
+          "date": "2026-11-22",
+          "startTime": "10:00",
+          "endTime": "13:00",
+          "room": "Auditorium",
+          "isSpecialClass": true
+        }
+      ]
+    };
+    return jsonEncode(template);
+  }
+
+  /// Generate template Mid-Semester New Subjects JSON
+  static String generateTemplateJsonMidSemester() {
+    final template = {
+      "effectiveFrom": "2026-11-15",
+      "subjects": [
+        {
+          "name": "Cloud Computing",
+          "acronym": "CC",
+          "targetAttendance": 75,
+          "room": "Lab 4",
           "schedule": [
+            {"day": "tuesday", "startTime": "10:00", "endTime": "11:30", "room": "Lab 4"},
+            {"day": "thursday", "startTime": "14:00", "endTime": "15:30", "room": "Room 205"}
+          ]
+        }
+      ]
+    };
+    return jsonEncode(template);
+  }
+
+  /// Generate template Electives Only JSON
+  static String generateTemplateJsonElectives() {
+    final template = {
+      "electives": [
+        {
+          "name": "Professional Elective I",
+          "subjects": [
             {
-              "day": "tuesday",
-              "startTime": "09:00",
-              "endTime": "10:30"
+              "name": "Machine Learning",
+              "acronym": "ML",
+              "schedule": [
+                {"day": "wednesday", "startTime": "11:00", "endTime": "12:30", "room": "Lab 3"}
+              ]
             },
             {
-              "day": "thursday",
-              "startTime": "14:00",
-              "endTime": "15:30"
+              "name": "Information Security",
+              "acronym": "IS",
+              "schedule": [
+                {"day": "wednesday", "startTime": "11:00", "endTime": "12:30", "room": "Room 105"}
+              ]
             }
           ]
         }
       ]
     };
-
     return jsonEncode(template);
   }
 
@@ -460,40 +802,137 @@ Saturday,"-","PHY","-","CSE","-"
 Sunday,"-","-","-","-","ENG"''';
   }
 
-  static const String timetableAiPrompt = '''I have provided an image, screenshot, or text of my college class timetable/schedule. Convert all subjects and their weekly schedules into the following JSON format:
+  // ==================== AI PROMPTS ====================
+
+  /// Master prompt for full timetable with electives and one-off classes
+  static const String timetableAiPromptMaster = '''I have provided an image, screenshot, or text of my college timetable/schedule. Convert all subjects, elective options, and any special classes into the following JSON format:
 
 {
   "subjects": [
     {
-      "name": "Mathematics",
-      "acronym": "MTH",
-      "room": "Room 101",
+      "name": "Operating Systems",
+      "acronym": "OS",
+      "room": "Room 201",
       "block": "Block A",
       "schedule": [
         {
           "day": "monday",
           "startTime": "09:00",
           "endTime": "10:30",
-          "room": "Room 101",
-          "block": "Block A"
-        },
-        {
-          "day": "wednesday",
-          "startTime": "14:00",
-          "endTime": "15:30",
-          "room": "Lab 2"
+          "room": "Room 201"
         }
       ]
+    }
+  ],
+  "electives": [
+    {
+      "name": "Professional Elective I",
+      "subjects": [
+        {
+          "name": "Machine Learning",
+          "acronym": "ML",
+          "schedule": [
+            {
+              "day": "wednesday",
+              "startTime": "11:00",
+              "endTime": "12:30",
+              "room": "Lab 3"
+            }
+          ]
+        },
+        {
+          "name": "Cloud Computing",
+          "acronym": "CC",
+          "schedule": [
+            {
+              "day": "wednesday",
+              "startTime": "11:00",
+              "endTime": "12:30",
+              "room": "Room 105"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "specialClasses": [
+    {
+      "subject": "Operating Systems",
+      "date": "2026-11-20",
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "room": "Lab 1"
+    }
+  ]
+}
+
+Rules to follow:
+- "day" must be lowercase day of week: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", or "sunday".
+- "startTime" and "endTime" must strictly be in 24-hour HH:mm format (e.g. "09:00", "14:30").
+- "date" must be in YYYY-MM-DD format.
+- Group any elective course choices sharing the same time slot under the "electives" list with an appropriate slot name (e.g. "Elective 1").
+- Any single-date makeup classes, workshops, or one-off sessions belong under "specialClasses".
+- Return ONLY the raw valid JSON object with no markdown code blocks, preamble, or explanation.''';
+
+  /// Legacy alias
+  static const String timetableAiPrompt = timetableAiPromptMaster;
+
+  /// AI Prompt for Special One-Off / Extra Classes only
+  static const String timetableAiPromptSpecialClasses = '''I have provided an announcement, circular, email, or message about upcoming makeup classes, extra sessions, seminars, or workshops. Convert these one-off events into the following JSON format:
+
+{
+  "specialClasses": [
+    {
+      "subject": "Mathematics",
+      "acronym": "MTH",
+      "date": "2026-11-20",
+      "startTime": "14:00",
+      "endTime": "15:30",
+      "room": "Room 302",
+      "block": "Block B",
+      "isExtra": true
     },
     {
-      "name": "Physics",
-      "acronym": "PHY",
-      "room": "Hall 3",
+      "name": "Cybersecurity Workshop",
+      "acronym": "CSW",
+      "date": "2026-11-22",
+      "startTime": "10:00",
+      "endTime": "13:00",
+      "room": "Auditorium",
+      "isSpecialClass": true
+    }
+  ]
+}
+
+Rules to follow:
+- "date" must strictly be in "YYYY-MM-DD" format.
+- "startTime" and "endTime" must be in 24-hour HH:mm format (e.g. "09:30", "16:00").
+- For extra classes on an existing course, specify "subject" or "acronym" and set "isExtra": true.
+- For new standalone workshops/seminars, specify "name" and set "isSpecialClass": true.
+- "room" and "block" are optional.
+- Return ONLY the raw valid JSON object with no markdown code blocks, preamble, or explanation.''';
+
+  /// AI Prompt for Mid-Semester New Subjects only
+  static const String timetableAiPromptMidSemester = '''I am enrolling in new subjects mid-semester. Convert these new courses and their weekly schedule into the following JSON format:
+
+{
+  "effectiveFrom": "2026-11-15",
+  "subjects": [
+    {
+      "name": "Cloud Computing",
+      "acronym": "CC",
+      "room": "Lab 4",
+      "block": "CS Block",
       "schedule": [
         {
           "day": "tuesday",
-          "startTime": "09:00",
-          "endTime": "10:30"
+          "startTime": "10:00",
+          "endTime": "11:30"
+        },
+        {
+          "day": "thursday",
+          "startTime": "14:00",
+          "endTime": "15:30"
         }
       ]
     }
@@ -501,9 +940,52 @@ Sunday,"-","-","-","-","ENG"''';
 }
 
 Rules to follow:
-- "day" must be lowercase day of week: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", or "sunday".
-- "startTime" and "endTime" must strictly be in 24-hour HH:mm format (e.g., "09:00", "14:30").
-- "acronym", "room", and "block" are optional.
+- "effectiveFrom" must be the starting date in "YYYY-MM-DD" format (defaults to when the class begins).
+- "day" must be lowercase: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", or "sunday".
+- "startTime" and "endTime" must strictly be in 24-hour HH:mm format (e.g. "10:00", "14:30").
+- Return ONLY the raw valid JSON object with no markdown code blocks, preamble, or explanation.''';
+
+  /// AI Prompt for Electives only
+  static const String timetableAiPromptElectives = '''I have provided an elective bucket/options list with multiple course choices for elective slots. Convert them into the following JSON format:
+
+{
+  "electives": [
+    {
+      "name": "Professional Elective I",
+      "subjects": [
+        {
+          "name": "Machine Learning",
+          "acronym": "ML",
+          "schedule": [
+            {
+              "day": "wednesday",
+              "startTime": "11:00",
+              "endTime": "12:30",
+              "room": "Lab 3"
+            }
+          ]
+        },
+        {
+          "name": "Information Security",
+          "acronym": "IS",
+          "schedule": [
+            {
+              "day": "wednesday",
+              "startTime": "11:00",
+              "endTime": "12:30",
+              "room": "Room 105"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules to follow:
+- "name" of the elective slot can be "Elective 1", "Open Elective", "Track Elective A", etc.
+- Each elective slot can contain one or multiple subjects.
+- All subjects in the slot must have valid weekly schedules with 24-hour HH:mm times.
 - Return ONLY the raw valid JSON object with no markdown code blocks, preamble, or explanation.''';
 
   /// Format JSON string with proper indentation

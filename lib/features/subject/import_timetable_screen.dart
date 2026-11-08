@@ -11,6 +11,9 @@ import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
 import '../../utils/timetable_export_utils.dart';
 import '../../utils/timetable_import_utils.dart';
+import '../../utils/time_format_utils.dart';
+import 'package:intl/intl.dart';
+import 'elective_selection_dialog.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import '../tutorial/tutorial_controller.dart';
@@ -38,8 +41,10 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   final GlobalKey _exportMenuKey = GlobalKey();
   String? _errorMessage;
   List<Subject>? _importedSubjects;
+  List<SpecialClassImportItem> _importedSpecialClasses = [];
   List<_MidSemesterChangePreview> _midSemesterChanges = [];
-  bool _isMidSemesterUpdate = true;
+  int _importModeIndex = 0; // 0: Update Mid-Semester Timetable, 1: Add New Subjects Mid-Semester, 2: Bulk Setup
+  bool get _isMidSemesterUpdate => _importModeIndex == 0;
   late DateTime _effectiveFromDate;
 
   @override
@@ -50,7 +55,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
 
     final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
     if (subjectProvider.subjects.isEmpty) {
-      _isMidSemesterUpdate = false;
+      _importModeIndex = 2; // Default to bulk if no subjects
     }
 
     if (widget.initialText != null && widget.initialText!.trim().isNotEmpty) {
@@ -88,13 +93,14 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     super.dispose();
   }
 
-  void _parseAndValidateInput() {
+  Future<void> _parseAndValidateInput() async {
     final inputText = _inputTextController.text.trim();
     
     if (inputText.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter or paste JSON or CSV data';
         _importedSubjects = null;
+        _importedSpecialClasses = [];
       });
       return;
     }
@@ -114,13 +120,35 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
       final usedColors = subjectProvider.subjects.map((s) => s.color).toSet();
       
-      final subjects = TimetableImportUtils.parseInputToSubjects(inputText, usedColors);
-      final midSemesterChanges = _isMidSemesterUpdate
-          ? _buildMidSemesterChangePreview(subjects)
+      final pkg = TimetableImportUtils.parseInputToImportPackage(inputText, usedColors);
+
+      if (pkg.effectiveFrom != null) {
+        _effectiveFromDate = pkg.effectiveFrom!;
+        if (_importModeIndex == 2) {
+          _importModeIndex = 1;
+        }
+      }
+
+      final subjectsToPreview = <Subject>[...pkg.standardSubjects];
+
+      // If electives are present, prompt user for preference
+      if (pkg.hasElectives && mounted) {
+        final chosen = await ElectiveSelectionDialog.show(
+          context,
+          electiveSlots: pkg.electiveSlots,
+        );
+        if (chosen != null) {
+          subjectsToPreview.addAll(chosen);
+        }
+      }
+
+      final midSemesterChanges = _importModeIndex == 0
+          ? _buildMidSemesterChangePreview(subjectsToPreview)
           : <_MidSemesterChangePreview>[];
       
       setState(() {
-        _importedSubjects = subjects;
+        _importedSubjects = subjectsToPreview;
+        _importedSpecialClasses = pkg.specialClasses;
         _midSemesterChanges = midSemesterChanges;
         _errorMessage = null;
       });
@@ -128,16 +156,20 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
         _importedSubjects = null;
+        _importedSpecialClasses = [];
         _midSemesterChanges = [];
       });
     }
   }
 
   Future<void> _importSubjects() async {
-    if (_importedSubjects == null || _importedSubjects!.isEmpty) {
+    final hasSubjects = _importedSubjects != null && _importedSubjects!.isNotEmpty;
+    final hasSpecials = _importedSpecialClasses.isNotEmpty;
+
+    if (!hasSubjects && !hasSpecials) {
       ScaffoldMessenger.of(context).showReplacingSnackBar(
         const SnackBar(
-          content: Text('No valid subjects to import'),
+          content: Text('No valid subjects or special classes to import'),
           backgroundColor: Colors.red,
         ),
       );
@@ -145,48 +177,47 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     }
 
     final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
+    int importedCount = 0;
+    int specialsCount = 0;
 
-    if (_isMidSemesterUpdate) {
-      final result = await subjectProvider.applyTimetableUpdateFromDate(
-        _importedSubjects!,
-        _effectiveFromDate,
-      );
+    if (hasSpecials) {
+      specialsCount = await subjectProvider.importSpecialOneOffClasses(_importedSpecialClasses);
+    }
 
-      if (!mounted) {
-        return;
+    if (hasSubjects) {
+      if (_importModeIndex == 0) {
+        final result = await subjectProvider.applyTimetableUpdateFromDate(
+          _importedSubjects!,
+          _effectiveFromDate,
+        );
+        importedCount = result.matchedSubjects + result.newSubjects;
+      } else if (_importModeIndex == 1) {
+        importedCount = await subjectProvider.importNewSubjectsMidSemester(
+          newSubjects: _importedSubjects!,
+          effectiveFromDate: _effectiveFromDate,
+        );
+      } else {
+        await subjectProvider.bulkImportSubjects(_importedSubjects!);
+        importedCount = _importedSubjects!.length;
       }
-
-      ScaffoldMessenger.of(context).showReplacingSnackBar(
-        SnackBar(
-          content: Text(
-            'Updated from ${_formatDate(_effectiveFromDate)}: '
-            '${result.matchedSubjects} matched, '
-            '${result.newSubjects} new'
-            '${result.retiredSubjects > 0 ? ', ${result.retiredSubjects} retired' : ''}.',
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } else {
-      await subjectProvider.bulkImportSubjects(_importedSubjects!);
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showReplacingSnackBar(
-        SnackBar(
-          content: Text('Successfully imported ${_importedSubjects!.length} subject(s)'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
     }
 
     if (!mounted) {
       return;
     }
+
+    final parts = <String>[];
+    if (importedCount > 0) parts.add('$importedCount subject(s)');
+    if (specialsCount > 0) parts.add('$specialsCount special class(es)');
+
+    ScaffoldMessenger.of(context).showReplacingSnackBar(
+      SnackBar(
+        content: Text('Successfully imported ${parts.join(" and ")}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
     Navigator.pop(context);
   }
 
@@ -490,86 +521,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
   void _showSampleFormatDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => DefaultTabController(
-        length: 3,
-        child: AlertDialog(
-          title: const Text('Timetable Import Formats'),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const TabBar(
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  tabs: [
-                    Tab(text: 'AI Prompt (Recommended)'),
-                    Tab(text: 'JSON Format'),
-                    Tab(text: 'CSV Format'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 250,
-                  child: TabBarView(
-                    children: [
-                      _buildTemplateView(TimetableImportUtils.timetableAiPrompt, 'AI Prompt'),
-                      _buildTemplateView(_getJsonFormatReference(), 'JSON'),
-                      _buildTemplateView(_getCsvFormatReference(), 'CSV'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTemplateView(String template, String formatName) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                template,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: template));
-            ScaffoldMessenger.of(context).showReplacingSnackBar(
-              SnackBar(
-                content: Text('$formatName template copied to clipboard'),
-                backgroundColor: Colors.blue,
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          },
-          icon: const Icon(Icons.copy, size: 14),
-          label: Text('Copy $formatName Template'),
-        ),
-      ],
+      builder: (ctx) => const _SampleFormatDialogWidget(),
     );
   }
 
@@ -803,7 +755,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           SizedBox(height: rs.height(16)),
 
           // Effective Date Picker (Mid-Semester Mode)
-          if (_isMidSemesterUpdate) ...[
+          if (_importModeIndex == 0 || _importModeIndex == 1) ...[
             _buildEffectiveDatePickerCard(context, rs),
             SizedBox(height: rs.height(16)),
           ],
@@ -823,7 +775,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           ],
 
           // Preview Section
-          if (_importedSubjects != null && _importedSubjects!.isNotEmpty) ...[
+          if ((_importedSubjects != null && _importedSubjects!.isNotEmpty) || _importedSpecialClasses.isNotEmpty) ...[
             SizedBox(height: rs.height(20)),
             _buildPreviewSection(context, rs),
           ],
@@ -943,20 +895,25 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
           ),
           SizedBox(
             width: double.infinity,
-            child: SegmentedButton<bool>(
+            child: SegmentedButton<int>(
               segments: [
-                ButtonSegment<bool>(
-                  value: true,
-                  label: Text('Update Mid-Semester', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
-                  icon: Icon(Icons.update_rounded, size: rs.scale(18)),
+                ButtonSegment<int>(
+                  value: 0,
+                  label: Text('Update Timetable', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
+                  icon: Icon(Icons.update_rounded, size: rs.scale(16)),
                 ),
-                ButtonSegment<bool>(
-                  value: false,
-                  label: Text('Add As New Subjects', style: TextStyle(fontSize: rs.font(12), fontWeight: FontWeight.w600)),
-                  icon: Icon(Icons.playlist_add_rounded, size: rs.scale(18)),
+                ButtonSegment<int>(
+                  value: 1,
+                  label: Text('Add Mid-Semester', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
+                  icon: Icon(Icons.post_add_rounded, size: rs.scale(16)),
+                ),
+                ButtonSegment<int>(
+                  value: 2,
+                  label: Text('Bulk Setup', style: TextStyle(fontSize: rs.font(11.5), fontWeight: FontWeight.w600)),
+                  icon: Icon(Icons.playlist_add_rounded, size: rs.scale(16)),
                 ),
               ],
-              selected: <bool>{_isMidSemesterUpdate},
+              selected: <int>{_importModeIndex},
               style: ButtonStyle(
                 shape: WidgetStateProperty.all(
                   RoundedRectangleBorder(
@@ -967,8 +924,8 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               onSelectionChanged: (selection) {
                 if (selection.isEmpty) return;
                 setState(() {
-                  _isMidSemesterUpdate = selection.first;
-                  if (_isMidSemesterUpdate && _importedSubjects != null) {
+                  _importModeIndex = selection.first;
+                  if (_importModeIndex == 0 && _importedSubjects != null) {
                     _midSemesterChanges = _buildMidSemesterChangePreview(_importedSubjects!);
                   } else {
                     _midSemesterChanges = [];
@@ -977,6 +934,20 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
               },
             ),
           ),
+          if (_importModeIndex == 1) ...[
+            SizedBox(height: rs.height(8)),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: rs.width(4)),
+              child: Text(
+                'Preserves all your current subjects and attendance history. Only newly imported subjects will be added from the effective date.',
+                style: TextStyle(
+                  fontSize: rs.font(11),
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1025,7 +996,9 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Apply Updated Timetable From',
+                        _importModeIndex == 1
+                            ? 'Add New Subjects Starting From'
+                            : 'Apply Updated Timetable From',
                         style: TextStyle(
                           fontSize: rs.font(13.5),
                           fontWeight: FontWeight.bold,
@@ -1034,7 +1007,9 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                       ),
                       SizedBox(height: rs.height(3)),
                       Text(
-                        'Classes prior to ${_formatDate(_effectiveFromDate)} remain locked to old schedule',
+                        _importModeIndex == 1
+                            ? 'New subjects will take effect starting ${_formatDate(_effectiveFromDate)}'
+                            : 'Classes prior to ${_formatDate(_effectiveFromDate)} remain locked to old schedule',
                         style: TextStyle(
                           fontSize: rs.font(11),
                           color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
@@ -1315,6 +1290,74 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_importedSpecialClasses.isNotEmpty) ...[
+          Container(
+            padding: EdgeInsets.all(rs.scale(12)),
+            margin: EdgeInsets.only(bottom: rs.height(14)),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(rs.scale(14)),
+              border: Border.all(color: theme.colorScheme.tertiary.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.event_note_rounded, size: rs.scale(18), color: theme.colorScheme.tertiary),
+                    SizedBox(width: rs.width(8)),
+                    Text(
+                      'SPECIAL ONE-OFF CLASSES (${_importedSpecialClasses.length})',
+                      style: TextStyle(
+                        fontSize: rs.font(11.5),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: theme.colorScheme.tertiary,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: rs.height(8)),
+                ..._importedSpecialClasses.map((item) {
+                  final dateStr = item.slot.specificDate != null
+                      ? DateFormat('EEE, dd MMM yyyy').format(item.slot.specificDate!)
+                      : 'Specific Date';
+                  final timeStr = TimeFormatUtils.formatTimeRange(item.slot.startTime, item.slot.endTime, TimeFormat.format12Hr);
+                  return Padding(
+                    padding: EdgeInsets.symmetric(vertical: rs.height(3)),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: rs.width(6), vertical: rs.height(2)),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            borderRadius: BorderRadius.circular(rs.scale(4)),
+                          ),
+                          child: Text(
+                            dateStr,
+                            style: TextStyle(fontSize: rs.font(11), fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: rs.width(8)),
+                        Expanded(
+                          child: Text(
+                            item.displayName,
+                            style: TextStyle(fontSize: rs.font(12.5), fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          timeStr,
+                          style: TextStyle(fontSize: rs.font(11), color: theme.textTheme.bodySmall?.color),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
         Row(
           children: [
             Text(
@@ -1529,6 +1572,27 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
                         ),
                         SizedBox(width: rs.width(6)),
                       ],
+                      if (subject.isElective) ...[
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: rs.width(6),
+                            vertical: rs.height(2),
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(rs.scale(6)),
+                          ),
+                          child: Text(
+                            'Elective',
+                            style: TextStyle(
+                              fontSize: rs.font(10.5),
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: rs.width(6)),
+                      ],
                       InkWell(
                         borderRadius: BorderRadius.circular(rs.scale(6)),
                         onTap: () => _editImportedSubject(subject),
@@ -1597,51 +1661,6 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
     );
   }
 
-  String _getJsonFormatReference() {
-    return '''{
-  "subjects": [
-    {
-      "name": "Mathematics",
-      "acronym": "MTH",
-      "room": "Room 101",
-      "block": "Block A",
-      "schedule": [
-        {
-          "day": "monday",
-          "startTime": "09:00",
-          "endTime": "10:30",
-          "room": "Room 101",
-          "block": "Block A"
-        },
-        {
-          "day": "wednesday",
-          "startTime": "14:00",
-          "endTime": "15:30",
-          "room": "Lab 2"
-        }
-      ]
-    },
-    {
-      "name": "Physics",
-      "acronym": "PHY",
-      "room": "Hall 3",
-      "schedule": [
-        {
-          "day": "tuesday",
-          "startTime": "09:00",
-          "endTime": "10:30"
-        }
-      ]
-    }
-  ]
-}''';
-  }
-
-
-  String _getCsvFormatReference() {
-    return TimetableImportUtils.generateTemplateCsv();
-  }
-
   Widget _buildSlotWrap(List<TimeSlot> slots, ResponsiveScale rs, BuildContext context) {
     if (slots.isEmpty) {
       return Text(
@@ -1692,4 +1711,225 @@ class _MidSemesterChangePreview {
     required this.kind,
     required this.subject,
   });
+}
+
+
+class _SampleFormatDialogWidget extends StatefulWidget {
+  const _SampleFormatDialogWidget();
+
+  @override
+  State<_SampleFormatDialogWidget> createState() => _SampleFormatDialogWidgetState();
+}
+
+class _SampleFormatDialogWidgetState extends State<_SampleFormatDialogWidget> {
+  int _promptCategory = 0; // 0: Master, 1: Special Classes, 2: Mid-Semester, 3: Electives
+  int _jsonCategory = 0;   // 0: Master, 1: Special Classes, 2: Mid-Semester, 3: Electives
+
+  String get _currentPromptText {
+    switch (_promptCategory) {
+      case 0: return TimetableImportUtils.timetableAiPromptMaster;
+      case 1: return TimetableImportUtils.timetableAiPromptSpecialClasses;
+      case 2: return TimetableImportUtils.timetableAiPromptMidSemester;
+      case 3: return TimetableImportUtils.timetableAiPromptElectives;
+      default: return TimetableImportUtils.timetableAiPromptMaster;
+    }
+  }
+
+  String get _currentPromptName {
+    switch (_promptCategory) {
+      case 0: return 'Master Timetable AI Prompt';
+      case 1: return 'Special One-Off Classes Prompt';
+      case 2: return 'Mid-Semester New Subjects Prompt';
+      case 3: return 'Electives Only Prompt';
+      default: return 'AI Prompt';
+    }
+  }
+
+  String get _currentJsonText {
+    switch (_jsonCategory) {
+      case 0: return TimetableImportUtils.formatJson(TimetableImportUtils.generateTemplateJsonMaster());
+      case 1: return TimetableImportUtils.formatJson(TimetableImportUtils.generateTemplateJsonSpecialClasses());
+      case 2: return TimetableImportUtils.formatJson(TimetableImportUtils.generateTemplateJsonMidSemester());
+      case 3: return TimetableImportUtils.formatJson(TimetableImportUtils.generateTemplateJsonElectives());
+      default: return TimetableImportUtils.formatJson(TimetableImportUtils.generateTemplateJsonMaster());
+    }
+  }
+
+  String get _currentJsonName {
+    switch (_jsonCategory) {
+      case 0: return 'Master Timetable JSON';
+      case 1: return 'Special Classes JSON';
+      case 2: return 'Mid-Semester JSON';
+      case 3: return 'Electives JSON';
+      default: return 'JSON Template';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: AlertDialog(
+        title: const Text('Timetable Import Formats'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: [
+                  Tab(text: 'AI Prompts (Recommended)'),
+                  Tab(text: 'JSON Schemas'),
+                  Tab(text: 'CSV Format'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 320,
+                child: TabBarView(
+                  children: [
+                    // Tab 1: AI Prompts
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildChoiceChip('All-in-One', 0, _promptCategory, (v) => setState(() => _promptCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Special Classes', 1, _promptCategory, (v) => setState(() => _promptCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Mid-Semester', 2, _promptCategory, (v) => setState(() => _promptCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Electives', 3, _promptCategory, (v) => setState(() => _promptCategory = v)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(child: _buildCodeView(_currentPromptText)),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _currentPromptText));
+                            ScaffoldMessenger.of(context).showReplacingSnackBar(
+                              SnackBar(
+                                content: Text('$_currentPromptName copied to clipboard'),
+                                backgroundColor: Colors.blue,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 14),
+                          label: Text('Copy $_currentPromptName'),
+                        ),
+                      ],
+                    ),
+
+                    // Tab 2: JSON Schemas
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildChoiceChip('Master', 0, _jsonCategory, (v) => setState(() => _jsonCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Special Classes', 1, _jsonCategory, (v) => setState(() => _jsonCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Mid-Semester', 2, _jsonCategory, (v) => setState(() => _jsonCategory = v)),
+                              const SizedBox(width: 6),
+                              _buildChoiceChip('Electives', 3, _jsonCategory, (v) => setState(() => _jsonCategory = v)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(child: _buildCodeView(_currentJsonText)),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _currentJsonText));
+                            ScaffoldMessenger.of(context).showReplacingSnackBar(
+                              SnackBar(
+                                content: Text('$_currentJsonName copied to clipboard'),
+                                backgroundColor: Colors.blue,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 14),
+                          label: Text('Copy $_currentJsonName'),
+                        ),
+                      ],
+                    ),
+
+                    // Tab 3: CSV Format
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _buildCodeView(TimetableImportUtils.generateTemplateCsv())),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: TimetableImportUtils.generateTemplateCsv()));
+                            ScaffoldMessenger.of(context).showReplacingSnackBar(
+                              const SnackBar(
+                                content: Text('CSV Template copied to clipboard'),
+                                backgroundColor: Colors.blue,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 14),
+                          label: const Text('Copy CSV Template'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChoiceChip(String label, int value, int current, ValueChanged<int> onSelected) {
+    final isSelected = current == value;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+      selected: isSelected,
+      onSelected: (_) => onSelected(value),
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildCodeView(String text) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SingleChildScrollView(
+        child: SelectableText(
+          text,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+        ),
+      ),
+    );
+  }
 }

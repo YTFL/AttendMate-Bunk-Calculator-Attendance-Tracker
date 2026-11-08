@@ -5,6 +5,7 @@ import '../../services/semester_share_service.dart';
 import '../../utils/error_utils.dart';
 import '../../utils/responsive_scale.dart';
 import '../../utils/snackbar_utils.dart';
+import '../subject/elective_selection_dialog.dart';
 import '../subject/subject_model.dart';
 
 class SemesterSharePreviewDialog extends StatefulWidget {
@@ -24,6 +25,49 @@ class SemesterSharePreviewDialog extends StatefulWidget {
 class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog> {
   bool _mergeIntoCurrent = false;
   bool _isImporting = false;
+  late DateTime _effectiveFromDate;
+  final List<ElectiveSlot> _electiveSlots = [];
+  List<Subject> _selectedElectiveSubjects = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _effectiveFromDate = DateTime(now.year, now.month, now.day);
+
+    final rawElectives = widget.shareData['electives'];
+    if (rawElectives is List) {
+      for (final e in rawElectives) {
+        if (e is Map<String, dynamic>) {
+          try {
+            _electiveSlots.add(ElectiveSlot.fromJson(e));
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Default: select the first subject for each elective slot
+    for (final slot in _electiveSlots) {
+      if (slot.subjects.isNotEmpty) {
+        _selectedElectiveSubjects.add(slot.subjects.first.copyWith(
+          isElective: true,
+          electiveGroupName: () => slot.name,
+        ));
+      }
+    }
+  }
+
+  Future<void> _pickElectives() async {
+    final chosen = await ElectiveSelectionDialog.show(
+      context,
+      electiveSlots: _electiveSlots,
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        _selectedElectiveSubjects = chosen;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,14 +94,17 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
     }
 
     final subjectsRaw = widget.shareData['subjects'] as List? ?? [];
-    final List<Subject> subjects = [];
+    final List<Subject> regularSubjects = [];
     for (final item in subjectsRaw) {
       if (item is Map<String, dynamic>) {
         try {
-          subjects.add(Subject.fromJson(item));
+          regularSubjects.add(Subject.fromJson(item));
         } catch (_) {}
       }
     }
+
+    // Combine standard subjects + resolved selected electives for preview
+    final allPreviewSubjects = [...regularSubjects, ..._selectedElectiveSubjects];
 
     return AlertDialog(
       shape: RoundedRectangleBorder(
@@ -170,12 +217,55 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
               SizedBox(height: rs.height(14)),
             ],
 
+            // Electives Section (if detected)
+            if (_electiveSlots.isNotEmpty) ...[
+              Container(
+                padding: EdgeInsets.all(rs.scale(12)),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(rs.scale(12)),
+                  border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.tune_rounded, size: rs.scale(20), color: theme.colorScheme.primary),
+                    SizedBox(width: rs.width(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Elective Slots (${_electiveSlots.length})',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(13)),
+                          ),
+                          Text(
+                            '${_selectedElectiveSubjects.length} of ${_electiveSlots.length} selected',
+                            style: TextStyle(fontSize: rs.font(11), color: theme.textTheme.bodySmall?.color),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _pickElectives,
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: const Text('Change'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.symmetric(horizontal: rs.width(10), vertical: rs.height(4)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: rs.height(14)),
+            ],
+
             // Subjects List Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'INCLUDED SUBJECTS (${subjects.length})',
+                  'INCLUDED SUBJECTS (${allPreviewSubjects.length})',
                   style: TextStyle(
                     fontSize: rs.font(11),
                     fontWeight: FontWeight.bold,
@@ -207,10 +297,10 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
               child: ListView.separated(
                 shrinkWrap: true,
                 padding: EdgeInsets.all(rs.scale(10)),
-                itemCount: subjects.length,
+                itemCount: allPreviewSubjects.length,
                 separatorBuilder: (context, index) => Divider(height: rs.height(12)),
                 itemBuilder: (context, index) {
-                  final s = subjects[index];
+                  final s = allPreviewSubjects[index];
                   final slots = s.schedule.length;
                   return Row(
                     children: [
@@ -227,12 +317,37 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              s.name,
-                              style: TextStyle(
-                                fontSize: rs.font(13),
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    s.name,
+                                    style: TextStyle(
+                                      fontSize: rs.font(13),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (s.isElective) ...[
+                                  SizedBox(width: rs.width(6)),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: rs.width(5), vertical: rs.height(1)),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(rs.scale(4)),
+                                    ),
+                                    child: Text(
+                                      'Elective',
+                                      style: TextStyle(
+                                        fontSize: rs.font(9.5),
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                             if (s.room != null || s.block != null)
                               Text(
@@ -286,6 +401,7 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
               },
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   RadioListTile<bool>(
                     dense: true,
@@ -313,6 +429,32 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
                       style: TextStyle(fontSize: rs.font(11)),
                     ),
                   ),
+                  if (_mergeIntoCurrent) ...[
+                    Padding(
+                      padding: EdgeInsets.only(left: rs.width(8), top: rs.height(6)),
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final now = DateTime.now();
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _effectiveFromDate,
+                            firstDate: DateTime(now.year - 1),
+                            lastDate: DateTime(now.year + 2),
+                            helpText: 'Classes start from date (mid-semester)',
+                          );
+                          if (picked != null) {
+                            setState(() => _effectiveFromDate = DateTime(picked.year, picked.month, picked.day));
+                          }
+                        },
+                        icon: const Icon(Icons.calendar_today_rounded, size: 14),
+                        label: Text('Classes Start: ${DateFormat('dd/MM/yyyy').format(_effectiveFromDate)}'),
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.symmetric(horizontal: rs.width(10), vertical: rs.height(4)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -345,10 +487,23 @@ class _SemesterSharePreviewDialogState extends State<SemesterSharePreviewDialog>
     });
 
     try {
+      final regularSubjectsRaw = (widget.shareData['subjects'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      final resolvedSubjects = [
+        ...regularSubjectsRaw,
+        ..._selectedElectiveSubjects.map((s) => s.toJson()),
+      ];
+
+      final packageToImport = Map<String, dynamic>.from(widget.shareData);
+      packageToImport['subjects'] = resolvedSubjects;
+
       final success = await SemesterShareService().importSharedSemesterPackage(
-        widget.shareData,
+        packageToImport,
         context,
         mergeIntoCurrent: _mergeIntoCurrent,
+        effectiveFromDate: _mergeIntoCurrent ? _effectiveFromDate : null,
       );
 
       if (!mounted) return;

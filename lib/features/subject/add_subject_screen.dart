@@ -39,6 +39,8 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
 
   Color _selectedColor = weeklyClassColors.first;
   bool _isSpecialClass = false;
+  bool _isElective = false;
+  final _electiveGroupController = TextEditingController(text: 'Elective 1');
   final Set<DateTime> _specialClassDates = <DateTime>{};
   int _targetAttendance = 75;
   final List<TimeSlot> _schedule = [];
@@ -91,6 +93,7 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
     } catch (_) {}
     _nameController.dispose();
     _acronymController.dispose();
+    _electiveGroupController.dispose();
     super.dispose();
   }
 
@@ -942,6 +945,8 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
         locationId: _selectedLocation?.id,
         room: _selectedLocation?.name,
         block: _selectedLocation?.block,
+        isElective: _isElective,
+        electiveGroupName: _isElective ? _electiveGroupController.text.trim() : null,
       ),
     );
 
@@ -1217,6 +1222,11 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
                 child: _buildSpecialClassSection(colorScheme),
               ),
 
+              const SizedBox(height: 20),
+
+              // ── Elective subject toggle ─────────────────────────────────
+              _buildElectiveSection(colorScheme),
+
               const SizedBox(height: 32),
 
               // ── Schedule section ────────────────────────────────────────
@@ -1300,6 +1310,59 @@ class _AddSubjectScreenState extends State<AddSubjectScreen> {
           ),
         ),
       ],
+    );
+  }
+
+
+  Widget _buildElectiveSection(ColorScheme colorScheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _isElective
+              ? colorScheme.primary.withValues(alpha: 0.5)
+              : colorScheme.outlineVariant.withValues(alpha: 0.4),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            title: const Text('Elective Subject', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            subtitle: Text(
+              'Mark as an elective option for timetable sharing & preference selection',
+              style: TextStyle(fontSize: 12, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+            ),
+            secondary: Icon(
+              Icons.tune_rounded,
+              color: _isElective ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            value: _isElective,
+            onChanged: (val) {
+              setState(() => _isElective = val);
+            },
+          ),
+          if (_isElective) ...[
+            Divider(height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextFormField(
+                controller: _electiveGroupController,
+                decoration: InputDecoration(
+                  labelText: 'Elective Slot / Group Name',
+                  hintText: 'e.g. Elective 1, Open Elective, Track A',
+                  helperText: 'Subjects in the same slot share the same elective slot choice on import',
+                  prefixIcon: const Icon(Icons.category_outlined, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

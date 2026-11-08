@@ -56,7 +56,7 @@ class UpdateService {
       // Get current app version
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
-      final currentBuildNumber = int.tryParse(packageInfo.buildNumber) ?? 0;
+      final currentBuildNumber = AppUpdate.normalizeBuildNumber(int.tryParse(packageInfo.buildNumber) ?? 0);
 
       final versionComparison = AppUpdate.compareVersions(
         remoteUpdate.version,

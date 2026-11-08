@@ -28,7 +28,7 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 9,
+        version: 10,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -65,7 +65,9 @@ class DatabaseService {
           attendanceRecords TEXT NOT NULL,
           locationId TEXT,
           room TEXT,
-          block TEXT
+          block TEXT,
+          isElective INTEGER DEFAULT 0,
+          electiveGroupName TEXT
         )
       ''');
 
@@ -256,6 +258,16 @@ class DatabaseService {
           )
         ''');
       }
+      if (oldVersion < 10) {
+        final cols = await db.rawQuery('PRAGMA table_info(subjects)');
+        final existing = cols.map((c) => c['name'] as String).toSet();
+        if (!existing.contains('isElective')) {
+          await db.execute('ALTER TABLE subjects ADD COLUMN isElective INTEGER DEFAULT 0');
+        }
+        if (!existing.contains('electiveGroupName')) {
+          await db.execute('ALTER TABLE subjects ADD COLUMN electiveGroupName TEXT');
+        }
+      }
     } catch (e) {
       debugPrint('DatabaseService onUpgrade error: $e');
       rethrow;
@@ -300,6 +312,8 @@ class DatabaseService {
           'locationId': subject.locationId,
           'room': subject.room,
           'block': subject.block,
+          'isElective': subject.isElective ? 1 : 0,
+          'electiveGroupName': subject.electiveGroupName,
         });
       }
 
@@ -331,6 +345,8 @@ class DatabaseService {
           locationId: map['locationId'] as String?,
           room: map['room'] as String?,
           block: map['block'] as String?,
+          isElective: (map['isElective'] as int? ?? 0) == 1,
+          electiveGroupName: map['electiveGroupName'] as String?,
         );
       }).toList();
       return subjects;

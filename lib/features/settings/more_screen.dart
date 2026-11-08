@@ -1112,7 +1112,10 @@ class _MoreScreenState extends State<MoreScreen> {
           future: _packageInfoFuture,
           builder: (context, snapshot) {
             final version = snapshot.data?.version ?? 'Loading...';
-            final buildNumber = snapshot.data?.buildNumber ?? 'Loading...';
+            final rawBuildNumber = snapshot.data?.buildNumber;
+            final buildNumber = rawBuildNumber != null
+                ? AppUpdate.cleanBuildNumber(rawBuildNumber)
+                : 'Loading...';
 
             return ListTile(
               leading: const Icon(Icons.info_outline),

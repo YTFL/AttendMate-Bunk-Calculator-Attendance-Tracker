@@ -133,7 +133,7 @@ class TimetableExportUtils {
   /// Export as JSON file
   static Future<File> exportAsJsonFile(List<Subject> subjects) async {
     final weeklySubjects = _extractWeeklySubjects(subjects);
-    final jsonData = _buildImportCompatibleJson(weeklySubjects);
+    final jsonData = _buildImportCompatibleJson(weeklySubjects, originalSubjects: subjects);
 
     final jsonString = _prettyJsonEncode(jsonData);
     
@@ -143,8 +143,12 @@ class TimetableExportUtils {
     return file;
   }
 
-  static Map<String, dynamic> _buildImportCompatibleJson(List<Subject> subjects) {
+  static Map<String, dynamic> _buildImportCompatibleJson(
+    List<Subject> subjects, {
+    List<Subject>? originalSubjects,
+  }) {
     final subjectList = <Map<String, dynamic>>[];
+    final electivesMap = <String, List<Map<String, dynamic>>>{};
 
     for (final subject in subjects) {
       final schedule = subject.schedule.map((slot) {
@@ -152,6 +156,8 @@ class TimetableExportUtils {
           'day': slot.day.name.toLowerCase(),
           'startTime': _formatTime(slot.startTime.hour, slot.startTime.minute),
           'endTime': _formatTime(slot.endTime.hour, slot.endTime.minute),
+          if (slot.room != null) 'room': slot.room,
+          if (slot.block != null) 'block': slot.block,
         };
       }).toList();
 
@@ -159,14 +165,56 @@ class TimetableExportUtils {
         'name': subject.name,
         if (subject.acronym != null && subject.acronym!.trim().isNotEmpty)
           'acronym': subject.acronym!.trim(),
+        'targetAttendance': subject.targetAttendance,
+        if (subject.room != null) 'room': subject.room,
+        if (subject.block != null) 'block': subject.block,
         'schedule': schedule,
       };
 
-      subjectList.add(item);
+      if (subject.isElective) {
+        final groupName = subject.electiveGroupName?.trim().isNotEmpty == true
+            ? subject.electiveGroupName!.trim()
+            : 'Elective';
+        electivesMap.putIfAbsent(groupName, () => []).add(item);
+      } else {
+        subjectList.add(item);
+      }
+    }
+
+    final electivesList = electivesMap.entries.map((entry) {
+      return {
+        'name': entry.key,
+        'subjects': entry.value,
+      };
+    }).toList();
+
+    final specialClasses = <Map<String, dynamic>>[];
+    final sourceForSpecials = originalSubjects ?? subjects;
+    for (final subject in sourceForSpecials) {
+      for (final slot in subject.schedule) {
+        if (slot.isSpecialClass && slot.specificDate != null) {
+          final d = slot.specificDate!;
+          final datePart = '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+          specialClasses.add({
+            'subject': subject.name,
+            if (subject.acronym != null) 'acronym': subject.acronym,
+            'date': datePart,
+            'startTime': _formatTime(slot.startTime.hour, slot.startTime.minute),
+            'endTime': _formatTime(slot.endTime.hour, slot.endTime.minute),
+            if (slot.room != null) 'room': slot.room,
+            if (slot.block != null) 'block': slot.block,
+            'isExtra': slot.isExtra,
+          });
+        }
+      }
     }
 
     return {
+      'app': 'AttendMate',
+      'type': 'timetable_json',
       'subjects': subjectList,
+      if (electivesList.isNotEmpty) 'electives': electivesList,
+      if (specialClasses.isNotEmpty) 'specialClasses': specialClasses,
     };
   }
 

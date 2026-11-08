@@ -42,20 +42,35 @@ class SemesterShareService {
     final subjects = await dbService.loadSubjects();
     final locations = await dbService.loadLocations();
 
-    final sanitizedSubjects = subjects.map((s) {
+    final sanitizedSubjects = <Map<String, dynamic>>[];
+    final electivesMap = <String, List<Map<String, dynamic>>>{};
+
+    for (final s in subjects) {
       final jsonMap = s.toJson();
-      // Ensure past attendance records are completely stripped
       jsonMap['attendanceRecords'] = [];
-      return jsonMap;
+      if (s.isElective) {
+        final group = s.electiveGroupName?.trim().isNotEmpty == true
+            ? s.electiveGroupName!.trim()
+            : 'Elective';
+        electivesMap.putIfAbsent(group, () => []).add(jsonMap);
+      } else {
+        sanitizedSubjects.add(jsonMap);
+      }
+    }
+
+    final electivesList = electivesMap.entries.map((entry) => {
+      'name': entry.key,
+      'subjects': entry.value,
     }).toList();
 
     return {
       'app': 'AttendMate',
       'type': 'semester_share',
-      'schema_version': 1,
+      'schema_version': 2,
       'exported_at': DateTime.now().toUtc().toIso8601String(),
       'semester': semester?.toJson(),
       'subjects': sanitizedSubjects,
+      if (electivesList.isNotEmpty) 'electives': electivesList,
       'locations': locations.map((l) => l.toMap()).toList(),
     };
   }
@@ -146,6 +161,12 @@ class SemesterShareService {
     final type = jsonMap['type'] as String?;
     if (type == 'semester_share') {
       return ImportFileType.semesterShare;
+    }
+    if (type == 'special_classes' || type == 'mid_semester_subjects' || type == 'electives') {
+      return ImportFileType.timetableJson;
+    }
+    if (jsonMap.containsKey('specialClasses') || jsonMap.containsKey('oneOffClasses') || jsonMap.containsKey('electives')) {
+      return ImportFileType.timetableJson;
     }
 
     // Check for full backup (contains database object with subjects/attendance or top-level preferences)
@@ -361,6 +382,7 @@ class SemesterShareService {
     Map<String, dynamic> package,
     BuildContext context, {
     required bool mergeIntoCurrent,
+    DateTime? effectiveFromDate,
   }) async {
     try {
       final semesterProv = Provider.of<SemesterProvider>(context, listen: false);
@@ -432,16 +454,29 @@ class SemesterShareService {
           );
 
           if (existingIdx != -1) {
+            final replacementSlots = newSub.schedule.map((slot) {
+              if (slot.isSpecialClass || effectiveFromDate == null) return slot;
+              return slot.copyWith(effectiveFrom: effectiveFromDate, clearEffectiveUntil: true);
+            }).toList();
+
             currentSubjects[existingIdx] = currentSubjects[existingIdx].copyWith(
               schedule: schedulePreservingExtraClasses(
-                replacement: newSub.schedule,
+                replacement: replacementSlots,
                 existing: currentSubjects[existingIdx].schedule,
               ),
               room: () => newSub.room,
               block: () => newSub.block,
             );
           } else {
-            currentSubjects.add(newSub);
+            final seededSub = effectiveFromDate == null
+                ? newSub
+                : newSub.copyWith(
+                    schedule: newSub.schedule.map((slot) {
+                      if (slot.isSpecialClass) return slot;
+                      return slot.copyWith(effectiveFrom: effectiveFromDate, clearEffectiveUntil: true);
+                    }).toList(),
+                  );
+            currentSubjects.add(seededSub);
           }
         }
         await dbService.saveSubjects(currentSubjects);

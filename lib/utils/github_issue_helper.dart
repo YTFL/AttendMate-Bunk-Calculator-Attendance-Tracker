@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../models/app_update_model.dart';
 import '../services/database_service.dart';
 import 'snackbar_utils.dart';
 import 'url_launcher_utils.dart';
@@ -31,7 +32,7 @@ class GitHubIssueHelper {
     String versionStr = 'Unknown';
     try {
       final info = await PackageInfo.fromPlatform();
-      versionStr = 'v${info.version} (Build ${info.buildNumber})';
+      versionStr = 'v${info.version} (Build ${AppUpdate.cleanBuildNumber(info.buildNumber)})';
     } catch (_) {}
 
     String platformStr = 'Unknown Platform';

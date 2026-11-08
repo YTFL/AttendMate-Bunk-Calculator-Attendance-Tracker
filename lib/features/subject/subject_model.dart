@@ -18,6 +18,8 @@ class Subject {
   final String? locationId;
   final String? room;
   final String? block;
+  final bool isElective;
+  final String? electiveGroupName;
 
   Subject({
     String? id,
@@ -30,6 +32,8 @@ class Subject {
     this.locationId,
     this.room,
     this.block,
+    this.isElective = false,
+    this.electiveGroupName,
   }) : id = id ?? uuid.v4();
 
   factory Subject.fromJson(Map<String, dynamic> json) {
@@ -48,6 +52,8 @@ class Subject {
       locationId: json['locationId'] as String?,
       room: json['room'] as String?,
       block: json['block'] as String?,
+      isElective: json['isElective'] as bool? ?? false,
+      electiveGroupName: json['electiveGroupName'] as String? ?? json['electiveGroup'] as String?,
     );
   }
 
@@ -62,6 +68,8 @@ class Subject {
         'locationId': locationId,
         'room': room,
         'block': block,
+        'isElective': isElective,
+        if (electiveGroupName != null) 'electiveGroupName': electiveGroupName,
       };
 
   Subject copyWith({
@@ -75,6 +83,8 @@ class Subject {
     String? Function()? locationId,
     String? Function()? room,
     String? Function()? block,
+    bool? isElective,
+    String? Function()? electiveGroupName,
   }) {
     return Subject(
       id: id ?? this.id,
@@ -87,6 +97,8 @@ class Subject {
       locationId: locationId != null ? locationId() : this.locationId,
       room: room != null ? room() : this.room,
       block: block != null ? block() : this.block,
+      isElective: isElective ?? this.isElective,
+      electiveGroupName: electiveGroupName != null ? electiveGroupName() : this.electiveGroupName,
     );
   }
 
@@ -201,6 +213,38 @@ class Subject {
   }
 }
 
+class ElectiveSlot {
+  final String id;
+  final String name;
+  final List<Subject> subjects;
+
+  ElectiveSlot({
+    String? id,
+    required this.name,
+    required this.subjects,
+  }) : id = id ?? uuid.v4();
+
+  factory ElectiveSlot.fromJson(Map<String, dynamic> json) {
+    final slotName = json['name'] as String? ?? 'Elective';
+    return ElectiveSlot(
+      id: json['id'] as String? ?? uuid.v4(),
+      name: slotName,
+      subjects: (json['subjects'] as List<dynamic>? ?? [])
+          .map((e) => Subject.fromJson(e as Map<String, dynamic>).copyWith(
+                isElective: true,
+                electiveGroupName: () => slotName,
+              ))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'subjects': subjects.map((s) => s.toJson()).toList(),
+      };
+}
+
 class ManualAttendanceOverride {
   final DateTime effectiveFrom;
   final int classesHeld;
@@ -310,10 +354,12 @@ class TimeSlot {
   });
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
-    final parsedSpecificDate = json['specificDate'] != null
-        ? DateTime.parse(json['specificDate'] as String)
+    final rawDateStr = json['specificDate'] ?? json['date'];
+    final parsedSpecificDate = rawDateStr != null
+        ? DateTime.parse(rawDateStr as String)
         : null;
     final normalizedDate = normalizeDate(parsedSpecificDate);
+
     final parsedEffectiveFrom = json['effectiveFrom'] != null
         ? DateTime.parse(json['effectiveFrom'] as String)
         : null;
@@ -321,17 +367,45 @@ class TimeSlot {
         ? DateTime.parse(json['effectiveUntil'] as String)
         : null;
 
+    // Day can be an integer, a string like "monday", or inferred from date
+    DayOfWeek resolvedDay;
+    if (json['day'] != null) {
+      if (json['day'] is int) {
+        resolvedDay = DayOfWeek.values[json['day'] as int];
+      } else {
+        final dStr = (json['day'] as String).trim().toLowerCase();
+        resolvedDay = DayOfWeek.values.firstWhere(
+          (d) => d.name.toLowerCase() == dStr,
+          orElse: () => DayOfWeek.monday,
+        );
+      }
+    } else if (normalizedDate != null) {
+      resolvedDay = DayOfWeek.values[normalizedDate.weekday - 1];
+    } else {
+      resolvedDay = DayOfWeek.monday;
+    }
+
+    TimeOfDay parseTime(dynamic value) {
+      if (value is Map) {
+        return TimeOfDay(hour: value['hour'] as int, minute: value['minute'] as int);
+      } else if (value is String) {
+        final parts = value.trim().split(':');
+        return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      }
+      return const TimeOfDay(hour: 9, minute: 0);
+    }
+
     return TimeSlot(
-      day: DayOfWeek.values[json['day'] as int],
-      startTime: TimeOfDay(hour: json['startTime']['hour'], minute: json['startTime']['minute']),
-      endTime: TimeOfDay(hour: json['endTime']['hour'], minute: json['endTime']['minute']),
+      day: resolvedDay,
+      startTime: parseTime(json['startTime']),
+      endTime: parseTime(json['endTime']),
       specificDate: normalizedDate,
       effectiveFrom: normalizeDate(parsedEffectiveFrom),
       effectiveUntil: normalizeDate(parsedEffectiveUntil),
       locationId: json['locationId'] as String?,
       room: json['room'] as String?,
       block: json['block'] as String?,
-      isExtra: json['isExtra'] as bool? ?? false,
+      isExtra: json['isExtra'] as bool? ?? (normalizedDate != null),
     );
   }
 

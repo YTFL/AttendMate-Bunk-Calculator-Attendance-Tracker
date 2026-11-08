@@ -54,6 +54,23 @@ class AppUpdate {
     return 0;
   }
 
+  /// Strip architecture offset (+1000, +2000, +3000) added by Flutter's split-per-abi build system.
+  static int normalizeBuildNumber(int rawBuildNumber) {
+    if (rawBuildNumber >= 1000) {
+      return rawBuildNumber % 1000;
+    }
+    return rawBuildNumber;
+  }
+
+  /// Strip architecture offset from build number string for display.
+  static String cleanBuildNumber(String rawBuildNumber) {
+    final parsed = int.tryParse(rawBuildNumber);
+    if (parsed != null && parsed >= 1000) {
+      return (parsed % 1000).toString();
+    }
+    return rawBuildNumber;
+  }
+
   /// Convert to JSON
   Map<String, dynamic> toJson() {
     return {

@@ -10,6 +10,8 @@ import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
 import '../calendar/calendar_utils.dart' hide isSameDay;
 import 'subject_model.dart';
+import '../../utils/timetable_import_utils.dart';
+import '../../utils/string_extension.dart';
 
 class TimetableUpdateResult {
   final int matchedSubjects;
@@ -113,6 +115,89 @@ class SubjectProvider with ChangeNotifier {
     await BackupService().notifyDataChanged();
     notifyListeners();
     _scheduleAutoSync();
+  }
+
+  Future<int> importNewSubjectsMidSemester({
+    required List<Subject> newSubjects,
+    required DateTime effectiveFromDate,
+  }) async {
+    final normalizedDate = normalizeDate(effectiveFromDate) ?? effectiveFromDate;
+    final seeded = <Subject>[];
+
+    for (final s in newSubjects) {
+      final seededSchedule = s.schedule.map((slot) {
+        if (slot.isSpecialClass) return slot;
+        return slot.copyWith(
+          effectiveFrom: normalizedDate,
+          clearEffectiveUntil: true,
+        );
+      }).toList();
+      seeded.add(s.copyWith(schedule: seededSchedule));
+    }
+
+    _subjects.addAll(seeded);
+    await _databaseService.saveSubjects(_subjects);
+    await _refreshAttendanceReminders();
+    await BackupService().notifyDataChanged();
+    notifyListeners();
+    _scheduleAutoSync();
+    return seeded.length;
+  }
+
+  Future<int> importSpecialOneOffClasses(List<SpecialClassImportItem> items) async {
+    if (items.isEmpty) return 0;
+    final updated = List<Subject>.from(_subjects);
+    int addedCount = 0;
+
+    for (final item in items) {
+      final targetName = (item.subjectName ?? '').trim().toLowerCase();
+      final targetAcronym = (item.subjectAcronym ?? '').trim().toLowerCase();
+
+      int existingIdx = -1;
+      if (targetAcronym.isNotEmpty) {
+        existingIdx = updated.indexWhere(
+          (s) => (s.acronym ?? '').trim().toLowerCase() == targetAcronym,
+        );
+      }
+      if (existingIdx == -1 && targetName.isNotEmpty) {
+        existingIdx = updated.indexWhere(
+          (s) => s.name.trim().toLowerCase() == targetName,
+        );
+      }
+
+      if (existingIdx != -1) {
+        final existing = updated[existingIdx];
+        final updatedSchedule = schedulePreservingExtraClasses(
+          replacement: [item.slot],
+          existing: existing.schedule,
+        );
+        updated[existingIdx] = existing.copyWith(
+          schedule: _sortedSchedule(updatedSchedule),
+        );
+        addedCount++;
+      } else {
+        final name = item.subjectName ?? item.subjectAcronym ?? 'Special Class';
+        final acronym = item.subjectAcronym ?? name.acronymFromName();
+        final usedColors = updated.map((s) => s.color).toSet();
+        final newSub = Subject(
+          name: name,
+          acronym: acronym,
+          color: TimetableImportUtils.getRandomUnusedColor(usedColors),
+          schedule: [item.slot],
+          targetAttendance: 75,
+        );
+        updated.add(newSub);
+        addedCount++;
+      }
+    }
+
+    _subjects = updated;
+    await _databaseService.saveSubjects(_subjects);
+    await _refreshAttendanceReminders();
+    await BackupService().notifyDataChanged();
+    notifyListeners();
+    _scheduleAutoSync();
+    return addedCount;
   }
 
   Future<TimetableUpdateResult> applyTimetableUpdateFromDate(

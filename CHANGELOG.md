@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.4.0] - 2026-11-08
 
 ### Added
+- **Elective Subject Support & Interactive Timetable Selection**:
+  - Added an "Elective Subject" toggle and elective group name input when creating or editing subjects (`AddSubjectScreen`, `EditSubjectScreen`).
+  - Added visual `Elective • <Group>` chip badges on subject cards for clear distinction.
+  - Upgraded SQLite database to version 10 with automated schema migration for `isElective` and `electiveGroupName`.
+  - Added interactive `ElectiveSelectionDialog` upon timetable or semester share import, allowing students to select their preferred elective subjects per slot or skip them.
+  - Updated JSON import/export schemas to support grouping elective subjects under `"electives": [{ "name": "...", "subjects": [...] }]`.
+- **Mid-Semester New Subjects Import**:
+  - Added capability to import newly introduced subjects mid-semester without affecting existing subjects, recurring weekly timetables, or historical attendance records.
+  - Supports date-based tracking with top-level or per-subject `"effectiveFrom": "YYYY-MM-DD"`.
+  - Integrated `importNewSubjectsMidSemester` in `SubjectProvider` and selectable merge modes in `ImportTimetableScreen`.
+- **Special One-Off Classes JSON Import**:
+  - Dedicated support for single-date makeup, extra, or special classes via `"specialClasses": [{ "subject": "...", "date": "YYYY-MM-DD", ... }]`.
+  - Automatically parses single dates, infers the weekday, and sets `isExtra: true` and `isSpecialClass: true`.
+  - Seamlessly merges into existing subject schedules if matched by name or acronym, or creates new standalone courses.
+- **Dedicated AI Prompts & JSON Schema Templates**:
+  - Added 4 dedicated, instruction-rich AI prompts and JSON templates in `TimetableImportUtils` (Master Timetable, Electives Only, Mid-Semester Subjects, Special One-Off Classes).
+  - Enhanced in-app format guide with chip-selectable categories and one-touch clipboard copying.
 - **Native Maps App Redirection & Smart Coordinate Parser**:
   - Completely removed the Google Maps SDK and paid Maps API in favor of phone-native map app redirection (`geo:0,0?q=`).
   - Added an intelligent coordinate parser supporting decimal coordinates (`lat, lng`), DMS format (Degrees Minutes Seconds), Google Maps URLs (`maps.app.goo.gl`, `?q=`, `/@lat,lng`), and dropped pin clipboard text with 1-tap clipboard paste and live coordinate preview.
@@ -21,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed & Improved
 - **High-Speed Calendar Synchronization**:
   - Re-architected schedule slot sync and differential hash lookups using a 5-worker concurrent pool, speeding up calendar synchronization up to 5x mid-semester without sequential API bottlenecking.
+- **Clean Build Number Display**:
+  - Automatically strip architecture offsets (+1000, +2000, +3000) injected by Flutter's split-per-ABI build system so the More tab, update engine, and logs display the clean canonical build number (e.g. `Build 33` instead of `Build 2033`).
 - **Streamlined Interactive Tutorial**:
   - Replaced the numerical step count ("STEP X OF Y") with a discreet "QUICK GUIDE" header chip to eliminate skip tendencies and improve onboarding flow.
 

@@ -591,11 +591,37 @@ class _SubjectCardItemState extends State<_SubjectCardItem>
                   ),
                   SizedBox(width: rs.width(12)),
                   Expanded(
-                    child: Text(
-                      subject.name,
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(15)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          subject.name,
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: rs.font(15)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (subject.isElective) ...[
+                          SizedBox(height: rs.height(2)),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: rs.width(6), vertical: rs.height(1)),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(rs.scale(4)),
+                            ),
+                            child: Text(
+                              subject.electiveGroupName?.isNotEmpty == true
+                                  ? 'Elective • '
+                                  : 'Elective',
+                              style: TextStyle(
+                                fontSize: rs.font(10),
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   IconButton(
