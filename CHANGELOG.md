@@ -7,34 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.4.0] - 2026-11-08
+## [2.3.0] - 2026-10-25
 
 ### Added
 - **Native Maps App Redirection & Smart Coordinate Parser**:
-  - Completely replaced the Google Maps SDK and paid Maps API with native maps app integration.
-  - Added an "Open Default Maps App" action that launches the user's preferred maps application (`geo:0,0?q=`).
-  - Added an intelligent coordinate parser supporting decimal coordinates, DMS (Degrees Minutes Seconds), Google Maps URLs, and dropped pin clipboard text with one-tap clipboard paste.
-- **Calendar Sync Progress Dialog & Modal Protection**:
-  - Added a non-dismissible `SyncProgressDialog` displaying exact sync percentage and real-time subject slot progress.
-  - Added `PopScope` blocking back navigation until calendar synchronization is complete, preventing partial or interrupted sync states.
-  - Added system status bar notification upon calendar sync completion.
+  - Completely removed the Google Maps SDK and paid Maps API in favor of phone-native map app redirection (`geo:0,0?q=`).
+  - Added an intelligent coordinate parser supporting decimal coordinates (`lat, lng`), DMS format (Degrees Minutes Seconds), Google Maps URLs (`maps.app.goo.gl`, `?q=`, `/@lat,lng`), and dropped pin clipboard text with 1-tap clipboard paste and live coordinate preview.
+- **Calendar Sync Progress Dialog & Interruption Protection**:
+  - Added a non-dismissible `SyncProgressDialog` modal displaying exact completion percentage (`%`) and real-time progress for each subject slot.
+  - Integrated `PopScope` blocking back dismissal during active synchronization, preventing partial or corrupted sync states.
+  - Added an automated system status bar notification upon calendar sync completion.
+- **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):
+  - Students can log one-off extra, rescheduled, or makeup classes directly on any date without altering their recurring weekly timetable.
+  - Quick Add from Daily Views, swipe gestures for attendance, bunk tracking, and non-destructive deletion.
+- **Consider Pre-Marked Future Lectures in Bunk Calculator** ([#3](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/3), [@purval26](https://github.com/purval26)):
+  - Students can factor future pre-marked classes (attended, absent, or cancelled holidays) into the Bunk Calculator ("What-If Calculator") and Bunk Meter.
+- **Developer Portfolio ("More apps by me") in More Tab**:
+  - Added a dedicated "More apps by me" entry under Help & Support on the More tab linking to [ytfl.github.io](https://ytfl.github.io/).
 
 ### Changed & Improved
 - **High-Speed Calendar Synchronization**:
-  - Parallelized schedule slot sync and differential hash lookups using a 5-worker concurrent pool, dramatically speeding up mid-semester sync.
+  - Re-architected schedule slot sync and differential hash lookups using a 5-worker concurrent pool, speeding up calendar synchronization up to 5x mid-semester without sequential API bottlenecking.
 - **Streamlined Interactive Tutorial**:
-  - Replaced the numerical step count ("STEP X OF Y") with a discreet "QUICK GUIDE" header badge to reduce user drop-off during onboarding.
+  - Replaced the numerical step count ("STEP X OF Y") with a discreet "QUICK GUIDE" header chip to eliminate skip tendencies and improve onboarding flow.
 
 ### Fixed
 - **Google Drive Midnight Backup Reliability**:
-  - Added independent modification timestamp tracking (`last_data_modified_timestamp_ms` and `last_google_drive_backup_timestamp_ms`) to ensure Drive backups run even if local auto-backups clear the dirty flag earlier in the day.
+  - Added independent modification timestamp tracking (`last_data_modified_timestamp_ms` and `last_google_drive_backup_timestamp_ms`) to ensure Drive backups run reliably at midnight even if local backups clear the dirty flag earlier in the day.
   - Updated WorkManager periodic backup policy to `ExistingPeriodicWorkPolicy.keep` with `NetworkType.connected` constraints.
-  - Added app launch catch-up check to automatically trigger missed backups if the device was in deep doze at midnight.
+  - Added app launch catch-up check to automatically trigger missed backups if the device was asleep or in battery doze at midnight.
 - **Smart Pre-Class Notification Filtering**:
-  - Automatically suppress 5-minute pre-class room reminders if a class is marked absent or holiday (cancelled), eliminating unnecessary alarms for missed classes.
-  - Keep pre-class reminders active for classes marked present (attended) or unmarked.
-
-## [2.3.0] - 2026-10-25
+  - Automatically suppress 5-minute pre-class room reminders if a future or current class is marked absent or holiday (cancelled), eliminating unnecessary notifications for cancelled or missed classes.
+  - Pre-class reminders remain active for classes marked present (attended) or unmarked.
 
 ### Added
 - **One-Day Extra / Makeup Classes (Without Changing Weekly Timetable)** ([#4](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/issues/4), [#6](https://github.com/YTFL/AttendMate-Bunk-Calculator-Attendance-Tracker/pull/6), [@pranjalaman](https://github.com/pranjalaman)):
