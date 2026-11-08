@@ -93,7 +93,12 @@ class NotificationService {
         // --- 1. Schedule Pre-Class Notification (5 minutes before class starts) ---
         // Always schedule pre-class reminder regardless of marked attendance,
         // so the user still receives classroom room & block details.
-        final preClassTime = _nextPreClassInstanceOfSlot(slot, minutesBefore: 5);
+        final preClassTime = _nextPreClassInstanceOfSlot(
+          slot,
+          existingAttendance: existingAttendance,
+          subjectId: subject.id,
+          minutesBefore: 5,
+        );
         if (preClassTime != null) {
           final preClassNotificationId = getPreClassNotificationId(subject.id, slot);
           if (!_scheduledNotifications.contains(preClassNotificationId)) {
@@ -314,6 +319,53 @@ class NotificationService {
     });
   }
 
+    /// Checks if a class slot for a subject on a specific date is marked as absent or holiday (cancelled/plannedAbsent).
+  /// Classes that are unmarked or marked present (attended) return false so reminders are KEPT.
+  bool isClassMarkedAbsentOrHoliday({
+    required List<Attendance> existingAttendance,
+    required String subjectId,
+    required DateTime date,
+    required String? slotKey,
+  }) {
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    final recordsForDay = existingAttendance.where((record) =>
+        DateTime(record.date.year, record.date.month, record.date.day) == dateOnly
+    ).toList();
+
+    if (recordsForDay.isEmpty) {
+      return false;
+    }
+
+    final isDayHoliday = recordsForDay.isNotEmpty &&
+        recordsForDay.every((record) => record.status == AttendanceStatus.cancelled);
+    if (isDayHoliday) {
+      return true;
+    }
+
+    final subjectRecords = recordsForDay.where((record) => record.subjectId == subjectId).toList();
+    if (subjectRecords.isEmpty) {
+      return false;
+    }
+
+    final cleanSlotKey = slotKey ?? '';
+
+    return subjectRecords.any((record) {
+      final recordSlotKey = record.slotKey ?? '';
+      final isSlotMatch = recordSlotKey == cleanSlotKey ||
+          recordSlotKey.isEmpty ||
+          cleanSlotKey.isEmpty;
+
+      if (!isSlotMatch) {
+        return false;
+      }
+
+      return record.status == AttendanceStatus.absent ||
+          record.status == AttendanceStatus.cancelled ||
+          record.status == AttendanceStatus.plannedAbsent;
+    });
+  }
+
   NotificationDetails _notificationDetails() {
     const androidDetails = AndroidNotificationDetails(
       'attendance_reminders',
@@ -445,7 +497,12 @@ class NotificationService {
     return const NotificationDetails(android: androidDetails);
   }
 
-  tz.TZDateTime? _nextPreClassInstanceOfSlot(TimeSlot slot, {int minutesBefore = 5}) {
+  tz.TZDateTime? _nextPreClassInstanceOfSlot(
+    TimeSlot slot, {
+    List<Attendance>? existingAttendance,
+    String? subjectId,
+    int minutesBefore = 5,
+  }) {
     final now = tz.TZDateTime.now(tz.local);
     final today = DateTime(now.year, now.month, now.day);
 
@@ -468,6 +525,18 @@ class NotificationService {
 
       if (now.isAfter(preClassTime)) {
         return null;
+      }
+
+      if (existingAttendance != null && subjectId != null) {
+        final isExcluded = isClassMarkedAbsentOrHoliday(
+          existingAttendance: existingAttendance,
+          subjectId: subjectId,
+          date: scheduledDate,
+          slotKey: slot.slotKey,
+        );
+        if (isExcluded) {
+          return null;
+        }
       }
 
       return preClassTime;
@@ -498,6 +567,18 @@ class NotificationService {
 
       if (preClassTime.isBefore(now)) {
         continue;
+      }
+
+      if (existingAttendance != null && subjectId != null) {
+        final isExcluded = isClassMarkedAbsentOrHoliday(
+          existingAttendance: existingAttendance,
+          subjectId: subjectId,
+          date: candidateDate,
+          slotKey: slot.slotKey,
+        );
+        if (isExcluded) {
+          continue;
+        }
       }
 
       return preClassTime;
@@ -584,6 +665,43 @@ class NotificationService {
   }
 
   /// Cancels all scheduled reminders (both pre-class and end-of-class) for a deleted subject.
+    /// Cancels only the pre-class reminder (room/block notification) for a specific subject slot on a date.
+  Future<void> cancelPreClassReminder({
+    required String subjectId,
+    required DateTime date,
+    String? slotKey,
+  }) async {
+    try {
+      if (slotKey != null && slotKey.isNotEmpty) {
+        final preId = getPreClassNotificationIdFromSlotKey(subjectId, slotKey);
+        await _plugin.cancel(id: preId);
+        _scheduledNotifications.remove(preId);
+        _payloadMap.remove(preId);
+      } else {
+        final subjects = await DatabaseService().loadSubjects();
+        Subject? targetSubject;
+        for (final s in subjects) {
+          if (s.id == subjectId) {
+            targetSubject = s;
+            break;
+          }
+        }
+        if (targetSubject != null) {
+          for (final slot in targetSubject.schedule) {
+            if (slot.occursOnDate(date)) {
+              final preId = getPreClassNotificationId(subjectId, slot);
+              await _plugin.cancel(id: preId);
+              _scheduledNotifications.remove(preId);
+              _payloadMap.remove(preId);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error canceling pre-class reminder: ');
+    }
+  }
+
   Future<void> cancelAllRemindersForSubject(Subject subject) async {
     try {
       for (final slot in subject.schedule) {

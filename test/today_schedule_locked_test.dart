@@ -125,6 +125,9 @@ class TestSubjectProvider extends SubjectProvider {
         .where((subject) => subject.schedule.any((slot) => slot.occursOnDate(date)))
         .toList();
   }
+
+  @override
+  void scheduleAutoSync() {}
 }
 
 // Test SemesterProvider

@@ -111,6 +111,7 @@ class BackupService {
     _hasChangesInCurrentSession = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefHasUnbackedChangesKey, true);
+    await prefs.setInt('last_data_modified_timestamp_ms', DateTime.now().millisecondsSinceEpoch);
 
     // If an existing 5-minute backup was scheduled and is currently running,
     // log that the timer is marked for reset upon exit

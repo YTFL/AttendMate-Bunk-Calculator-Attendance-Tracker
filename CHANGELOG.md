@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2026-11-08
+
+### Added
+- **Native Maps App Redirection & Smart Coordinate Parser**:
+  - Completely replaced the Google Maps SDK and paid Maps API with native maps app integration.
+  - Added an "Open Default Maps App" action that launches the user's preferred maps application (`geo:0,0?q=`).
+  - Added an intelligent coordinate parser supporting decimal coordinates, DMS (Degrees Minutes Seconds), Google Maps URLs, and dropped pin clipboard text with one-tap clipboard paste.
+- **Calendar Sync Progress Dialog & Modal Protection**:
+  - Added a non-dismissible `SyncProgressDialog` displaying exact sync percentage and real-time subject slot progress.
+  - Added `PopScope` blocking back navigation until calendar synchronization is complete, preventing partial or interrupted sync states.
+  - Added system status bar notification upon calendar sync completion.
+
+### Changed & Improved
+- **High-Speed Calendar Synchronization**:
+  - Parallelized schedule slot sync and differential hash lookups using a 5-worker concurrent pool, dramatically speeding up mid-semester sync.
+- **Streamlined Interactive Tutorial**:
+  - Replaced the numerical step count ("STEP X OF Y") with a discreet "QUICK GUIDE" header badge to reduce user drop-off during onboarding.
+
+### Fixed
+- **Google Drive Midnight Backup Reliability**:
+  - Added independent modification timestamp tracking (`last_data_modified_timestamp_ms` and `last_google_drive_backup_timestamp_ms`) to ensure Drive backups run even if local auto-backups clear the dirty flag earlier in the day.
+  - Updated WorkManager periodic backup policy to `ExistingPeriodicWorkPolicy.keep` with `NetworkType.connected` constraints.
+  - Added app launch catch-up check to automatically trigger missed backups if the device was in deep doze at midnight.
+- **Smart Pre-Class Notification Filtering**:
+  - Automatically suppress 5-minute pre-class room reminders if a class is marked absent or holiday (cancelled), eliminating unnecessary alarms for missed classes.
+  - Keep pre-class reminders active for classes marked present (attended) or unmarked.
+
 ## [2.3.0] - 2026-10-25
 
 ### Added

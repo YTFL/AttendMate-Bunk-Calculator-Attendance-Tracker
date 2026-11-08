@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../services/calendar_service.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/sync_progress_dialog.dart';
+import '../../services/notification_service.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 
@@ -150,19 +152,30 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     });
 
     try {
-      await CalendarService.syncFullTimetable(
-        subjects: subjectProvider.subjects,
-        semester: semesterProvider.semester!,
-        isHoliday: subjectProvider.isHoliday,
+      final ok = await SyncProgressDialog.show(
+        context: context,
+        title: 'Syncing Google Calendar',
+        action: (onProgress) => CalendarService.syncFullTimetable(
+          subjects: subjectProvider.subjects,
+          semester: semesterProvider.semester!,
+          isHoliday: subjectProvider.isHoliday,
+          onProgress: onProgress,
+        ),
       );
 
-      if (mounted) {
+      if (ok == true && mounted) {
         ScaffoldMessenger.of(context).showReplacingSnackBar(
           const SnackBar(
             content: Text('Timetable successfully synced to Google Calendar!'),
             backgroundColor: Colors.green,
           ),
         );
+        try {
+          await NotificationService().showBackupNotification(
+            title: 'Calendar Sync Complete',
+            body: 'Your timetable was synchronized with Google Calendar.',
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (mounted) {
@@ -199,7 +212,9 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
     final semester = semesterProvider.semester;
     final subjectCount = subjectProvider.subjects.length;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isSyncing,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Google Calendar Sync'),
         elevation: 0,
@@ -320,6 +335,7 @@ class _GoogleCalendarSyncScreenState extends State<GoogleCalendarSyncScreen> {
                   ),
               ],
             ),
+      ),
     );
   }
 

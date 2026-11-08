@@ -199,6 +199,7 @@ class GoogleDriveBackupService {
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now().toUtc();
       await prefs.setString(prefLastDriveBackupTimeKey, now.toIso8601String());
+      await prefs.setInt('last_google_drive_backup_timestamp_ms', now.millisecondsSinceEpoch);
 
       await DatabaseService().logAppEvent(
         tag: 'GoogleDriveBackup',
@@ -265,7 +266,7 @@ class GoogleDriveBackupService {
   }
 
   /// Background midnight backup trigger
-  Future<void> executeMidnightBackup() async {
+  Future<void> executeMidnightBackup({bool forceIfHadChanges = false}) async {
     await DatabaseService().logAppEvent(
       tag: 'GoogleDriveBackup',
       message: 'Midnight Google Drive cloud backup trigger started.',
@@ -291,8 +292,17 @@ class GoogleDriveBackupService {
       return;
     }
 
-    final hasChanges = await BackupService().hasUnbackedDataChanges();
-    if (!hasChanges) {
+    final prefs = await SharedPreferences.getInstance();
+    final lastModifiedMs = prefs.getInt('last_data_modified_timestamp_ms') ?? 0;
+    final lastDriveBackupMs = prefs.getInt('last_google_drive_backup_timestamp_ms') ?? 0;
+    final hasUnbackedLocal = await BackupService().hasUnbackedDataChanges();
+
+    final bool shouldBackup = forceIfHadChanges ||
+        hasUnbackedLocal ||
+        (lastModifiedMs > lastDriveBackupMs) ||
+        (lastDriveBackupMs == 0);
+
+    if (!shouldBackup) {
       await DatabaseService().logAppEvent(
         tag: 'GoogleDriveBackup',
         message: 'Midnight cloud backup skipped: No unbacked database changes found since last backup.',

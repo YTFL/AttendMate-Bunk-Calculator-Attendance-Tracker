@@ -281,7 +281,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'STEP ${controller.currentStepIndex + 1} OF ${controller.totalSteps}',
+                      'QUICK GUIDE',
                       style: TextStyle(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,

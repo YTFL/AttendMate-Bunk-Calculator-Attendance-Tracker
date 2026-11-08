@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -284,6 +285,7 @@ class CalendarService {
     required List<Subject> subjects,
     required Semester? semester,
     required bool Function(DateTime) isHoliday,
+    void Function(double progress, String statusMessage)? onProgress,
   }) async {
     if (_isSyncInProgress) {
       debugPrint('Google Calendar sync skipped: another sync cycle is already in progress.');
@@ -361,215 +363,231 @@ class CalendarService {
         }
       }
 
-      // 3. Sync each subject's schedule
+            // 3. Prepare and sync subjects in parallel batches with progress tracking
+      final totalSlots = subjects.fold<int>(0, (sum, s) => sum + s.schedule.length);
+      int completedSlots = 0;
+      onProgress?.call(0.0, 'Preparing calendar sync...');
+
+      final slotTasks = <Future<void> Function()>[];
+
       for (final subject in subjects) {
         final String baseName = _getBaseSubjectName(subject.name);
         final String colorId = baseNameToColorId[baseName] ?? _getNearestGoogleColorId(subject.color);
 
         for (final slot in subject.schedule) {
-          DateTime startDateTime;
-          DateTime endDateTime;
-          DateTime untilDate = semester.endDate;
-
-          if (slot.isSpecialClass) {
-            final date = slot.specificDate!;
-            final occStart = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
-            final occEnd = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
-
-            bool isExcluded = isHoliday(date);
-            if (!isExcluded) {
-              for (final leave in plannedLeaves) {
-                if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
-                  if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
-                    isExcluded = true;
-                    break;
-                  }
-                }
-              }
-            }
-            for (final record in subject.attendanceRecords) {
-              if (_isSameDay(record.date, date) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
-                if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
-                  isExcluded = true;
-                } else if (record.status == AttendanceStatus.attended) {
-                  isExcluded = false;
-                }
-                break;
-              }
-            }
-
-            if (isExcluded) {
-              // Excluded one-time event; do not import
-              continue;
-            }
-
-            startDateTime = occStart;
-            endDateTime = occEnd;
-            untilDate = date;
-          } else {
-            // Regular weekly slot
-            DateTime calcStart = semester.startDate;
-            if (slot.effectiveFrom != null && slot.effectiveFrom!.isAfter(calcStart)) {
-              calcStart = slot.effectiveFrom!;
-            }
-            int daysToAdd = (slot.day.index + 1 - calcStart.weekday + 7) % 7;
-            DateTime firstDate = calcStart.add(Duration(days: daysToAdd));
-
-            startDateTime = DateTime(firstDate.year, firstDate.month, firstDate.day, slot.startTime.hour, slot.startTime.minute);
-            endDateTime = DateTime(firstDate.year, firstDate.month, firstDate.day, slot.endTime.hour, slot.endTime.minute);
-
-            if (slot.effectiveUntil != null && slot.effectiveUntil!.isBefore(untilDate)) {
-              untilDate = slot.effectiveUntil!;
-            }
-          }
-
-          // Format clean unique RFC 5545 UID
           final String slotKeyId = slot.slotKey.replaceAll(':', '_').replaceAll('-', '_');
           final String uniqueICalId = "sched_${subject.id}_slot_$slotKeyId@attendmate.app".toLowerCase();
           final String mappingKey = "${subject.id}_${slot.slotKey}";
           activeKeys.add(mappingKey);
           activeICalIds.add(uniqueICalId);
 
-          // 4. Construct RRULE and EXDATE exceptions for weekly events
-          List<String>? recurrenceRule;
-          if (!slot.isSpecialClass) {
-            // Ensure until covers the full last day (23:59:59) so classes on the semester end date are included
-            final untilInclusive = DateTime(untilDate.year, untilDate.month, untilDate.day, 23, 59, 59);
-            final String untilFormatted = "${untilInclusive.toUtc().toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
-            recurrenceRule = ["RRULE:FREQ=WEEKLY;UNTIL=$untilFormatted"];
+          slotTasks.add(() async {
+            try {
+              DateTime startDateTime;
+              DateTime endDateTime;
+              DateTime untilDate = semester.endDate;
 
-            DateTime currentDate = DateTime(startDateTime.year, startDateTime.month, startDateTime.day);
-            final DateTime checkUntil = DateTime(untilDate.year, untilDate.month, untilDate.day);
+              if (slot.isSpecialClass) {
+                final date = slot.specificDate!;
+                final occStart = DateTime(date.year, date.month, date.day, slot.startTime.hour, slot.startTime.minute);
+                final occEnd = DateTime(date.year, date.month, date.day, slot.endTime.hour, slot.endTime.minute);
 
-            while (currentDate.isBefore(checkUntil) || _isSameDay(currentDate, checkUntil)) {
-              final occStart = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.startTime.hour, slot.startTime.minute);
-              final occEnd = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.endTime.hour, slot.endTime.minute);
-
-              bool isExcluded = isHoliday(currentDate);
-              if (!isExcluded) {
-                for (final leave in plannedLeaves) {
-                  if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
-                    if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
-                      isExcluded = true;
-                      break;
+                bool isExcluded = isHoliday(date);
+                if (!isExcluded) {
+                  for (final leave in plannedLeaves) {
+                    if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
+                      if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
+                        isExcluded = true;
+                        break;
+                      }
                     }
                   }
                 }
-              }
-              for (final record in subject.attendanceRecords) {
-                if (_isSameDay(record.date, currentDate) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
-                  if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
-                    isExcluded = true;
-                  } else if (record.status == AttendanceStatus.attended) {
-                    isExcluded = false;
+                for (final record in subject.attendanceRecords) {
+                  if (_isSameDay(record.date, date) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
+                    if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
+                      isExcluded = true;
+                    } else if (record.status == AttendanceStatus.attended) {
+                      isExcluded = false;
+                    }
+                    break;
                   }
-                  break;
+                }
+
+                if (isExcluded) {
+                  return;
+                }
+
+                startDateTime = occStart;
+                endDateTime = occEnd;
+                untilDate = date;
+              } else {
+                DateTime calcStart = semester.startDate;
+                if (slot.effectiveFrom != null && slot.effectiveFrom!.isAfter(calcStart)) {
+                  calcStart = slot.effectiveFrom!;
+                }
+                int daysToAdd = (slot.day.index + 1 - calcStart.weekday + 7) % 7;
+                DateTime firstDate = calcStart.add(Duration(days: daysToAdd));
+
+                startDateTime = DateTime(firstDate.year, firstDate.month, firstDate.day, slot.startTime.hour, slot.startTime.minute);
+                endDateTime = DateTime(firstDate.year, firstDate.month, firstDate.day, slot.endTime.hour, slot.endTime.minute);
+
+                if (slot.effectiveUntil != null && slot.effectiveUntil!.isBefore(untilDate)) {
+                  untilDate = slot.effectiveUntil!;
                 }
               }
 
-              if (isExcluded) {
-                final occurrenceUtcStart = occStart.toUtc();
-                final exdateStr = "${occurrenceUtcStart.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
-                recurrenceRule.add("EXDATE:$exdateStr");
+              List<String>? recurrenceRule;
+              if (!slot.isSpecialClass) {
+                final untilInclusive = DateTime(untilDate.year, untilDate.month, untilDate.day, 23, 59, 59);
+                final String untilFormatted = "${untilInclusive.toUtc().toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
+                recurrenceRule = ["RRULE:FREQ=WEEKLY;UNTIL=$untilFormatted"];
+
+                DateTime currentDate = DateTime(startDateTime.year, startDateTime.month, startDateTime.day);
+                final DateTime checkUntil = DateTime(untilDate.year, untilDate.month, untilDate.day);
+
+                while (currentDate.isBefore(checkUntil) || _isSameDay(currentDate, checkUntil)) {
+                  final occStart = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.startTime.hour, slot.startTime.minute);
+                  final occEnd = DateTime(currentDate.year, currentDate.month, currentDate.day, slot.endTime.hour, slot.endTime.minute);
+
+                  bool isExcluded = isHoliday(currentDate);
+                  if (!isExcluded) {
+                    for (final leave in plannedLeaves) {
+                      if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
+                        if (occStart.isBefore(leave.endDate) && occEnd.isAfter(leave.startDate)) {
+                          isExcluded = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  for (final record in subject.attendanceRecords) {
+                    if (_isSameDay(record.date, currentDate) && (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
+                      if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
+                        isExcluded = true;
+                      } else if (record.status == AttendanceStatus.attended) {
+                        isExcluded = false;
+                      }
+                      break;
+                    }
+                  }
+
+                  if (isExcluded) {
+                    final occurrenceUtcStart = occStart.toUtc();
+                    final exdateStr = "${occurrenceUtcStart.toIso8601String().replaceAll('-', '').replaceAll(':', '').split('.').first}Z";
+                    recurrenceRule.add("EXDATE:$exdateStr");
+                  }
+
+                  currentDate = currentDate.add(const Duration(days: 7));
+                }
               }
 
-              currentDate = currentDate.add(const Duration(days: 7));
-            }
-          }
+              final room = subject.getEffectiveRoom(slot);
+              final block = subject.getEffectiveBlock(slot);
+              final locationStr = room != null ? '$room${block != null && block.isNotEmpty ? ' ($block)' : ''}' : null;
+              final summaryStr = "${subject.name} ${subject.acronym != null ? '(${subject.acronym})' : ''}".trim();
 
-          final room = subject.getEffectiveRoom(slot);
-          final block = subject.getEffectiveBlock(slot);
-          final locationStr = room != null ? '$room${block != null && block.isNotEmpty ? ' ($block)' : ''}' : null;
-          final summaryStr = "${subject.name} ${subject.acronym != null ? '(${subject.acronym})' : ''}".trim();
+              final rawContentSignature = [
+                summaryStr,
+                colorId,
+                startDateTime.toUtc().toIso8601String(),
+                endDateTime.toUtc().toIso8601String(),
+                locationStr ?? '',
+                subject.targetAttendance.toString(),
+                ...?recurrenceRule,
+              ].join('||');
+              final currentHash = _computeSlotHash(rawContentSignature);
 
-          // 5. Compute deterministic slot content hash
-          final rawContentSignature = [
-            summaryStr,
-            colorId,
-            startDateTime.toUtc().toIso8601String(),
-            endDateTime.toUtc().toIso8601String(),
-            locationStr ?? '',
-            subject.targetAttendance.toString(),
-            ...?recurrenceRule,
-          ].join('||');
-          final currentHash = _computeSlotHash(rawContentSignature);
+              final cachedRow = cachedMap[mappingKey];
+              if (cachedRow != null && cachedRow['contentHash'] == currentHash) {
+                return;
+              }
 
-          // Check cached record
-          final cachedRow = cachedMap[mappingKey];
-          if (cachedRow != null && cachedRow['contentHash'] == currentHash) {
-            // Unchanged: Skip entirely. 0 API requests made.
-            continue;
-          }
+              final cal.Event eventPayload = cal.Event()
+                ..iCalUID = uniqueICalId
+                ..summary = summaryStr
+                ..description = "Imported from AttendMate. Re-importing updates this specific schedule.\nTarget attendance: ${subject.targetAttendance}%."
+                ..colorId = colorId
+                ..start = (cal.EventDateTime()..dateTime = startDateTime.toUtc()..timeZone = "UTC")
+                ..end = (cal.EventDateTime()..dateTime = endDateTime.toUtc()..timeZone = "UTC")
+                ..recurrence = recurrenceRule;
 
-          // Build Google Calendar Event resource
-          final cal.Event eventPayload = cal.Event()
-            ..iCalUID = uniqueICalId
-            ..summary = summaryStr
-            ..description = "Imported from AttendMate. Re-importing updates this specific schedule.\nTarget attendance: ${subject.targetAttendance}%."
-            ..colorId = colorId
-            ..start = (cal.EventDateTime()..dateTime = startDateTime.toUtc()..timeZone = "UTC")
-            ..end = (cal.EventDateTime()..dateTime = endDateTime.toUtc()..timeZone = "UTC")
-            ..recurrence = recurrenceRule;
+              if (locationStr != null) {
+                eventPayload.location = locationStr;
+              }
 
-          if (locationStr != null) {
-            eventPayload.location = locationStr;
-          }
+              String? resolvedEventId = cachedRow?['googleEventId'] as String?;
 
-          // 6. Execute differential update / upsert
-          String? resolvedEventId = cachedRow?['googleEventId'] as String?;
+              if (resolvedEventId != null) {
+                try {
+                  eventPayload.status = "confirmed";
+                  await calendarApi.events.update(eventPayload, "primary", resolvedEventId);
+                  await db.saveGoogleCalendarEvent(
+                    subjectId: subject.id,
+                    slotKey: slot.slotKey,
+                    googleEventId: resolvedEventId,
+                    contentHash: currentHash,
+                  );
+                  return;
+                } catch (e) {
+                  resolvedEventId = null;
+                }
+              }
 
-          if (resolvedEventId != null) {
-            try {
-              // Direct update to existing Google event ID: Exactly 1 API call
-              eventPayload.status = "confirmed";
-              await calendarApi.events.update(eventPayload, "primary", resolvedEventId);
-              await db.saveGoogleCalendarEvent(
-                subjectId: subject.id,
-                slotKey: slot.slotKey,
-                googleEventId: resolvedEventId,
-                contentHash: currentHash,
+              final listResult = await calendarApi.events.list(
+                "primary",
+                iCalUID: uniqueICalId,
+                showDeleted: true,
               );
-              continue;
-            } catch (e) {
-              debugPrint('Direct update failed for $resolvedEventId, falling back to lookup: $e');
-              resolvedEventId = null;
-            }
-          }
 
-          // If not cached or update failed (e.g. event deleted on Google web):
-          // Perform idempotent upsert by iCalUID
-          final listResult = await calendarApi.events.list(
-            "primary",
-            iCalUID: uniqueICalId,
-            showDeleted: true,
-          );
-
-          final existingItems = listResult.items ?? [];
-          if (existingItems.isNotEmpty) {
-            final existingEvent = existingItems.first;
-            final existingId = existingEvent.id!;
-            eventPayload.status = "confirmed";
-            await calendarApi.events.update(eventPayload, "primary", existingId);
-            await db.saveGoogleCalendarEvent(
-              subjectId: subject.id,
-              slotKey: slot.slotKey,
-              googleEventId: existingId,
-              contentHash: currentHash,
-            );
-          } else {
-            // Fresh import: 1 API call
-            final importedEvent = await calendarApi.events.import(eventPayload, "primary");
-            if (importedEvent.id != null) {
-              await db.saveGoogleCalendarEvent(
-                subjectId: subject.id,
-                slotKey: slot.slotKey,
-                googleEventId: importedEvent.id!,
-                contentHash: currentHash,
-              );
+              final existingItems = listResult.items ?? [];
+              if (existingItems.isNotEmpty) {
+                final existingEvent = existingItems.first;
+                final existingId = existingEvent.id!;
+                eventPayload.status = "confirmed";
+                await calendarApi.events.update(eventPayload, "primary", existingId);
+                await db.saveGoogleCalendarEvent(
+                  subjectId: subject.id,
+                  slotKey: slot.slotKey,
+                  googleEventId: existingId,
+                  contentHash: currentHash,
+                );
+              } else {
+                final importedEvent = await calendarApi.events.import(eventPayload, "primary");
+                if (importedEvent.id != null) {
+                  await db.saveGoogleCalendarEvent(
+                    subjectId: subject.id,
+                    slotKey: slot.slotKey,
+                    googleEventId: importedEvent.id!,
+                    contentHash: currentHash,
+                  );
+                }
+              }
+            } finally {
+              completedSlots++;
+              final p = totalSlots > 0 ? (completedSlots / totalSlots) : 1.0;
+              onProgress?.call(p, 'Syncing ${subject.name} ($completedSlots/$totalSlots)...');
             }
-          }
+          });
         }
       }
+
+      // Execute slot syncs with 5 concurrent workers
+      if (slotTasks.isNotEmpty) {
+        int nextTaskIdx = 0;
+        Future<void> worker() async {
+          while (nextTaskIdx < slotTasks.length) {
+            final idx = nextTaskIdx++;
+            await slotTasks[idx]();
+          }
+        }
+
+        final workerCount = math.min(5, slotTasks.length);
+        final workers = List.generate(workerCount, (_) => worker());
+        await Future.wait(workers);
+      }
+
+      onProgress?.call(1.0, 'Cleaning up removed schedules...');
 
       // 7. Clean up deleted classes
       // 7A: Remove slots that were previously tracked but are no longer active in the timetable

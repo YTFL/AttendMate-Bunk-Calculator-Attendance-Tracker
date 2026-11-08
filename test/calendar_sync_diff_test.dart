@@ -282,7 +282,7 @@ void main() {
 
       expect(uniqueICalId.startsWith('sched_'), isTrue);
       expect(uniqueICalId.endsWith('@attendmate.app'), isTrue);
-      expect(uniqueICalId, contains('sub_cs101'));
+      expect(uniqueICalId, contains('sub-cs101'));
       expect(uniqueICalId, contains('0_09_00_10_00'));
     });
   });

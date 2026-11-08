@@ -67,11 +67,21 @@ class AttendanceProvider with ChangeNotifier {
       await BackupService().notifyDataChanged();
 
       try {
-        await NotificationService().cancelEndOfClassReminder(
+        final notifService = NotificationService();
+        await notifService.cancelEndOfClassReminder(
           subjectId: subjectId,
           date: date,
           slotKey: slotKey,
         );
+        if (status == AttendanceStatus.absent ||
+            status == AttendanceStatus.cancelled ||
+            status == AttendanceStatus.plannedAbsent) {
+          await notifService.cancelPreClassReminder(
+            subjectId: subjectId,
+            date: date,
+            slotKey: slotKey,
+          );
+        }
       } catch (e) {
         // Silently fail - notification cancellation error
       }
@@ -105,6 +115,15 @@ class AttendanceProvider with ChangeNotifier {
             date: record.date,
             slotKey: record.slotKey,
           );
+          if (record.status == AttendanceStatus.absent ||
+              record.status == AttendanceStatus.cancelled ||
+              record.status == AttendanceStatus.plannedAbsent) {
+            await notifService.cancelPreClassReminder(
+              subjectId: record.subjectId,
+              date: record.date,
+              slotKey: record.slotKey,
+            );
+          }
         }
       } catch (e) {
         // Silently fail - notification cancellation error

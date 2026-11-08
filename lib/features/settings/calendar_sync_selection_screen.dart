@@ -11,6 +11,8 @@ import '../../services/system_calendar_service.dart';
 import '../semester/semester_provider.dart';
 import '../subject/subject_provider.dart';
 import '../../utils/snackbar_utils.dart';
+import '../../widgets/sync_progress_dialog.dart';
+import '../../services/notification_service.dart';
 
 class CalendarSyncSelectionScreen extends StatefulWidget {
   const CalendarSyncSelectionScreen({super.key});
@@ -208,14 +210,27 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     try {
       final subjectProvider = Provider.of<SubjectProvider>(context, listen: false);
 
-      await CalendarService.syncFullTimetable(
-        subjects: subjects,
-        semester: semester,
-        isHoliday: subjectProvider.isHoliday,
+      final ok = await SyncProgressDialog.show(
+        context: context,
+        title: 'Syncing Google Calendar',
+        action: (onProgress) => CalendarService.syncFullTimetable(
+          subjects: subjects,
+          semester: semester,
+          isHoliday: subjectProvider.isHoliday,
+          onProgress: onProgress,
+        ),
       );
 
-      if (showFeedback && mounted) {
-        SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar synchronized successfully.');
+      if (ok == true && mounted) {
+        if (showFeedback) {
+          SnackbarUtils.showSuccessSnackBar(context, 'Google Calendar synchronized successfully.');
+        }
+        try {
+          await NotificationService().showBackupNotification(
+            title: 'Calendar Sync Complete',
+            body: 'Your timetable was synchronized with Google Calendar.',
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (showFeedback && mounted) {
@@ -357,13 +372,24 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     });
 
     try {
-      await SystemCalendarService.syncFullTimetable(
-        subjects: subjectProvider.subjects,
-        semester: semesterProvider.semester!,
-        isHoliday: subjectProvider.isHoliday,
+      final ok = await SyncProgressDialog.show(
+        context: context,
+        title: 'Syncing Device Calendar',
+        action: (onProgress) => SystemCalendarService.syncFullTimetable(
+          subjects: subjectProvider.subjects,
+          semester: semesterProvider.semester!,
+          isHoliday: subjectProvider.isHoliday,
+          onProgress: onProgress,
+        ),
       );
-      if (mounted) {
+      if (ok == true && mounted) {
         SnackbarUtils.showSuccessSnackBar(context, 'Timetable successfully synced to "$_selectedSystemCalendarName"!');
+        try {
+          await NotificationService().showBackupNotification(
+            title: 'Device Calendar Synced',
+            body: 'Timetable was synced to $_selectedSystemCalendarName.',
+          );
+        } catch (_) {}
       }
     } catch (e) {
       if (mounted) {
@@ -408,7 +434,9 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     final semester = Provider.of<SemesterProvider>(context).semester;
     final subjects = Provider.of<SubjectProvider>(context).subjects;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isActionInProgress,
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Calendar Synchronization'),
       ),
@@ -746,6 +774,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                   ),
               ],
             ),
+      ),
     );
   }
 

@@ -27,10 +27,11 @@ import 'services/backup_service.dart';
 import 'services/google_drive_backup_service.dart';
 import 'services/live_timetable_sync_service.dart';
 import 'services/calendar_service.dart';
+import 'services/google_auth_service.dart';
 import 'utils/github_issue_helper.dart';
 import 'features/settings/diagnostics_log_screen.dart';
-import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
-import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
+
+
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -105,6 +106,7 @@ void callbackDispatcher() {
           message: 'Daily scheduled background backup task triggered by Android WorkManager.',
           level: 'INFO',
         );
+        final hadChanges = await BackupService().hasUnbackedDataChanges();
         // 1. Local backup
         await BackupService().createBackup(
           showNotification: true,
@@ -112,7 +114,7 @@ void callbackDispatcher() {
           force: false,
         );
         // 2. Google Drive cloud backup
-        await GoogleDriveBackupService().executeMidnightBackup();
+        await GoogleDriveBackupService().executeMidnightBackup(forceIfHadChanges: hadChanges);
       } else if (task == 'testBackgroundBackup') {
         await DatabaseService().logAppEvent(
           tag: 'Workmanager',
@@ -411,16 +413,8 @@ Future<void> _performGeofenceCheck(
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Android Google Maps Renderer Surface
-  try {
-    final GoogleMapsFlutterPlatform mapsImplementation = GoogleMapsFlutterPlatform.instance;
-    if (mapsImplementation is GoogleMapsFlutterAndroid) {
-      mapsImplementation.useAndroidViewSurface = true;
-      mapsImplementation.initializeWithRenderer(AndroidMapRenderer.latest);
-    }
-  } catch (e) {
-    debugPrint('Google Maps renderer initialization note: $e');
-  }
+
+
   
   // Global error handler to catch any unhandled exceptions
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -548,7 +542,22 @@ Future<void> main() async {
     databaseErrorMessage = e.toString();
   }
 
-  // Initialize WorkManager for background update checks
+      // Catch-up check for Google Drive backup
+    try {
+      if (await GoogleDriveBackupService().isBackupEnabled()) {
+        final lastDriveBackup = await GoogleDriveBackupService().getLastBackupTime();
+        final now = DateTime.now();
+        if (lastDriveBackup == null || (lastDriveBackup.year != now.year || lastDriveBackup.month != now.month || lastDriveBackup.day != now.day)) {
+          if (await GoogleAuthService.instance.isSignedIn()) {
+            unawaited(GoogleDriveBackupService().executeMidnightBackup());
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Google Drive catch-up backup check note: $e');
+    }
+
+    // Initialize WorkManager for background update checks
   try {
     await Workmanager().initialize(callbackDispatcher);
     
@@ -559,7 +568,7 @@ Future<void> main() async {
         'updateCheck',
         frequency: const Duration(days: 1),
         initialDelay: const Duration(minutes: 15),
-        existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
         constraints: Constraints(
           requiresBatteryNotLow: false,
           requiresCharging: false,
@@ -587,13 +596,13 @@ Future<void> main() async {
       'dailySemesterBackup',
       frequency: const Duration(days: 1),
       initialDelay: backupInitialDelay,
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       constraints: Constraints(
         requiresBatteryNotLow: false,
         requiresCharging: false,
         requiresDeviceIdle: false,
         requiresStorageNotLow: false,
-        networkType: NetworkType.notRequired,
+        networkType: NetworkType.connected,
       ),
     );
   } catch (e) {

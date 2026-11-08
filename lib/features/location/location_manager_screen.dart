@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/database_service.dart';
-import 'location_map_picker.dart';
+import 'coordinate_parser.dart';
 import 'location_model.dart';
 
 class LocationManagerScreen extends StatefulWidget {
@@ -122,8 +124,6 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
     } catch (_) {}
 
     // ── Step 3: Background location (needed for auto-attendance) ──────────
-    // On Android 10+ background location is a separate permission level.
-    // whileInUse = app must be open; always = works when app is closed.
     if (permission == LocationPermission.whileInUse && mounted) {
       final isDarkMode = Theme.of(context).brightness == Brightness.dark;
       final wantsBackground = await showDialog<bool>(
@@ -152,9 +152,6 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
       );
 
       if (wantsBackground == true) {
-        // requestPermission() on Android 10+ triggers the background upgrade
-        // if foreground is already granted — but many launchers require
-        // openAppSettings() for a clean UI. We try requestPermission first.
         final bgPermission = await Geolocator.requestPermission();
         if (bgPermission != LocationPermission.always && mounted) {
           await Geolocator.openAppSettings();
@@ -165,22 +162,151 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
     return true;
   }
 
-  Future<void> _showMapPickerDialog(
+  Future<void> _showCoordinateInputDialog(
     Function(double lat, double lng) onSelect, {
     double? initialLat,
     double? initialLng,
   }) async {
-    final result = await showDialog<Map<String, double>>(
+    final textController = TextEditingController(
+      text: (initialLat != null && initialLng != null) ? '$initialLat, $initialLng' : '',
+    );
+    ParsedCoordinates? parsedCoords = (initialLat != null && initialLng != null)
+        ? ParsedCoordinates(latitude: initialLat, longitude: initialLng)
+        : null;
+
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    await showDialog(
       context: context,
-      builder: (ctx) => InteractiveMapPickerDialog(
-        initialLatitude: initialLat,
-        initialLongitude: initialLng,
+      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          void updateParsed(String val) {
+            setDialogState(() {
+              parsedCoords = CoordinateParser.parse(val);
+            });
+          }
+
+          return AlertDialog(
+            icon: const Icon(Icons.location_searching, size: 36, color: Colors.blue),
+            title: const Text('Set Location Coordinates'),
+            content: SizedBox(
+              width: 320,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '1. Open your default Maps app to find your classroom or building.\n'
+                      '2. Drop a pin or tap on the location.\n'
+                      '3. Copy the coordinates or share the link, then paste it below.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.4,
+                        color: isDarkMode ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final geoUri = Uri.parse('geo:0,0?q=');
+                        final webFallback = Uri.parse('https://www.google.com/maps');
+                        try {
+                          if (await canLaunchUrl(geoUri)) {
+                            await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+                          } else {
+                            await launchUrl(webFallback, mode: LaunchMode.externalApplication);
+                          }
+                        } catch (_) {
+                          await launchUrl(webFallback, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.map_outlined, size: 18),
+                      label: const Text('Open Default Maps App'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: textController,
+                      decoration: InputDecoration(
+                        labelText: 'Coordinates or Maps Link',
+                        hintText: 'e.g., 12.971598, 77.594566',
+                        prefixIcon: const Icon(Icons.pin_drop_outlined, size: 20),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.content_paste, size: 20),
+                          tooltip: 'Paste from Clipboard',
+                          onPressed: () async {
+                            final data = await Clipboard.getData(Clipboard.kTextPlain);
+                            final text = data?.text?.trim() ?? '';
+                            if (text.isNotEmpty) {
+                              textController.text = text;
+                              updateParsed(text);
+                            }
+                          },
+                        ),
+                      ),
+                      onChanged: updateParsed,
+                    ),
+                    const SizedBox(height: 12),
+                    if (parsedCoords != null)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Lat: ${parsedCoords!.latitude.toStringAsFixed(6)}\nLng: ${parsedCoords!.longitude.toStringAsFixed(6)}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (textController.text.trim().isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'Could not parse coordinates. Please enter a valid decimal pair or Google Maps URL.',
+                          style: TextStyle(fontSize: 11, color: Colors.red),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: parsedCoords == null
+                    ? null
+                    : () {
+                        onSelect(parsedCoords!.latitude, parsedCoords!.longitude);
+                        Navigator.pop(dialogCtx);
+                      },
+                child: const Text('Set Coordinates'),
+              ),
+            ],
+          );
+        },
       ),
     );
-
-    if (result != null && result.containsKey('latitude') && result.containsKey('longitude')) {
-      onSelect(result['latitude']!, result['longitude']!);
-    }
   }
 
   void _showAddEditLocationDialog([LocationConfig? location]) {
@@ -208,177 +334,177 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                   children: [
                     TextFormField(
                       controller: nameController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Room / Location Name',
-                      hintText: 'e.g., Room 402, Lab A',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      prefixIcon: Icon(Icons.meeting_room_outlined),
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Room / Location Name',
+                        hintText: 'e.g., Room 402, Lab A',
+                        hintStyle: TextStyle(color: Colors.grey),
+                        prefixIcon: Icon(Icons.meeting_room_outlined),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: blockController,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'Block / Building (Optional)',
-                      hintText: 'e.g., Block C, CSE Dept',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      prefixIcon: Icon(Icons.business_outlined),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: blockController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Block / Building (Optional)',
+                        hintText: 'e.g., Block C, CSE Dept',
+                        hintStyle: TextStyle(color: Colors.grey),
+                        prefixIcon: Icon(Icons.business_outlined),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'GEOFENCE COORDINATES',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: latitude != null && longitude != null
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.gps_fixed, color: Colors.green, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Lat: ${latitude!.toStringAsFixed(6)}\nLng: ${longitude!.toStringAsFixed(6)}',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'GEOFENCE COORDINATES',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: latitude != null && longitude != null
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.gps_fixed, color: Colors.green, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Lat: ${latitude!.toStringAsFixed(6)}\nLng: ${longitude!.toStringAsFixed(6)}',
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green),
+                                    ),
                                   ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.clear, color: Colors.red, size: 18),
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      latitude = null;
-                                      longitude = null;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          )
-                        : Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: isDarkMode ? Colors.white12 : Colors.grey.shade300),
-                            ),
-                            child: Text(
-                              'No geofence coordinates attached.\nAuto-attendance checking will be skipped.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 11, color: isDarkMode ? Colors.white60 : Colors.grey.shade600),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: isFetchingGps
-                              ? null
-                              : () async {
-                                  final hasPermission = await _handleLocationPermission();
-                                  if (!hasPermission) return;
-
-                                  setDialogState(() => isFetchingGps = true);
-                                  try {
-                                    Position? pos;
-                                    try {
-                                      pos = await Geolocator.getCurrentPosition(
-                                        locationSettings: const LocationSettings(
-                                          accuracy: LocationAccuracy.high,
-                                          timeLimit: Duration(seconds: 15),
-                                        ),
-                                      );
-                                    } catch (_) {
-                                      pos = await Geolocator.getLastKnownPosition();
-                                    }
-
-                                    final currentPos = pos;
-                                    if (currentPos != null) {
-                                      final lat = currentPos.latitude;
-                                      final lng = currentPos.longitude;
+                                  IconButton(
+                                    icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                                    onPressed: () {
                                       setDialogState(() {
-                                        latitude = lat;
-                                        longitude = lng;
-                                        isFetchingGps = false;
+                                        latitude = null;
+                                        longitude = null;
                                       });
-                                    } else {
+                                    },
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: isDarkMode ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: isDarkMode ? Colors.white12 : Colors.grey.shade300),
+                              ),
+                              child: Text(
+                                'No geofence coordinates attached.\nAuto-attendance checking will be skipped.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 11, color: isDarkMode ? Colors.white60 : Colors.grey.shade600),
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: isFetchingGps
+                                ? null
+                                : () async {
+                                    final hasPermission = await _handleLocationPermission();
+                                    if (!hasPermission) return;
+
+                                    setDialogState(() => isFetchingGps = true);
+                                    try {
+                                      Position? pos;
+                                      try {
+                                        pos = await Geolocator.getCurrentPosition(
+                                          locationSettings: const LocationSettings(
+                                            accuracy: LocationAccuracy.high,
+                                            timeLimit: Duration(seconds: 15),
+                                          ),
+                                        );
+                                      } catch (_) {
+                                        pos = await Geolocator.getLastKnownPosition();
+                                      }
+
+                                      final currentPos = pos;
+                                      if (currentPos != null) {
+                                        final lat = currentPos.latitude;
+                                        final lng = currentPos.longitude;
+                                        setDialogState(() {
+                                          latitude = lat;
+                                          longitude = lng;
+                                          isFetchingGps = false;
+                                        });
+                                      } else {
+                                        setDialogState(() => isFetchingGps = false);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Could not obtain current or last known GPS location. Please try again.')),
+                                          );
+                                        }
+                                      }
+                                    } catch (e) {
                                       setDialogState(() => isFetchingGps = false);
                                       if (mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Could not obtain current or last known GPS location. Please try again.')),
+                                          SnackBar(content: Text('Error getting coordinates: $e')),
                                         );
                                       }
                                     }
-                                  } catch (e) {
-                                    setDialogState(() => isFetchingGps = false);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Error getting coordinates: $e')),
-                                      );
-                                    }
-                                  }
+                                  },
+                            icon: isFetchingGps
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.my_location, size: 16),
+                            label: Text(isFetchingGps ? 'GPS...' : 'Use Current'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              _showCoordinateInputDialog(
+                                (lat, lng) {
+                                  setDialogState(() {
+                                    latitude = lat;
+                                    longitude = lng;
+                                  });
                                 },
-                          icon: isFetchingGps
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.my_location, size: 16),
-                          label: Text(isFetchingGps ? 'GPS...' : 'Use Current'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                                initialLat: latitude,
+                                initialLng: longitude,
+                              );
+                            },
+                            icon: const Icon(Icons.map_outlined, size: 16),
+                            label: const Text('Paste / Maps'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            _showMapPickerDialog(
-                              (lat, lng) {
-                                setDialogState(() {
-                                  latitude = lat;
-                                  longitude = lng;
-                                });
-                              },
-                              initialLat: latitude,
-                              initialLng: longitude,
-                            );
-                          },
-                          icon: const Icon(Icons.map_outlined, size: 16),
-                          label: const Text('Select Map'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           ),
           actions: [
             TextButton(
@@ -390,36 +516,37 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Room / Location Name is required')),
+                    const SnackBar(content: Text('Please enter a location name')),
                   );
                   return;
                 }
 
-                if (latitude != null && (latitude! < -90.0 || latitude! > 90.0)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Invalid Latitude $latitude: Must be between -90.0° and +90.0°')),
+                final block = blockController.text.trim().isEmpty ? null : blockController.text.trim();
+                final db = DatabaseService();
+
+                if (location == null) {
+                  final newLoc = LocationConfig(
+                    id: const Uuid().v4(),
+                    name: name,
+                    block: block,
+                    latitude: latitude,
+                    longitude: longitude,
                   );
-                  return;
+                  await db.saveLocation(newLoc);
+                } else {
+                  final updatedLoc = location.copyWith(
+                    name: name,
+                    block: block,
+                    latitude: latitude,
+                    longitude: longitude,
+                  );
+                  await db.saveLocation(updatedLoc);
                 }
 
-                if (longitude != null && (longitude! < -180.0 || longitude! > 180.0)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Invalid Longitude $longitude: Must be between -180.0° and +180.0°')),
-                  );
-                  return;
+                if (mounted && dialogCtx.mounted) {
+                  Navigator.pop(dialogCtx);
+                  _loadLocations();
                 }
-
-                final newLoc = LocationConfig(
-                  id: location?.id ?? const Uuid().v4(),
-                  name: name,
-                  block: blockController.text.trim().isEmpty ? null : blockController.text.trim(),
-                  latitude: latitude,
-                  longitude: longitude,
-                );
-
-                Navigator.pop(dialogCtx);
-                await DatabaseService().saveLocation(newLoc);
-                _loadLocations(showLoading: false);
               },
               child: const Text('Save'),
             ),
@@ -430,22 +557,20 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
   }
 
   Future<void> _deleteLocation(String id) async {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final confirm = await showDialog<bool>(
       context: context,
-      barrierColor: isDarkMode ? Colors.white.withValues(alpha: 0.12) : null,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Location'),
         content: const Text(
-          'Are you sure you want to delete this location? Subjects linked to this room will revert to text-only mode.',
+          'Are you sure you want to delete this location? Classes assigned to this location will lose their geofence binding.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -455,17 +580,19 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
 
     if (confirm == true) {
       await DatabaseService().deleteLocation(id);
-      _loadLocations(showLoading: false);
+      _loadLocations();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Locations & Geofencing'),
+        title: const Text('Campus Locations'),
+        elevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -474,23 +601,28 @@ class _LocationManagerScreenState extends State<LocationManagerScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.pin_drop_outlined, size: 64, color: colorScheme.onSurface.withValues(alpha: 0.3)),
+                      Icon(Icons.location_off_outlined, size: 64, color: colorScheme.outline),
                       const SizedBox(height: 16),
                       Text(
-                        'No Locations Configured',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.7)),
+                        'No Locations Added',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
                         child: Text(
-                          'Add rooms or lecture halls, set coordinates, and enable auto-attendance.',
+                          'Add your classrooms, lecture halls, or labs to enable precise automatic attendance tracking.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, color: colorScheme.onSurface.withValues(alpha: 0.5)),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
-                      ElevatedButton.icon(
+                      FilledButton.icon(
                         onPressed: () => _showAddEditLocationDialog(),
                         icon: const Icon(Icons.add),
                         label: const Text('Add Location'),

@@ -74,11 +74,6 @@
                 <data android:pathPattern=".*\\..*\\..*\\.json" />
             </intent-filter>
         </activity>
-        
-        <!-- Google Maps API Key injected dynamically from .env / Gradle -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="${MAPS_API_KEY}"/>
 
         <!-- Receivers for flutter_local_notifications -->
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" android:exported="false" />

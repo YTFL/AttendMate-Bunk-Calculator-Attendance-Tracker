@@ -230,6 +230,7 @@ class SystemCalendarService {
     required List<Subject> subjects,
     required Semester? semester,
     required bool Function(DateTime) isHoliday,
+    void Function(double progress, String statusMessage)? onProgress,
   }) async {
     if (_isSyncInProgress) {
       debugPrint('System Calendar sync skipped: another sync cycle is already in progress.');
@@ -263,6 +264,10 @@ class SystemCalendarService {
       // Calculate start and end dates
       final DateTime startDate = semester.startDate;
       final DateTime endDate = semester.endDate;
+
+            final totalSlots = subjects.fold<int>(0, (sum, s) => sum + s.schedule.length);
+      int completedSlots = 0;
+      onProgress?.call(0.0, 'Starting device calendar sync...');
 
       for (final subject in subjects) {
         for (final slot in subject.schedule) {
@@ -411,6 +416,9 @@ class SystemCalendarService {
             }
             currentDate = currentDate.add(const Duration(days: 1));
           }
+          completedSlots++;
+          final p = totalSlots > 0 ? (completedSlots / totalSlots) : 1.0;
+          onProgress?.call(p, 'Syncing ${subject.name} ($completedSlots/$totalSlots)...');
         }
       }
 
