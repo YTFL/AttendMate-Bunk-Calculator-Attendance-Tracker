@@ -70,6 +70,19 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGUMENTS", "APK path is required", null)
                     }
                 }
+                "openFile" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath != null) {
+                        try {
+                            val opened = openFile(filePath)
+                            result.success(opened)
+                        } catch (e: Exception) {
+                            result.error("OPEN_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "File path is required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -115,6 +128,46 @@ class MainActivity : FlutterActivity() {
             "installer_started"
         } catch (e: ActivityNotFoundException) {
             "installer_not_found"
+        }
+    }
+
+    private fun openFile(filePath: String): Boolean {
+        val file = File(filePath)
+        if (!file.exists()) {
+            throw Exception("File not found: $filePath")
+        }
+
+        val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+        } else {
+            Uri.fromFile(file)
+        }
+
+        val mimeType = when (file.extension.lowercase()) {
+            "pdf" -> "application/pdf"
+            "json" -> "application/json"
+            "csv" -> "text/csv"
+            "txt" -> "text/plain"
+            else -> "*/*"
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        return try {
+            val chooser = Intent.createChooser(intent, "Open file")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
         }
     }
 

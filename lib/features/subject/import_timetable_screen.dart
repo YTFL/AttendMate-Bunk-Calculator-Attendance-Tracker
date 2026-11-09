@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:open_filex/open_filex.dart';
+import '../../utils/file_utils.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/semester_share_service.dart';
@@ -716,7 +716,7 @@ class _ImportTimetableScreenState extends State<ImportTimetableScreen> {
             action: shouldOpen ? SnackBarAction(
               label: 'Open',
               onPressed: () async {
-                await OpenFilex.open(file.path);
+                await FileUtils.openFile(file.path);
               },
             ) : null,
           ),

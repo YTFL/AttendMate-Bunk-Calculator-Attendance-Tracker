@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatically strip architecture offsets (+1000, +2000, +3000) injected by Flutter's split-per-ABI build system so the More tab, update engine, and logs display the clean canonical build number (e.g. `Build 33` instead of `Build 2033`).
 - **Streamlined Interactive Tutorial**:
   - Replaced the numerical step count ("STEP X OF Y") with a discreet "QUICK GUIDE" header chip to eliminate skip tendencies and improve onboarding flow.
+- **Strict Permission Hardening & Third-Party Library Cleanup**:
+  - Removed third-party library `open_filex` which was implicitly pulling in unrequired permissions (`READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, and `READ_EXTERNAL_STORAGE`).
+  - Implemented lightweight, native Android `openFile` and `installAPK` handlers using standard Android `FileProvider` (`Intent.ACTION_VIEW` + `FLAG_GRANT_READ_URI_PERMISSION`) without needing any storage or media permissions.
+  - Added explicit `tools:node="remove"` directives in `AndroidManifest.xml` to permanently block `CAMERA`, media (`READ_MEDIA_*`), audio recording (`RECORD_AUDIO`), and storage (`READ/WRITE_EXTERNAL_STORAGE`) permissions from being merged by dependencies.
 
 ### Fixed
 - **Google Drive Midnight Backup Reliability**:

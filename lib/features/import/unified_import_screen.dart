@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
+import '../../utils/file_utils.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/responsive_scale.dart';
@@ -157,7 +157,7 @@ class _UnifiedImportScreenState extends State<UnifiedImportScreen>
                 ? SnackBarAction(
                     label: 'Open',
                     onPressed: () async {
-                      await OpenFilex.open(file.path);
+                      await FileUtils.openFile(file.path);
                     },
                   )
                 : null,

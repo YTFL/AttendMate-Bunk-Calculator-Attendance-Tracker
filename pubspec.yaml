@@ -48,7 +48,7 @@ dependencies:
   package_info_plus: ^10.2.1
   path_provider: ^2.1.6
   workmanager: ^0.9.0+3
-  open_filex: ^4.5.0
+
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.1
   pdf: ^3.13.0

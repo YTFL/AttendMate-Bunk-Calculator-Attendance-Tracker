@@ -4,4 +4,8 @@
     <files-path name="documents" path="." />
     <!-- Access to files in the app's cache directory -->
     <cache-path name="cache" path="." />
+    <!-- Access to files in the app's external files directory -->
+    <external-files-path name="external_files" path="." />
+    <!-- Access to files in external storage / downloads -->
+    <external-path name="external" path="." />
 </paths>

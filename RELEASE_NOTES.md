@@ -131,6 +131,13 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 
 ---
 
+### 5. Strict Permission Hardening & Third-Party Library Cleanup
+- **Elimination of Unrequired Permissions**:
+  - Audited and stripped unneeded camera, photo, video, audio, and storage permissions injected by third-party packages.
+  - Completely removed the `open_filex` dependency and replaced it with native Android `FileProvider` intent dispatching for previewing exported files (PDF, CSV, JSON) and running in-app APK update installation.
+  - Enforced strict `tools:node="remove"` rules in `AndroidManifest.xml` to permanently block `CAMERA`, `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, and `RECORD_AUDIO` from being merged into the final build.
+---
+
 ## 📥 Installation
 
 1. Download **AttendMate-v2.4.0.apk**

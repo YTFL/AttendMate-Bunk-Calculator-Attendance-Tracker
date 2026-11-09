@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:open_filex/open_filex.dart';
+
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -347,25 +347,6 @@ class UpdateService {
         return InstallResult.failed;
       }
 
-      final openResult = await OpenFilex.open(
-        apkFile.path,
-        type: 'application/vnd.android.package-archive',
-      );
-
-      switch (openResult.type) {
-        case ResultType.done:
-          return InstallResult.installerStarted;
-        case ResultType.noAppToOpen:
-          return InstallResult.installerUnavailable;
-        case ResultType.permissionDenied:
-          return InstallResult.permissionRequired;
-        case ResultType.fileNotFound:
-          return InstallResult.failed;
-        case ResultType.error:
-          break;
-      }
-
-      // Fallback: call native Android method if OpenFilex fails
       final result = await platform.invokeMethod<String>(
         'installAPK',
         {'apkPath': apkFile.path},
