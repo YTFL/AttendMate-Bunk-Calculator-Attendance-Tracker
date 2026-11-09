@@ -12,6 +12,10 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import android.provider.CalendarContract
+import android.content.ContentValues
+import android.content.ContentResolver
+import android.os.Bundle
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.attendmate.app/update"
@@ -49,6 +53,57 @@ class MainActivity : FlutterActivity() {
                         result.success(openBatteryOptimizationSettings())
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        val CALENDAR_CHANNEL = "com.attendmate.app/calendar"
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CALENDAR_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pruneAttendMateEvents" -> {
+                    val calendarId = call.argument<String>("calendarId")
+                    try {
+                        val count = pruneAttendMateEvents(calendarId)
+                        result.success(count)
+                    } catch (e: Exception) {
+                        result.error("PRUNE_ERROR", e.message, null)
+                    }
+                }
+                "deleteEvent" -> {
+                    val eventId = call.argument<String>("eventId")
+                    if (eventId != null) {
+                        try {
+                            val deleted = deleteCalendarEvent(eventId)
+                            result.success(deleted)
+                        } catch (e: Exception) {
+                            result.error("DELETE_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "eventId is required", null)
+                    }
+                }
+                "setEventColor" -> {
+                    val eventId = call.argument<String>("eventId")
+                    val color = call.argument<Int>("color")
+                    if (eventId != null && color != null) {
+                        try {
+                            val updated = setCalendarEventColor(eventId, color)
+                            result.success(updated)
+                        } catch (e: Exception) {
+                            result.error("COLOR_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "eventId and color are required", null)
+                    }
+                }
+                "triggerCalendarSync" -> {
+                    try {
+                        triggerCalendarSync()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SYNC_ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()
@@ -225,6 +280,71 @@ class MainActivity : FlutterActivity() {
                 ex.printStackTrace()
                 false
             }
+        }
+    }
+
+    private fun deleteCalendarEvent(eventId: String): Boolean {
+        return try {
+            val rows = contentResolver.delete(
+                CalendarContract.Events.CONTENT_URI,
+                "${CalendarContract.Events._ID} = ?",
+                arrayOf(eventId)
+            )
+            triggerCalendarSync()
+            rows > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun pruneAttendMateEvents(calendarId: String?): Int {
+        return try {
+            val whereClause: String
+            val selectionArgs: Array<String>
+            if (calendarId != null && calendarId.isNotEmpty()) {
+                whereClause = "${CalendarContract.Events.CALENDAR_ID} = ? AND (${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
+                selectionArgs = arrayOf(calendarId, "%AttendMate%", "%attendmate%", "%AttendMate%")
+            } else {
+                whereClause = "(${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
+                selectionArgs = arrayOf("%AttendMate%", "%attendmate%", "%AttendMate%")
+            }
+            val deleted = contentResolver.delete(CalendarContract.Events.CONTENT_URI, whereClause, selectionArgs)
+            triggerCalendarSync()
+            deleted
+        } catch (e: Exception) {
+            e.printStackTrace()
+            0
+        }
+    }
+
+    private fun setCalendarEventColor(eventId: String, color: Int): Boolean {
+        return try {
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.EVENT_COLOR, color)
+            }
+            val rows = contentResolver.update(
+                CalendarContract.Events.CONTENT_URI,
+                values,
+                "${CalendarContract.Events._ID} = ?",
+                arrayOf(eventId)
+            )
+            rows > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    private fun triggerCalendarSync() {
+        try {
+            val bundle = Bundle().apply {
+                putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+            }
+            ContentResolver.requestSync(null, CalendarContract.AUTHORITY, bundle)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

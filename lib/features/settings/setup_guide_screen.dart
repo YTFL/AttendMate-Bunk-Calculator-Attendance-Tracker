@@ -331,15 +331,15 @@ AttendMate sends notifications before and after your scheduled classes:
       openTarget: _GuideOpenTarget.calendarSync,
       markdown: '''
 ## Overview
-AttendMate syncs your weekly timetable, classes, and cancellations directly to your phone's native calendar database (Google Calendar, Samsung Calendar, Outlook, or local device calendars).
+AttendMate syncs your weekly timetable, classes, and cancellations directly to your phone's native calendar database (Google Calendar, Samsung Calendar, or local device calendars).
 
 ---
 
 ## Setting Up Calendar Sync
 1. Open the **More** tab and tap **Calendar Sync**.
 2. Switch **Sync Timetable to Calendar** to **ON** (allow the calendar permission prompt when requested).
-3. Select your desired calendar account from the popup dialog (e.g. your Google account, Outlook, or local phone calendar).
-4. AttendMate will instantly synchronize your entire semester schedule. If you selected a Google or Outlook account, Android's built-in calendar sync adapter will automatically mirror the events to the cloud and desktop.
+3. Select your desired calendar account from the dropdown (e.g. your Google account, Samsung Calendar, or local phone calendar).
+4. AttendMate will synchronize your entire semester schedule. If you selected a Google account, Android's built-in calendar sync adapter will automatically mirror the events to Google Calendar in the cloud and web.
 
 ---
 
@@ -355,7 +355,7 @@ Once calendar synchronization is configured, you don't need to manually sync aga
 ## Key Rules
 - **Direct OS Integration**: Syncing through the device calendar operates with zero network lag and never runs into API rate limits or quota issues.
 - **Smart Filtering**: Read-only holiday calendars, national calendars, and third-party subscription lists are automatically filtered out to keep your account picker clean.
-- **Outlook Calendar Sync**: To sync with Outlook, open the native Outlook app settings and ensure **Sync calendars** is enabled for your Exchange account.
+- **Subject Color Sync**: Classes are automatically synchronized with your subject colors in your calendar.
 ''',
     ),
   _GuideSection(

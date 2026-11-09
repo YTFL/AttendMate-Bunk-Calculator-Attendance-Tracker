@@ -786,7 +786,7 @@ class _MoreScreenState extends State<MoreScreen> {
             enabled: !(kDebugMode && !_devModeCalendarSyncEnabled),
             leading: const Icon(Icons.calendar_month_outlined),
             title: const Text('Calendar Sync'),
-            subtitle: const Text('Sync class schedule to Google, Outlook, or Phone Calendar'),
+            subtitle: const Text('Sync class schedule to Google, Samsung, or Phone Calendar'),
             trailing: const Icon(Icons.chevron_right),
             onTap: (kDebugMode && !_devModeCalendarSyncEnabled)
                 ? null

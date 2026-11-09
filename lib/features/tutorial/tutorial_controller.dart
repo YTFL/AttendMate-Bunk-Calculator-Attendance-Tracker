@@ -366,7 +366,7 @@ class TutorialController extends ChangeNotifier {
       stepIndex: 26,
       title: '26. Calendar Synchronization',
       description:
-          'Tap Calendar Sync here to connect your Google Calendar or sync directly with your phone (Samsung/Outlook/Local calendars).',
+          'Tap Calendar Sync here to connect your Google Calendar or sync directly with your phone (Samsung/Local calendars).',
       targetTabIndex: 4,
       targetKeyName: 'key_calendar_sync',
       borderRadius: BorderRadius.all(Radius.circular(12.0)),
