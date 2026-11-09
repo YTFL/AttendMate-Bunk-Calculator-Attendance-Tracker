@@ -69,11 +69,82 @@ class _SyncProgressDialogState extends State<SyncProgressDialog> {
     }
   }
 
+  Widget _buildProgressBar(BuildContext context, double progress) {
+    final percent = (progress * 100).clamp(0, 100).toInt();
+    final isClearing = widget.title.toLowerCase().contains('clear') ||
+        widget.title.toLowerCase().contains('delet');
+    final actionWord = isClearing ? 'Clearing...' : 'Syncing...';
+    final textString = progress > 0 ? '$actionWord $percent%' : actionWord;
+
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final backgroundColor = isDark ? primaryColor.withValues(alpha: 0.4) : primaryColor;
+    const progressColor = Colors.white;
+    const textOnBackground = Colors.white;
+    const textOnProgress = Colors.black87;
+
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final totalWidth = constraints.maxWidth;
+          final filledWidth = totalWidth * progress.clamp(0.0, 1.0);
+
+          return Stack(
+            children: [
+              // Background Layer Text
+              SizedBox(
+                width: totalWidth,
+                height: 48,
+                child: Center(
+                  child: Text(
+                    textString,
+                    style: const TextStyle(
+                      color: textOnBackground,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+              // White progress fill layer with dark text clipped to filledWidth
+              if (filledWidth > 0)
+                ClipRect(
+                  clipper: _ProgressClipper(filledWidth),
+                  child: Container(
+                    width: totalWidth,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: progressColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        textString,
+                        style: const TextStyle(
+                          color: textOnProgress,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final percentage = (_progress * 100).clamp(0, 100).toInt();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return PopScope(
       canPop: false, // Prevents back navigation during sync!
@@ -97,53 +168,20 @@ class _SyncProgressDialogState extends State<SyncProgressDialog> {
                   style: const TextStyle(fontSize: 13, color: Colors.red),
                 ),
               ] else ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _status,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                if (_status.isNotEmpty) ...[
+                  Text(
+                    _status,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : Colors.black87,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$percentage%',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isDark ? Colors.white24 : Colors.black12,
-                        width: 1,
-                      ),
-                    ),
-                    child: LinearProgressIndicator(
-                      value: _progress.clamp(0.0, 1.0),
-                      minHeight: 10,
-                      backgroundColor: isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.black.withValues(alpha: 0.08),
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
-                      ),
-                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                   ),
-                ),
+                  const SizedBox(height: 14),
+                ],
+                _buildProgressBar(context, _progress),
                 const SizedBox(height: 12),
                 Text(
                   'Please do not exit AttendMate while synchronization is in progress.',
@@ -167,5 +205,20 @@ class _SyncProgressDialogState extends State<SyncProgressDialog> {
         ],
       ),
     );
+  }
+}
+
+class _ProgressClipper extends CustomClipper<Rect> {
+  final double width;
+  _ProgressClipper(this.width);
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTRB(0, 0, width, size.height);
+  }
+
+  @override
+  bool shouldReclip(_ProgressClipper oldClipper) {
+    return oldClipper.width != width;
   }
 }
