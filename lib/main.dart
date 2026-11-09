@@ -103,17 +103,11 @@ void callbackDispatcher() {
       } else if (task == 'dailySemesterBackup') {
         await DatabaseService().logAppEvent(
           tag: 'Workmanager',
-          message: 'Daily scheduled background backup task triggered by Android WorkManager.',
+          message: 'Daily midnight Google Drive cloud backup task triggered by Android WorkManager.',
           level: 'INFO',
         );
         final hadChanges = await BackupService().hasUnbackedDataChanges();
-        // 1. Local backup
-        await BackupService().createBackup(
-          showNotification: true,
-          triggerReason: 'Daily midnight background backup',
-          force: false,
-        );
-        // 2. Google Drive cloud backup
+        // Google Drive cloud backup (Local backups are handled exclusively via the post-session delayed routine)
         await GoogleDriveBackupService().executeMidnightBackup(forceIfHadChanges: hadChanges);
       } else if (task == 'testBackgroundBackup') {
         await DatabaseService().logAppEvent(

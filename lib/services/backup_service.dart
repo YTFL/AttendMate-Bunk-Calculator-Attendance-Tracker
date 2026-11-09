@@ -49,6 +49,7 @@ class BackupService {
   static const String _prefBackupEnabledKey = 'semester_backup_enabled';
   static const String _prefScheduledBackupTargetTimeKey = 'backup_scheduled_target_time_ms';
   static const String _prefScheduledBackupReasonKey = 'backup_scheduled_trigger_reason';
+  static const String _prefLastLocalBackupTimeKey = 'last_local_backup_timestamp_ms';
   static const int maxRollingBackups = 3;
   static const MethodChannel _fileChannel = MethodChannel('com.attendmate.app/file_import');
 
@@ -285,12 +286,16 @@ class BackupService {
           return null;
         }
 
+        final prefs = await SharedPreferences.getInstance();
+        final lastModifiedMs = prefs.getInt('last_data_modified_timestamp_ms') ?? 0;
+        final lastLocalBackupMs = prefs.getInt(_prefLastLocalBackupTimeKey) ?? 0;
         final hasChanges = await hasUnbackedDataChanges();
-        if (!hasChanges) {
-          debugPrint('BackupService: Auto-backup skipped because no data changes occurred since last backup.');
+
+        if (!hasChanges || lastModifiedMs <= lastLocalBackupMs) {
+          debugPrint('BackupService: Auto-backup skipped: Database content has not changed since last backup.');
           await DatabaseService().logAppEvent(
             tag: 'BackupService',
-            message: 'Auto-backup skipped: No new data changes occurred since last backup.',
+            message: 'Auto-backup skipped: Database content has not changed since last backup (Last modified: $lastModifiedMs, Last backup: $lastLocalBackupMs).',
             level: 'INFO',
           );
           await NotificationService().cancelScheduledBackupNotification();
@@ -331,6 +336,10 @@ class BackupService {
         );
         return null;
       }
+
+      // Record successful local backup timestamp to prevent duplicate backups without data changes
+      final prefsInst = await SharedPreferences.getInstance();
+      await prefsInst.setInt(_prefLastLocalBackupTimeKey, DateTime.now().millisecondsSinceEpoch);
 
       // Clear the dirty flag and scheduled target time since backup was successfully created
       await clearUnbackedDataChanges();

@@ -28,7 +28,7 @@ import '../semester/live_timetable_sync_screen.dart';
 import '../subject/subject_model.dart';
 import '../subject/subject_provider.dart';
 import 'calendar_sync_selection_screen.dart';
-import 'google_integrations_screen.dart';
+import 'google_drive_backup_screen.dart';
 import 'github_discussions_screen.dart';
 import 'keep_android_open_screen.dart';
 import 'setup_guide_screen.dart';
@@ -769,14 +769,14 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
         ),
         ListTile(
-          leading: const Icon(Icons.hub_outlined),
-          title: const Text('Google Integrations'),
-          subtitle: const Text('Account connection, Drive cloud backup, & Calendar sync'),
+          leading: const Icon(Icons.cloud_upload_outlined),
+          title: const Text('Google Drive Backup'),
+          subtitle: const Text('Automatic midnight cloud backup & restore'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const GoogleIntegrationsScreen()),
+              MaterialPageRoute(builder: (context) => const GoogleDriveBackupScreen()),
             );
           },
         ),
@@ -784,9 +784,9 @@ class _MoreScreenState extends State<MoreScreen> {
           key: _calendarSyncKey,
           child: ListTile(
             enabled: !(kDebugMode && !_devModeCalendarSyncEnabled),
-            leading: const Icon(Icons.sync),
+            leading: const Icon(Icons.calendar_month_outlined),
             title: const Text('Calendar Sync'),
-            subtitle: const Text('Sync your timetable with Google or Device Calendar'),
+            subtitle: const Text('Sync class schedule to Google, Outlook, or Phone Calendar'),
             trailing: const Icon(Icons.chevron_right),
             onTap: (kDebugMode && !_devModeCalendarSyncEnabled)
                 ? null

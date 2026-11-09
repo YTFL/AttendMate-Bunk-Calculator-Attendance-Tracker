@@ -8,6 +8,17 @@
 
 ---
 
+> [!IMPORTANT]
+> **Unified Calendar Synchronization & Google Drive Cloud Backup Upgrade**
+>
+> In AttendMate 2.4.0, calendar synchronization has been unified into a blazing-fast, phone-native calendar engine powered by Android's device calendar provider.
+> - **Zero Rate Limits & Instant Sync**: Direct OS calendar synchronization writes schedules instantly with zero network latency, no Google API 403/429 rate limit errors, and full offline support.
+> - **Automatic Cloud Mirroring**: When syncing to your Google or Outlook account, Android's native calendar sync adapter automatically mirrors your schedule to Google Calendar and Outlook in the cloud and on the web.
+> - **Action Required After Updating**: If you previously used Google Calendar Sync, please navigate to **More > Calendar Sync**, switch **Sync Timetable to Calendar** to **ON**, and select your Google account in the interactive picker.
+> - **Dedicated Google Drive Cloud Backup**: Google sign-in and cloud backups are now housed under a dedicated screen: **More > Google Drive Backup**.
+
+---
+
 ## 🚀 AttendMate 2.4.0 Update
 
 AttendMate 2.4.0 delivers major enhancements including flexible elective subject support and interactive timetable sharing, mid-semester new subject imports, dedicated one-off special class scheduling, performance-optimized parallel calendar synchronization, phone-native map app redirection, dependable midnight Google Drive backups, and smart pre-class notifications.
@@ -53,20 +64,20 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 
 ---
 
-### 5. High-Speed Calendar Synchronization & Deletion Engine (Up to 5x Faster)
-- **Concurrent Worker Pool for Sync & Deletion**:
-  - Re-architected both schedule slot synchronization AND calendar event deletion to execute across a high-throughput **5-worker concurrent pool**.
-  - Completely eliminated sequential one-by-one network blocking when synchronizing timetables mid-semester or clearing dozens of synced events from Google Calendar.
-- **Unified Determinate Progress Modal Across All Screens**:
-  - Displays a clean, modal progress dialog showing the **exact completion percentage** (`0%` to `100%`) alongside real-time status labels during both synchronization and event deletion (e.g. `Syncing Data Structures (4/12)...`, `Deleting tracked events (15/30)...`, `Clearing remaining events...`).
-  - Seamlessly integrated across the **Calendar Synchronization screen** (`CalendarSyncSelectionScreen`), **Google Calendar Sync screen** (`GoogleCalendarSyncScreen`), and **Google Integrations screen** (`GoogleIntegrationsScreen`).
-- **Full Interruption & Back-Dismissal Shield (`PopScope`)**:
-  - Enforced strict back-navigation protection (`PopScope(canPop: false)`) across **both the Calendar Sync page and the Google Integrations page**, as well as the modal dialog.
-  - Users can no longer accidentally press back or swipe back mid-sync or mid-deletion, guaranteeing zero orphaned calendar events, partial deletions, or desynchronized event states.
-- **Dedicated "Clear Synced Events" Action**:
-  - Added a dedicated 1-tap **"Clear Synced Events"** button with confirmation dialog directly in the Google Calendar Sync screen for immediate calendar housekeeping.
+### 5. Unified Native Device Calendar Engine & Parallel Deletion
+- **Zero Rate Limits & Instant Local Sync**:
+  - Unified all calendar synchronization into the native Android Device Calendar provider (`device_calendar_plus`).
+  - Completely eliminates Google Cloud API rate limits (`403 Rate Limit Exceeded` / `429 Too Many Requests`), OAuth verification hurdles, and slow sequential network uploads. Android's background sync adapter automatically handles uploading events to Google Calendar and Outlook in the cloud.
+- **Interactive Calendar Account Picker on Toggle**:
+  - Switching Calendar Sync to ON prompts you with an interactive account selection dialog showing all writable Google, Outlook, and local device calendars. You choose exactly which calendar receives your timetable before any sync starts.
+- **Concurrent Worker Pool for Event Deletion**:
+  - Calendar event deletion executes across a high-throughput **5-worker concurrent pool**, clearing synced events in seconds instead of half a minute.
+- **High-Contrast Dark Mode Progress Bar**:
+  - Re-styled the modal progress dialog with a clear, high-contrast progress fill and subtle background track, ensuring visual fill progress is prominently visible in dark mode.
+- **Full Interruption Shield (`PopScope`)**:
+  - Enforced strict back-navigation protection (`PopScope(canPop: false)`) on both the screen and progress modal during active sync and deletion, preventing incomplete or desynchronized states.
 - **Background Completion Notification**:
-  - Sync automatically completes with an automated system status bar notification confirming how many slots and subjects were synchronized.
+  - An automated system status bar notification confirms when your timetable synchronization finishes.
 
 ---
 
@@ -91,6 +102,13 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 - **Distraction-Free Onboarding**:
   - Replaced the intimidating numeric step counter (`"STEP 1 OF 9"`) with a sleek, minimalist `"QUICK GUIDE"` chip.
   - Significantly reduces onboarding drop-off and encourages new users to explore key app interactions naturally.
+
+---
+
+### 8. Dedicated Google Drive Cloud Backup Screen
+- **Exclusive Google Cloud Hub**:
+  - Replaced the generic Google Integrations screen with a focused **Google Drive Backup** screen (**More > Google Drive Backup**).
+  - Google Sign-In and Sign-Out are strictly exclusive to Google Drive Cloud Backup, cleanly separating cloud storage from calendar synchronization.
 
 ---
 
@@ -136,6 +154,14 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
   - Audited and stripped unneeded camera, photo, video, audio, and storage permissions injected by third-party packages.
   - Completely removed the `open_filex` dependency and replaced it with native Android `FileProvider` intent dispatching for previewing exported files (PDF, CSV, JSON) and running in-app APK update installation.
   - Enforced strict `tools:node="remove"` rules in `AndroidManifest.xml` to permanently block `CAMERA`, `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, and `RECORD_AUDIO` from being merged into the final build.
+
+---
+
+### 6. Change-Gated Precision Local Backups
+- **No Redundant Backups**:
+  - Local backups are now strictly gated on genuine database modifications (`last_data_modified_timestamp_ms > last_local_backup_timestamp_ms`). If no attendance or subjects were modified during your session, redundant backups are skipped.
+- **Optimized Background WorkManager Tasks**:
+  - Removed duplicate midnight local backups since local auto-backups execute 5 minutes after session changes. The midnight background task is now strictly dedicated to Google Drive cloud backups.
 ---
 
 ## 📥 Installation

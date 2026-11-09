@@ -13,7 +13,7 @@ import '../import/unified_import_screen.dart';
 import '../location/location_manager_screen.dart';
 import '../planner/leave_planner_screen.dart';
 import 'semester_backup_screen.dart';
-import 'google_integrations_screen.dart';
+import 'google_drive_backup_screen.dart';
 import 'github_discussions_screen.dart';
 import 'keep_android_open_screen.dart';
 import '../../services/battery_optimization_service.dart';
@@ -327,43 +327,33 @@ AttendMate sends notifications before and after your scheduled classes:
     _GuideSection(
       title: '10. Calendar Synchronization',
       openInAppLabel: 'Open Calendar Sync Settings',
-      openTarget: _GuideOpenTarget.googleCalendarSync,
+      openTarget: _GuideOpenTarget.calendarSync,
       markdown: '''
 ## Overview
-AttendMate supports two forms of calendar synchronization to keep your weekly timetable, classes, and cancellations perfectly synchronized:
-1. **Google Calendar Sync (Cloud)**: Links to your Google Account and syncs your schedules online.
-2. **Device Calendar Sync (Local)**: Writes your schedules directly to your phone's native calendar database (supporting Samsung Calendar, Outlook, or local offline calendars).
+AttendMate syncs your weekly timetable, classes, and cancellations directly to your phone's native calendar database (Google Calendar, Samsung Calendar, Outlook, or local device calendars).
 
 ---
 
-## Setting Up Google Calendar Sync
+## Setting Up Calendar Sync
 1. Open the **More** tab and tap **Calendar Sync**.
-2. Under **Google Calendar Sync**, tap the arrow to open settings, then tap **Connect Account** and log in.
-3. Once connected, AttendMate will automatically sync your timetable. You can also tap **Sync Now** to trigger an immediate full update.
-
----
-
-## Setting Up Device Calendar Sync
-1. Open the **More** tab and tap **Calendar Sync**.
-2. Toggle **Device Calendar Sync** to **ON** (allow the calendar permission prompt when requested).
-3. Under **Select Destination Calendar**, choose the target calendar from the dropdown. 
-   - All Google account calendars, Samsung/Outlook accounts, and local offline phone calendars (labeled as `My Calendar (Local Offline)`) will be listed with their owner accounts.
-4. Tap **Sync to Device Calendar Now** to write all your schedules to your local calendar database.
+2. Switch **Sync Timetable to Calendar** to **ON** (allow the calendar permission prompt when requested).
+3. Select your desired calendar account from the popup dialog (e.g. your Google account, Outlook, or local phone calendar).
+4. AttendMate will instantly synchronize your entire semester schedule. If you selected a Google or Outlook account, Android's built-in calendar sync adapter will automatically mirror the events to the cloud and desktop.
 
 ---
 
 ## Automated Background Sync
-Once calendar synchronization is configured, you don't need to manually sync again! AttendMate automatically runs background sync operations (debounced at 1.5 seconds to protect your battery and network) whenever you:
+Once calendar synchronization is configured, you don't need to manually sync again! AttendMate automatically runs background sync operations whenever you:
 - Add, edit, or delete a subject or schedule timeslot.
 - Change a subject's name (automatically updates event titles).
 - Declare/unmark a holiday.
-- Mark a class as cancelled (automatically deletes that specific event occurrence).
+- Mark a class as cancelled or overwritten.
 
 ---
 
 ## Key Rules
-- **Color Mapping**: Google Calendar color mapping automatically groups related lecture and lab subjects together under the same color, using a linear probing collision loop to resolve overlaps.
-- **Smart Filtering**: Read-only holiday calendars, national calendars, and third-party subscription lists are automatically filtered out to keep your dropdown clean.
+- **Direct OS Integration**: Syncing through the device calendar operates with zero network lag and never runs into API rate limits or quota issues.
+- **Smart Filtering**: Read-only holiday calendars, national calendars, and third-party subscription lists are automatically filtered out to keep your account picker clean.
 - **Outlook Calendar Sync**: To sync with Outlook, open the native Outlook app settings and ensure **Sync calendars** is enabled for your Exchange account.
 ''',
     ),
@@ -457,26 +447,20 @@ Once the leave period passes, a dialog prompt will ask you to confirm your absen
 ''',
   ),
     _GuideSection(
-      title: '14. Google Integrations & Cloud Backup',
-      openInAppLabel: 'Open Google Integrations',
-      openTarget: _GuideOpenTarget.googleIntegrations,
+      title: '14. Google Drive Cloud Backup',
+      openInAppLabel: 'Open Google Drive Backup',
+      openTarget: _GuideOpenTarget.googleDriveBackup,
       markdown: '''
 ## Overview
-AttendMate provides a unified Google account hub under **More > Google Integrations** for Google Calendar synchronization and Google Drive cloud backups.
+AttendMate provides Google Drive Cloud Backup under **More > Google Drive Backup** for secure off-device cloud storage and easy restoration.
 
 ---
 
 ## Google Drive Cloud Backup
 - **Daily Midnight Backup**: When enabled, AttendMate automatically creates an encrypted, single JSON cloud backup (`attendmate_cloud_backup.json`) in your Google Drive every night at midnight.
-- **No Rapid Rolling Sync**: Unlike local backups, cloud backup strictly avoids high-frequency rolling syncs to preserve battery and respect API quotas.
-- **Smart Restore on Login**: When signing in to Google Drive (from Google Integrations, Calendar Sync, or Semester Backup), AttendMate automatically detects if an existing cloud backup exists and prompts you to restore your data immediately.
-- **Force Cloud Backup**: Tap **Force Backup to Drive Now** anytime to create an immediate backup.
-
----
-
-## Google Calendar Sync
-- Keep your class schedule synchronized directly to Google Calendar.
-- Clean one-tap toggle for easy enabling and disabling without cluttering secondary screens.
+- **Precision Sync**: Cloud backup strictly runs at midnight or on manual demand to preserve battery and respect API quotas.
+- **Smart Restore on Login**: When signing in to Google Drive (from Google Drive Backup or Semester Backup), AttendMate automatically detects if an existing cloud backup exists and prompts you to restore your data immediately.
+- **Backup Now**: Tap **Backup Now** anytime to create an immediate cloud backup.
 
 > Privacy First: Cloud backups are stored in your private Google Drive app storage and are never shared or accessible by third parties.
 ''',
@@ -797,7 +781,7 @@ The **More** page contains app preferences, integrations, diagnostics, update to
         return _openHomeTab(1, subLevelBuilder: (context) => const UnifiedImportScreen(initialTabIndex: 0));
       case _GuideOpenTarget.calendar:
         return _openHomeTab(0, subLevelBuilder: (context) => const CalendarScreen());
-      case _GuideOpenTarget.googleCalendarSync:
+      case _GuideOpenTarget.calendarSync:
         return _openHomeTab(4, subLevelBuilder: (context) => const CalendarSyncSelectionScreen());
       case _GuideOpenTarget.swipeActions:
         return _openHomeTab(4, subLevelBuilder: (context) => const SwipeActionsSettingsScreen());
@@ -809,8 +793,8 @@ The **More** page contains app preferences, integrations, diagnostics, update to
         return _openHomeTab(4, subLevelBuilder: (context) => const SemesterBackupScreen());
       case _GuideOpenTarget.importAttendance:
         return _openHomeTab(2, subLevelBuilder: (context) => const UnifiedImportScreen(initialTabIndex: 1));
-      case _GuideOpenTarget.googleIntegrations:
-        return _openHomeTab(4, subLevelBuilder: (context) => const GoogleIntegrationsScreen());
+      case _GuideOpenTarget.googleDriveBackup:
+        return _openHomeTab(4, subLevelBuilder: (context) => const GoogleDriveBackupScreen());
       case _GuideOpenTarget.githubDiscussions:
         return _openHomeTab(4, subLevelBuilder: (context) => const GitHubDiscussionsScreen());
       case _GuideOpenTarget.keepAndroidOpen:
@@ -971,13 +955,13 @@ enum _GuideOpenTarget {
   addSubject,
   importTimetable,
   calendar,
-  googleCalendarSync,
+  calendarSync,
   swipeActions,
   locationManager,
   leavePlanner,
   semesterBackup,
   importAttendance,
-  googleIntegrations,
+  googleDriveBackup,
   githubDiscussions,
   keepAndroidOpen,
   batteryOptimization,

@@ -124,9 +124,24 @@ class _SyncProgressDialogState extends State<SyncProgressDialog> {
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: _progress.clamp(0.0, 1.0),
-                    minHeight: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        width: 1,
+                      ),
+                    ),
+                    child: LinearProgressIndicator(
+                      value: _progress.clamp(0.0, 1.0),
+                      minHeight: 10,
+                      backgroundColor: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.08),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isDark ? const Color(0xFF64B5F6) : theme.colorScheme.primary,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),

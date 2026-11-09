@@ -286,9 +286,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
             backupService.resetSessionChangeFlag();
           } else {
-            // No changes in this session. Check if an existing timer is running.
+            // No changes in this session.
+            final hasUnbacked = await backupService.hasUnbackedDataChanges();
             final existingTarget = await backupService.getScheduledBackupTargetTime();
-            if (existingTarget != null && existingTarget.isAfter(DateTime.now())) {
+            if (hasUnbacked && existingTarget != null && existingTarget.isAfter(DateTime.now())) {
               final remainingSec = existingTarget.difference(DateTime.now()).inSeconds;
               final remainingStr = '${remainingSec ~/ 60}m ${(remainingSec % 60).toString().padLeft(2, '0')}s';
               final formattedTarget = DateFormat('hh:mm:ss a').format(existingTarget);
@@ -297,6 +298,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 message: 'App exited without new changes. Keeping existing 5-minute backup timer intact without reset (Target: $formattedTarget, $remainingStr remaining).',
                 level: 'INFO',
               );
+            } else if (!hasUnbacked) {
+              // Ensure no idle task is pending if database has no unbacked changes
+              await Workmanager().cancelByUniqueName('app_close_5min_backup');
+              await backupService.clearScheduledBackupTargetTime();
             }
           }
         });

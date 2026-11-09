@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.4.0] - 2026-11-08
 
+> [!IMPORTANT]
+> **Unified Calendar Synchronization & Google Drive Cloud Backup Upgrade**
+>
+> Calendar synchronization is now unified into Android's native Device Calendar engine. If you previously synced with Google Calendar, please go to **More > Calendar Sync**, turn **Sync Timetable to Calendar** ON, and select your Google account. Google Drive Cloud Backup is now accessible under **More > Google Drive Backup**.
+
 ### Added
 - **Elective Subject Support & Interactive Timetable Selection**:
   - Added an "Elective Subject" toggle and elective group name input when creating or editing subjects (`AddSubjectScreen`, `EditSubjectScreen`).
@@ -30,16 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native Maps App Redirection & Smart Coordinate Parser**:
   - Completely removed the Google Maps SDK and paid Maps API in favor of phone-native map app redirection (`geo:0,0?q=`).
   - Added an intelligent coordinate parser supporting decimal coordinates (`lat, lng`), DMS format (Degrees Minutes Seconds), Google Maps URLs (`maps.app.goo.gl`, `?q=`, `/@lat,lng`), and dropped pin clipboard text with 1-tap clipboard paste and live coordinate preview.
-- **Calendar Sync Progress Dialog & Interruption Protection**:
-  - Added a non-dismissible `SyncProgressDialog` modal displaying exact completion percentage (`%`) and real-time progress for each subject slot.
-  - Integrated `PopScope` blocking back dismissal during active synchronization and deletion across both the Calendar Sync screen and the Google Integrations screen, preventing partial or corrupted sync states.
-  - Added a dedicated 1-tap "Clear Synced Events" action with confirmation dialog directly in the Google Calendar Sync screen.
+- **Unified Native Device Calendar Engine & Interactive Account Picker**:
+  - Unified timetable synchronization into native Android Device Calendar (`device_calendar_plus`), eliminating Google API rate limits (`403/429`) and network bottlenecks while syncing offline and mirroring to Google/Outlook cloud automatically.
+  - Added an interactive `Select Calendar Account` dialog when enabling Calendar Sync so users can pick their preferred Google, Outlook, or local calendar account before synchronization begins.
+- **Dedicated Google Drive Backup Screen**:
+  - Dedicated `GoogleDriveBackupScreen` (**More > Google Drive Backup**) with exclusive Google Sign-In/Sign-Out, automatic midnight cloud backup toggling, manual cloud backup, and backup restoration.
+- **High-Contrast Dark Mode Progress Bar & Interruption Protection**:
+  - Added high-contrast track and fill styling to `SyncProgressDialog` to ensure visual progress feedback is clearly visible in dark mode.
+  - Integrated `PopScope` blocking back dismissal during active synchronization and deletion across the Calendar Sync screen and the modal dialog, preventing partial or corrupted sync states.
   - Added an automated system status bar notification upon calendar sync completion.
 
 ### Changed & Improved
 - **High-Speed Calendar Synchronization & Parallel Deletion Engine**:
   - Re-architected both schedule slot synchronization AND calendar event deletion using a 5-worker concurrent pool, accelerating both timetable sync and event clearing up to 5x without sequential API bottlenecking.
-  - Unified determinate progress reporting across the Calendar Sync screen, Google Calendar Sync screen, and Google Integrations screen with exact percentages and live status messages during both sync and event deletion.
+  - Unified determinate progress reporting across the Calendar Sync screen with exact percentages and live status messages during both sync and event deletion.
+- **Change-Gated Precision Local Backups**:
+  - Local backups are now strictly generated only when genuine database modifications occur (`last_data_modified_timestamp_ms > last_local_backup_timestamp_ms`), preventing redundant backups.
+  - Removed duplicate midnight local backups from WorkManager; midnight routine is now strictly dedicated to Google Drive cloud backups.
 - **Clean Build Number Display**:
   - Automatically strip architecture offsets (+1000, +2000, +3000) injected by Flutter's split-per-ABI build system so the More tab, update engine, and logs display the clean canonical build number (e.g. `Build 33` instead of `Build 2033`).
 - **Streamlined Interactive Tutorial**:
