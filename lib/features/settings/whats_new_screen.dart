@@ -4,6 +4,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../services/update_service.dart';
 
+import '../../utils/markdown_helper.dart';
 import '../../utils/markdown_link_helper.dart';
 
 class WhatsNewScreen extends StatefulWidget {
@@ -52,7 +53,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
             selectable: true,
             softLineBreak: true,
             padding: const EdgeInsets.all(16),
-            styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+            styleSheet: MarkdownHelper.buildStyleSheet(context),
             onTapLink: (text, href, title) {
               MarkdownLinkHelper.openLink(context, href);
             },

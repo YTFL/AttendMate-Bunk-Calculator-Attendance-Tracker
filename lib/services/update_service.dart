@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/app_update_model.dart';
+import '../utils/markdown_helper.dart';
 import 'database_service.dart';
 
 enum InstallResult {
@@ -142,7 +143,7 @@ class UpdateService {
     lines = _removeTrailingDividersAndFooters(lines);
 
     final sanitized = lines.join('\n').trim();
-    return sanitized;
+    return MarkdownHelper.prepareMarkdown(sanitized);
   }
 
   static List<String> _removeTopMetadataBlock(List<String> lines) {

@@ -18,6 +18,7 @@ import 'github_discussions_screen.dart';
 import 'keep_android_open_screen.dart';
 import '../../services/battery_optimization_service.dart';
 import '../../utils/attendance_import_utils.dart';
+import '../../utils/markdown_helper.dart';
 import '../../utils/markdown_link_helper.dart';
 
 class SetupGuideScreen extends StatefulWidget {
@@ -829,24 +830,7 @@ The **More** page contains app preferences, integrations, diagnostics, update to
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final blockquoteBackground = colorScheme.surfaceContainerHighest;
-    final codeBackground = colorScheme.surfaceContainerHigh;
-
-    final markdownStyle = MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      blockquoteDecoration: BoxDecoration(
-        color: blockquoteBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      blockquotePadding: const EdgeInsets.all(12),
-      codeblockDecoration: BoxDecoration(
-        color: codeBackground,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      code: TextStyle(
-        backgroundColor: codeBackground,
-      ),
-    );
+    final markdownStyle = MarkdownHelper.buildStyleSheet(context);
 
     final totalPages = _sections.length + 1;
     final sectionIndex = _currentPage - 1;
@@ -887,7 +871,7 @@ The **More** page contains app preferences, integrations, diagnostics, update to
 
                   final section = _sections[index - 1];
                   return _GuideSectionPage(
-                    markdown: section.markdown,
+                    markdown: MarkdownHelper.prepareMarkdown(section.markdown),
                     markdownStyle: markdownStyle,
                     aiPromptCopyText: section.aiPromptCopyText,
                     onCopyPrompt: () => _copyAiPrompt(section.aiPromptCopyText),

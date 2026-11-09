@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../models/github_discussion_model.dart';
 import '../../services/github_discussions_service.dart';
+import '../../utils/markdown_helper.dart';
 import '../../utils/markdown_link_helper.dart';
 import '../../utils/url_launcher_utils.dart';
 
@@ -135,33 +136,12 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
 
             // Markdown Content
             MarkdownBody(
-              data: discussion.markdownContent.isNotEmpty
-                  ? discussion.markdownContent
-                  : '_No description provided._',
-              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                p: TextStyle(
-                  fontSize: 15,
-                  height: 1.5,
-                  color: isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
-                ),
-                h1: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                h2: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-                h3: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                blockquote: TextStyle(
-                  color: isDark ? Colors.white70 : Colors.black87,
-                  fontStyle: FontStyle.italic,
-                ),
-                blockquoteDecoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border(
-                    left: BorderSide(
-                      color: Theme.of(context).colorScheme.primary,
-                      width: 4,
-                    ),
-                  ),
-                ),
+              data: MarkdownHelper.prepareMarkdown(
+                discussion.markdownContent.isNotEmpty
+                    ? discussion.markdownContent
+                    : '_No description provided._',
               ),
+              styleSheet: MarkdownHelper.buildStyleSheet(context),
               onTapLink: (text, href, title) {
                 MarkdownLinkHelper.openLink(context, href);
               },

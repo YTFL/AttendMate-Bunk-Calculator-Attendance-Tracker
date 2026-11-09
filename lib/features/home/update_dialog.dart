@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../models/app_update_model.dart';
+import '../../utils/markdown_helper.dart';
 import '../../utils/markdown_link_helper.dart';
 
 class UpdateFullScreen extends StatelessWidget {
@@ -231,14 +232,12 @@ class _UpdateContent extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: MarkdownBody(
-              data: update.changelog,
+              data: MarkdownHelper.prepareMarkdown(update.changelog),
               selectable: true,
               softLineBreak: true,
-              styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+              styleSheet: MarkdownHelper.buildStyleSheet(
+                context,
                 p: Theme.of(context).textTheme.bodySmall,
-                code: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
               ),
               onTapLink: (text, href, title) {
                 MarkdownLinkHelper.openLink(context, href);
