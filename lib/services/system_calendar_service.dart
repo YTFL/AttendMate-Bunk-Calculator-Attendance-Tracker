@@ -574,7 +574,7 @@ class SystemCalendarService {
 
 class _TimetableSyncItem {
   final Subject subject;
-  final SubjectSchedule slot;
+  final TimeSlot slot;
   final DateTime dateOnly;
 
   const _TimetableSyncItem({
