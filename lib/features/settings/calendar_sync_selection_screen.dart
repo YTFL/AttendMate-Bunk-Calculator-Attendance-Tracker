@@ -22,6 +22,8 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
   bool _isSyncEnabled = false;
   String? _selectedCalendarId;
   String? _selectedCalendarName;
+  String? _selectedCalendarAccount;
+  List<dc.Calendar> _calendars = [];
   bool _isActionInProgress = false;
 
   @override
@@ -39,8 +41,18 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
       _isSyncEnabled = await SystemCalendarService.isSystemSyncEnabled();
       _selectedCalendarId = await SystemCalendarService.getSystemCalendarId();
       _selectedCalendarName = await SystemCalendarService.getSystemCalendarName();
+      _selectedCalendarAccount = await SystemCalendarService.getSystemCalendarAccountName();
 
       if (await SystemCalendarService.checkOrRequestPermissions()) {
+        _calendars = await SystemCalendarService.getWritableCalendars();
+        if (_selectedCalendarId != null && _calendars.isNotEmpty) {
+          final matched = _calendars.where((c) => c.id == _selectedCalendarId);
+          if (matched.isNotEmpty) {
+            final cal = matched.first;
+            _selectedCalendarName = _getCalendarDisplayName(cal);
+            _selectedCalendarAccount = _getCalendarAccountName(cal);
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error loading calendar sync status: $e');
@@ -58,6 +70,10 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
       return 'Google Calendar';
     } else if (cal.name.toLowerCase() == 'my calendar') {
       return 'My Calendar';
+    } else if (cal.accountType != null && cal.accountType!.toLowerCase().contains('samsung')) {
+      return 'Samsung Calendar';
+    } else if (cal.accountType != null && cal.accountType!.toLowerCase().contains('outlook')) {
+      return 'Outlook Calendar';
     } else {
       return cal.name.isEmpty ? 'Calendar' : cal.name;
     }
@@ -73,154 +89,66 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     }
   }
 
-  Future<dc.Calendar?> _showCalendarAccountPickerDialog(List<dc.Calendar> calendars) async {
-    final theme = Theme.of(context);
-    return showDialog<dc.Calendar>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return AlertDialog(
-          icon: Icon(
-            Icons.calendar_month_rounded,
-            size: 36,
-            color: theme.colorScheme.primary,
-          ),
-          title: const Text('Select Calendar Account'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Choose which account or calendar to synchronize your class schedule with:',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(dialogContext).size.height * 0.45,
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: calendars.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final cal = calendars[index];
-                      final isSelected = cal.id == _selectedCalendarId;
-                      final displayName = _getCalendarDisplayName(cal);
-                      final accountName = _getCalendarAccountName(cal);
-                      final calColor = cal.color;
-
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        leading: Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: calColor?.withValues(alpha: 0.15) ?? theme.colorScheme.primaryContainer,
-                            border: Border.all(
-                              color: calColor ?? theme.colorScheme.primary,
-                              width: 2,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.calendar_today_rounded,
-                            size: 18,
-                            color: calColor ?? theme.colorScheme.primary,
-                          ),
-                        ),
-                        title: Text(
-                          displayName,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          accountName,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        trailing: isSelected
-                            ? Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary)
-                            : null,
-                        onTap: () => Navigator.of(dialogContext).pop(cal),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Future<void> _toggleSync(bool value) async {
     if (value) {
-      // 1. Request / check permissions
       setState(() => _isActionInProgress = true);
-      final hasPerm = await SystemCalendarService.checkOrRequestPermissions();
-      if (!hasPerm) {
-        setState(() => _isActionInProgress = false);
-        if (mounted) {
-          SnackbarUtils.showErrorSnackBar(context, 'Calendar permissions are required to sync timetable.');
+      try {
+        final hasPerm = await SystemCalendarService.checkOrRequestPermissions();
+        if (!hasPerm) {
+          if (mounted) {
+            SnackbarUtils.showErrorSnackBar(context, 'Calendar permissions are required to sync timetable.');
+          }
+          return;
         }
-        return;
-      }
 
-      // 2. Query writable calendars
-      final calendars = await SystemCalendarService.getWritableCalendars();
-      setState(() {
-        _isActionInProgress = false;
-      });
-
-      if (calendars.isEmpty) {
-        if (mounted) {
-          SnackbarUtils.showErrorSnackBar(context, 'No writable calendars found on this device.');
+        final calendars = await SystemCalendarService.getWritableCalendars();
+        if (calendars.isEmpty) {
+          if (mounted) {
+            SnackbarUtils.showErrorSnackBar(context, 'No writable calendars found on this device.');
+          }
+          return;
         }
-        return;
+
+        dc.Calendar targetCal = calendars.first;
+        if (_selectedCalendarId != null) {
+          final found = calendars.where((c) => c.id == _selectedCalendarId);
+          if (found.isNotEmpty) {
+            targetCal = found.first;
+          }
+        }
+
+        final targetId = targetCal.id;
+        final targetName = _getCalendarDisplayName(targetCal);
+        final targetAccount = _getCalendarAccountName(targetCal);
+
+        await SystemCalendarService.setSystemSyncEnabled(
+          true,
+          calendarId: targetId,
+          calendarName: targetName,
+          accountName: targetAccount,
+        );
+
+        if (mounted) {
+          setState(() {
+            _calendars = calendars;
+            _isSyncEnabled = true;
+            _selectedCalendarId = targetId;
+            _selectedCalendarName = targetName;
+            _selectedCalendarAccount = targetAccount;
+          });
+        }
+
+        await _triggerSystemSync();
+      } catch (e) {
+        if (mounted) {
+          SnackbarUtils.showErrorSnackBar(context, 'Error enabling calendar sync: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isActionInProgress = false);
+        }
       }
-
-      // 3. User must select account before sync begins
-      final chosenCal = await _showCalendarAccountPickerDialog(calendars);
-      if (chosenCal == null) {
-        // User cancelled picker -> keep toggle OFF
-        return;
-      }
-
-      final targetId = chosenCal.id;
-      final targetName = _getCalendarDisplayName(chosenCal);
-
-      await SystemCalendarService.setSystemSyncEnabled(
-        true,
-        calendarId: targetId,
-        calendarName: targetName,
-      );
-
-      if (mounted) {
-        setState(() {
-          _isSyncEnabled = true;
-          _selectedCalendarId = targetId;
-          _selectedCalendarName = targetName;
-        });
-      }
-
-      // 4. Trigger initial full sync
-      await _triggerSystemSync();
     } else {
-      // Toggle OFF: Confirm and clear events
       setState(() => _isActionInProgress = true);
       try {
         final currentCalId = _selectedCalendarId;
@@ -240,6 +168,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
             _isSyncEnabled = false;
             _selectedCalendarId = null;
             _selectedCalendarName = null;
+            _selectedCalendarAccount = null;
           });
           if (ok == true) {
             SnackbarUtils.showSuccessSnackBar(context, 'Calendar sync disabled. Synced events cleared.');
@@ -257,39 +186,19 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     }
   }
 
-  Future<void> _handleChangeAccount() async {
-    setState(() => _isActionInProgress = true);
-    final hasPerm = await SystemCalendarService.checkOrRequestPermissions();
-    if (!hasPerm) {
-      setState(() => _isActionInProgress = false);
-      if (mounted) {
-        SnackbarUtils.showErrorSnackBar(context, 'Calendar permissions required.');
-      }
-      return;
-    }
+  Future<void> _onCalendarChanged(dc.Calendar cal) async {
+    final targetId = cal.id;
+    final targetName = _getCalendarDisplayName(cal);
+    final targetAccount = _getCalendarAccountName(cal);
 
-    final calendars = await SystemCalendarService.getWritableCalendars();
-    setState(() {
-      _isActionInProgress = false;
-    });
-
-    if (calendars.isEmpty) {
-      if (mounted) {
-        SnackbarUtils.showErrorSnackBar(context, 'No writable calendars found on this device.');
-      }
-      return;
-    }
-
-    final chosenCal = await _showCalendarAccountPickerDialog(calendars);
-    if (chosenCal == null || chosenCal.id == _selectedCalendarId) {
-      return;
-    }
+    if (targetId == _selectedCalendarId) return;
 
     if (!mounted) return;
     setState(() => _isActionInProgress = true);
+
     try {
       final oldCalId = _selectedCalendarId;
-      if (oldCalId != null) {
+      if (oldCalId != null && oldCalId != targetId) {
         await SyncProgressDialog.show(
           context: context,
           title: 'Clearing Previous Calendar Events',
@@ -301,19 +210,18 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
         );
       }
 
-      final targetId = chosenCal.id;
-      final targetName = _getCalendarDisplayName(chosenCal);
-
       await SystemCalendarService.setSystemSyncEnabled(
         true,
         calendarId: targetId,
         calendarName: targetName,
+        accountName: targetAccount,
       );
 
       if (mounted) {
         setState(() {
           _selectedCalendarId = targetId;
           _selectedCalendarName = targetName;
+          _selectedCalendarAccount = targetAccount;
         });
       }
 
@@ -362,14 +270,17 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
       );
 
       if (ok == true && mounted) {
+        final destinationLabel = _selectedCalendarAccount != null
+            ? '${_selectedCalendarName ?? "Calendar"} ($_selectedCalendarAccount)'
+            : (_selectedCalendarName ?? 'your calendar');
         SnackbarUtils.showSuccessSnackBar(
           context,
-          'Timetable successfully synced to ${_selectedCalendarName ?? "your calendar"}!',
+          'Timetable successfully synced to $destinationLabel!',
         );
         try {
           await NotificationService().showBackupNotification(
             title: 'Calendar Synced',
-            body: 'Timetable was synced to ${_selectedCalendarName ?? "calendar"}.',
+            body: 'Timetable was synced to $destinationLabel.',
           );
         } catch (_) {}
       }
@@ -449,7 +360,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                         const SizedBox(height: 2),
                                         Text(
                                           _isSyncEnabled && _selectedCalendarName != null
-                                              ? 'Synced to $_selectedCalendarName'
+                                              ? 'Synced to $_selectedCalendarName${_selectedCalendarAccount != null ? " ($_selectedCalendarAccount)" : ""}'
                                               : 'Sync class timetable to Google, Outlook, or Phone Calendar',
                                           style: theme.textTheme.bodySmall?.copyWith(
                                             color: theme.colorScheme.onSurfaceVariant,
@@ -470,52 +381,129 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                 const Divider(),
                                 const SizedBox(height: 12),
 
-                                // Current active calendar display
+                                // Active Destination Card (showing App and Account email properly)
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.all(14),
                                   decoration: BoxDecoration(
-                                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
                                     borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                                    ),
                                   ),
-                                  child: Row(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Icon(
-                                        Icons.check_circle_rounded,
-                                        size: 20,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Active Destination',
-                                              style: theme.textTheme.labelSmall?.copyWith(
-                                                color: theme.colorScheme.onSurfaceVariant,
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle_rounded,
+                                            size: 18,
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Active Destination',
+                                            style: theme.textTheme.labelMedium?.copyWith(
+                                              color: theme.colorScheme.primary,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            Text(
-                                              _selectedCalendarName ?? 'Calendar',
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'App: ',
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              color: theme.colorScheme.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Text(
+                                            _selectedCalendarName ?? 'Calendar',
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Account: ',
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              color: theme.colorScheme.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              _selectedCalendarAccount ?? 'Local Device',
                                               style: theme.textTheme.bodyMedium?.copyWith(
-                                                fontWeight: FontWeight.bold,
+                                                fontWeight: FontWeight.w600,
+                                                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
                                               ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      OutlinedButton(
-                                        onPressed: _isActionInProgress ? null : _handleChangeAccount,
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        child: const Text('Change Account'),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(height: 16),
+
+                                // Destination Calendar Dropdown Selector (NO icons)
+                                Text(
+                                  'Select Calendar Account',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+
+                                if (_calendars.isNotEmpty)
+                                  DropdownButtonFormField<String>(
+                                    value: _selectedCalendarId,
+                                    isExpanded: true,
+                                    decoration: InputDecoration(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    items: _calendars.map((cal) {
+                                      final appName = _getCalendarDisplayName(cal);
+                                      final accName = _getCalendarAccountName(cal);
+                                      return DropdownMenuItem<String>(
+                                        value: cal.id,
+                                        child: Text(
+                                          '$appName ($accName)',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodyMedium?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: _isActionInProgress
+                                        ? null
+                                        : (newId) {
+                                            if (newId != null && newId != _selectedCalendarId) {
+                                              final cal = _calendars.firstWhere((c) => c.id == newId);
+                                              _onCalendarChanged(cal);
+                                            }
+                                          },
+                                  )
+                                else
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                                    child: Text('No writable calendars found on this device.'),
+                                  ),
 
                                 const SizedBox(height: 16),
                                 SizedBox(

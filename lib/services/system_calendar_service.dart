@@ -46,16 +46,31 @@ class SystemCalendarService {
   }
 
   /// Sets system calendar synchronization preferences in SharedPreferences.
-  static Future<void> setSystemSyncEnabled(bool enabled, {String? calendarId, String? calendarName}) async {
+  static Future<void> setSystemSyncEnabled(
+    bool enabled, {
+    String? calendarId,
+    String? calendarName,
+    String? accountName,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('system_calendar_sync_enabled', enabled);
     if (enabled && calendarId != null && calendarName != null) {
       await prefs.setString('system_calendar_id', calendarId);
       await prefs.setString('system_calendar_name', calendarName);
+      if (accountName != null) {
+        await prefs.setString('system_calendar_account_name', accountName);
+      }
     } else if (!enabled) {
       await prefs.remove('system_calendar_id');
       await prefs.remove('system_calendar_name');
+      await prefs.remove('system_calendar_account_name');
     }
+  }
+
+  /// Retrieves the selected system calendar's account name / email.
+  static Future<String?> getSystemCalendarAccountName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('system_calendar_account_name');
   }
 
   /// Checks if system calendar synchronization is enabled.
