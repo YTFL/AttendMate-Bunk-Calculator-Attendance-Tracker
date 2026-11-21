@@ -10,10 +10,15 @@ class GoogleAuthService extends ChangeNotifier {
   factory GoogleAuthService() => _instance;
   static GoogleAuthService get instance => _instance;
 
+  Future<GoogleSignInAccount?>? _silentSignInFuture;
+  bool _silentSignInAttempted = false;
+
   GoogleAuthService._internal() {
     _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
-      _currentUser = account;
-      notifyListeners();
+      if (_currentUser != account) {
+        _currentUser = account;
+        notifyListeners();
+      }
     });
   }
 
@@ -33,17 +38,21 @@ class GoogleAuthService extends ChangeNotifier {
 
   Future<bool> isSignedIn() async {
     final signedIn = await _googleSignIn.isSignedIn();
-    if (signedIn && _currentUser == null) {
-      _currentUser = _googleSignIn.currentUser ?? await _googleSignIn.signInSilently();
+    if (signedIn && _currentUser == null && !_silentSignInAttempted) {
+      _silentSignInAttempted = true;
+      _currentUser = _googleSignIn.currentUser ?? await signInSilently();
     }
-    return signedIn;
+    return signedIn && _currentUser != null;
   }
 
   Future<GoogleSignInAccount?> signIn() async {
     try {
       final account = await _googleSignIn.signIn();
-      _currentUser = account;
-      notifyListeners();
+      _silentSignInAttempted = true;
+      if (_currentUser != account) {
+        _currentUser = account;
+        notifyListeners();
+      }
       return account;
     } catch (e) {
       debugPrint('GoogleAuthService signIn error: $e');
@@ -52,10 +61,24 @@ class GoogleAuthService extends ChangeNotifier {
   }
 
   Future<GoogleSignInAccount?> signInSilently() async {
+    if (_silentSignInFuture != null) {
+      return _silentSignInFuture;
+    }
+    _silentSignInFuture = _performSignInSilently();
+    try {
+      return await _silentSignInFuture;
+    } finally {
+      _silentSignInFuture = null;
+    }
+  }
+
+  Future<GoogleSignInAccount?> _performSignInSilently() async {
     try {
       final account = await _googleSignIn.signInSilently();
-      _currentUser = account;
-      notifyListeners();
+      if (_currentUser != account) {
+        _currentUser = account;
+        notifyListeners();
+      }
       return account;
     } catch (e) {
       debugPrint('GoogleAuthService signInSilently error: $e');
@@ -67,6 +90,8 @@ class GoogleAuthService extends ChangeNotifier {
     try {
       await _googleSignIn.signOut();
       _currentUser = null;
+      _silentSignInFuture = null;
+      _silentSignInAttempted = false;
       notifyListeners();
     } catch (e) {
       debugPrint('GoogleAuthService signOut error: $e');
@@ -93,8 +118,11 @@ class GoogleAuthService extends ChangeNotifier {
       GoogleSignInAccount? user = currentUser ?? await signInSilently();
       if (user == null && interactive) {
         user = await _googleSignIn.signIn();
-        _currentUser = user;
-        notifyListeners();
+        _silentSignInAttempted = true;
+        if (_currentUser != user) {
+          _currentUser = user;
+          notifyListeners();
+        }
       }
       if (user == null) return null;
       return await _googleSignIn.authenticatedClient();

@@ -577,28 +577,20 @@ Future<void> main() async {
       await Workmanager().cancelByUniqueName('end_of_day_attendance_check');
     } catch (_) {}
 
-    // Register periodic task: daily semester & cloud backup at midnight (12:00 AM)
-    final now = DateTime.now();
-    var backupTargetTime = DateTime(now.year, now.month, now.day, 0, 0, 0);
-    if (!backupTargetTime.isAfter(now)) {
-      backupTargetTime = backupTargetTime.add(const Duration(days: 1));
-    }
-    final backupInitialDelay = backupTargetTime.difference(now);
+    // Synchronize Google Drive midnight backup task registration with actual settings & auth state
+    try {
+      final driveService = GoogleDriveBackupService();
+      final backupEnabled = await driveService.isBackupEnabled();
+      final signedIn = await GoogleAuthService.instance.isSignedIn();
 
-    await Workmanager().registerPeriodicTask(
-      'daily_semester_backup',
-      'dailySemesterBackup',
-      frequency: const Duration(days: 1),
-      initialDelay: backupInitialDelay,
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-      constraints: Constraints(
-        requiresBatteryNotLow: false,
-        requiresCharging: false,
-        requiresDeviceIdle: false,
-        requiresStorageNotLow: false,
-        networkType: NetworkType.connected,
-      ),
-    );
+      if (backupEnabled && signedIn) {
+        await driveService.scheduleMidnightBackupTask();
+      } else {
+        await driveService.cancelMidnightBackupTask();
+      }
+    } catch (e) {
+      debugPrint('Error synchronizing Google Drive midnight backup task: $e');
+    }
   } catch (e) {
     debugPrint('WorkManager initialization failed: $e');
   }

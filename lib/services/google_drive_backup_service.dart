@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 import 'backup_service.dart';
 import 'database_service.dart';
 import 'google_auth_service.dart';
@@ -96,7 +97,7 @@ class GoogleDriveBackupService {
   /// Query Google Drive for the existing single cloud backup file
   Future<DriveBackupFileInfo?> checkForExistingBackup() async {
     try {
-      final client = await GoogleAuthService.instance.getAuthenticatedClient();
+      final client = await GoogleAuthService.instance.getAuthenticatedClient(interactive: false);
       if (client == null) {
         _cachedExistingBackup = null;
         return null;
@@ -222,7 +223,7 @@ class GoogleDriveBackupService {
   /// Download and restore the latest database backup from Google Drive
   Future<bool> restoreLatestBackupFromDrive({BuildContext? context}) async {
     try {
-      final client = await GoogleAuthService.instance.getAuthenticatedClient();
+      final client = await GoogleAuthService.instance.getAuthenticatedClient(interactive: false);
       if (client == null) {
         throw Exception('Google account is not authenticated.');
       }
@@ -265,6 +266,49 @@ class GoogleDriveBackupService {
     }
   }
 
+  static const String workManagerTaskTag = 'daily_semester_backup';
+  static const String workManagerTaskName = 'dailySemesterBackup';
+
+  /// Register periodic midnight backup task with WorkManager
+  Future<void> scheduleMidnightBackupTask() async {
+    try {
+      final now = DateTime.now();
+      var backupTargetTime = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      if (!backupTargetTime.isAfter(now)) {
+        backupTargetTime = backupTargetTime.add(const Duration(days: 1));
+      }
+      final backupInitialDelay = backupTargetTime.difference(now);
+
+      await Workmanager().registerPeriodicTask(
+        workManagerTaskTag,
+        workManagerTaskName,
+        frequency: const Duration(days: 1),
+        initialDelay: backupInitialDelay,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+        constraints: Constraints(
+          requiresBatteryNotLow: false,
+          requiresCharging: false,
+          requiresDeviceIdle: false,
+          requiresStorageNotLow: false,
+          networkType: NetworkType.connected,
+        ),
+      );
+      debugPrint('GoogleDriveBackupService: Scheduled midnight backup task.');
+    } catch (e) {
+      debugPrint('GoogleDriveBackupService scheduleMidnightBackupTask error: $e');
+    }
+  }
+
+  /// Cancel periodic midnight backup task with WorkManager
+  Future<void> cancelMidnightBackupTask() async {
+    try {
+      await Workmanager().cancelByUniqueName(workManagerTaskTag);
+      debugPrint('GoogleDriveBackupService: Cancelled midnight backup task.');
+    } catch (e) {
+      debugPrint('GoogleDriveBackupService cancelMidnightBackupTask error: $e');
+    }
+  }
+
   /// Background midnight backup trigger
   Future<void> executeMidnightBackup({bool forceIfHadChanges = false}) async {
     await DatabaseService().logAppEvent(
@@ -274,6 +318,7 @@ class GoogleDriveBackupService {
     );
 
     if (!await isBackupEnabled()) {
+      await cancelMidnightBackupTask();
       await DatabaseService().logAppEvent(
         tag: 'GoogleDriveBackup',
         message: 'Midnight cloud backup skipped: Google Drive backup is disabled in settings.',
@@ -283,7 +328,8 @@ class GoogleDriveBackupService {
     }
 
     final signedIn = await GoogleAuthService.instance.isSignedIn();
-    if (!signedIn) {
+    if (!signedIn || GoogleAuthService.instance.currentUser == null) {
+      await cancelMidnightBackupTask();
       await DatabaseService().logAppEvent(
         tag: 'GoogleDriveBackup',
         message: 'Midnight cloud backup skipped: User is not signed into Google account.',

@@ -18,13 +18,15 @@ class _GoogleDriveBackupScreenState extends State<GoogleDriveBackupScreen> {
   bool _isDriveBackupEnabled = GoogleDriveBackupService.isBackupEnabledSync;
   DateTime? _lastDriveBackupTime = GoogleDriveBackupService.lastBackupTimeSync;
   DriveBackupFileInfo? _existingDriveBackup = GoogleDriveBackupService.cachedExistingBackup;
+  bool _isInitialLoading = true;
+  bool _isSettingsLoading = false;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _authService.addListener(_onAuthStateChanged);
-    _loadSettings();
+    _loadSettings(isInitial: true);
   }
 
   @override
@@ -34,30 +36,45 @@ class _GoogleDriveBackupScreenState extends State<GoogleDriveBackupScreen> {
   }
 
   void _onAuthStateChanged() {
-    if (mounted) {
+    if (!mounted) return;
+    if (!_isSettingsLoading) {
       _loadSettings();
     }
   }
 
-  Future<void> _loadSettings() async {
-    final driveEnabled = await _driveService.isBackupEnabled();
-    final lastBackup = await _driveService.getLastBackupTime();
+  Future<void> _loadSettings({bool isInitial = false}) async {
+    if (_isSettingsLoading) return;
+    _isSettingsLoading = true;
 
-    if (mounted) {
-      setState(() {
-        _isDriveBackupEnabled = driveEnabled;
-        _lastDriveBackupTime = lastBackup;
-      });
-    }
+    try {
+      final driveEnabled = await _driveService.isBackupEnabled();
+      final lastBackup = await _driveService.getLastBackupTime();
+      DriveBackupFileInfo? existingBackup;
 
-    final isSignedIn = await _authService.isSignedIn();
-    if (isSignedIn) {
-      final existingBackup = await _driveService.checkForExistingBackup();
+      final isSignedIn = await _authService.isSignedIn();
+      if (isSignedIn) {
+        existingBackup = await _driveService.checkForExistingBackup();
+      }
+
       if (mounted) {
         setState(() {
+          _isDriveBackupEnabled = driveEnabled;
+          _lastDriveBackupTime = lastBackup;
           _existingDriveBackup = existingBackup;
+          if (isInitial) {
+            _isInitialLoading = false;
+          }
         });
       }
+    } catch (e) {
+      debugPrint('Error loading drive backup settings: $e');
+      if (mounted && isInitial) {
+        setState(() {
+          _isInitialLoading = false;
+        });
+      }
+    } finally {
+      _isSettingsLoading = false;
     }
   }
 
@@ -68,7 +85,10 @@ class _GoogleDriveBackupScreenState extends State<GoogleDriveBackupScreen> {
 
     if (account != null && mounted) {
       SnackbarUtils.showSuccessSnackBar(context, 'Signed in as ${account.email}');
-      await _checkExistingCloudBackup();
+      await _loadSettings();
+      if (mounted && _existingDriveBackup != null) {
+        _showExistingBackupDialog(_existingDriveBackup!);
+      }
     }
   }
 
@@ -98,77 +118,74 @@ class _GoogleDriveBackupScreenState extends State<GoogleDriveBackupScreen> {
       setState(() => _isLoading = true);
       await _authService.signOut();
       await _driveService.setBackupEnabled(false);
-      setState(() {
-        _isDriveBackupEnabled = false;
-        _isLoading = false;
-        _existingDriveBackup = null;
-      });
+      await _driveService.cancelMidnightBackupTask();
       if (mounted) {
+        setState(() {
+          _isDriveBackupEnabled = false;
+          _isLoading = false;
+          _existingDriveBackup = null;
+        });
         SnackbarUtils.showSuccessSnackBar(context, 'Logged out from Google Account.');
       }
     }
   }
 
-  Future<void> _checkExistingCloudBackup() async {
-    final backup = await _driveService.checkForExistingBackup();
-    setState(() => _existingDriveBackup = backup);
+  void _showExistingBackupDialog(DriveBackupFileInfo backup) {
+    if (!mounted) return;
+    final formattedDate = DateFormat.yMMMd().add_jm().format(backup.modifiedTime);
+    final sizeKb = (backup.sizeBytes / 1024).toStringAsFixed(1);
 
-    if (backup != null && mounted) {
-      final formattedDate = DateFormat.yMMMd().add_jm().format(backup.modifiedTime);
-      final sizeKb = (backup.sizeBytes / 1024).toStringAsFixed(1);
-
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.cloud_download_outlined, size: 40, color: Colors.blue),
-          title: const Text('Cloud Backup Found'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'A previous AttendMate backup was found on your Google Drive:',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Date: $formattedDate', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Size: $sizeKb KB'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Would you like to restore your subjects and attendance from this backup now?',
-                style: TextStyle(fontSize: 13),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Keep Local Data'),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.cloud_download_outlined, size: 40, color: Colors.blue),
+        title: const Text('Cloud Backup Found'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A previous AttendMate backup was found on your Google Drive:',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _restoreFromDrive();
-              },
-              child: const Text('Restore from Drive'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Date: $formattedDate', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('Size: $sizeKb KB'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Would you like to restore your subjects and attendance from this backup now?',
+              style: TextStyle(fontSize: 13),
             ),
           ],
         ),
-      );
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep Local Data'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _restoreFromDrive();
+            },
+            child: const Text('Restore from Drive'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _restoreFromDrive() async {
@@ -203,17 +220,31 @@ class _GoogleDriveBackupScreenState extends State<GoogleDriveBackupScreen> {
   Future<void> _toggleDriveBackup(bool val) async {
     setState(() => _isDriveBackupEnabled = val);
     await _driveService.setBackupEnabled(val);
-    if (!mounted) return;
     if (val) {
+      await _driveService.scheduleMidnightBackupTask();
+      if (!mounted) return;
       SnackbarUtils.showSuccessSnackBar(
         context,
         'Google Drive midnight backup enabled.',
       );
+    } else {
+      await _driveService.cancelMidnightBackupTask();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitialLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Google Drive Backup'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     final user = _authService.currentUser;
     final canPop = !_isLoading;
 

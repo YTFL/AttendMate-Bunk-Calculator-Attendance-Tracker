@@ -62,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added explicit `tools:node="remove"` directives in `AndroidManifest.xml` to permanently block `CAMERA`, media (`READ_MEDIA_*`), audio recording (`RECORD_AUDIO`), and storage (`READ/WRITE_EXTERNAL_STORAGE`) permissions from being merged by dependencies.
 
 ### Fixed
+- **Google Drive Backup Screen Flickering Elimination**:
+  - Resolved an infinite reactive loop between `GoogleAuthService.isSignedIn()`, `signInSilently()`, and `GoogleDriveBackupScreen`'s authentication listener that caused rapid screen re-rendering.
+  - Implemented deduplicated silent sign-in and idempotent listener notifications in `GoogleAuthService`.
+  - Added an initial loading spinner and concurrency lock to `GoogleDriveBackupScreen` to prevent overlapping settings loads and layout thrashing.
+  - Enforced non-interactive authentication checks during background Google Drive status queries.
+- **Dynamic Midnight Background Task & Notification Gating**:
+  - Fixed spurious midnight backup notifications firing when unauthenticated with Google.
+  - Dynamically register and cancel the midnight WorkManager background task (`daily_semester_backup`) based on whether Google Drive backup is enabled and the user is authenticated, automatically cleaning up orphaned background tasks.
 - **Google Drive Midnight Backup Reliability**:
   - Added independent modification timestamp tracking (`last_data_modified_timestamp_ms` and `last_google_drive_backup_timestamp_ms`) to ensure Drive backups run reliably at midnight even if local backups clear the dirty flag earlier in the day.
   - Updated WorkManager periodic backup policy to `ExistingPeriodicWorkPolicy.keep` with `NetworkType.connected` constraints.

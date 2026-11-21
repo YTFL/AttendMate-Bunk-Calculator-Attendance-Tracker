@@ -114,7 +114,23 @@ AttendMate 2.4.0 delivers major enhancements including flexible elective subject
 
 ## 🐛 Bug Fixes & Refinements
 
-### 1. Guaranteed Google Drive Midnight Backup Reliability
+### 1. Google Drive Backup Screen Flickering Elimination
+- **Eliminated Infinite Re-render Loop**:
+  - Fixed an infinite reactive loop between `GoogleAuthService.isSignedIn()`, `signInSilently()`, and `GoogleDriveBackupScreen`'s authentication listener that caused rapid screen flickering.
+  - Implemented deduplicated in-flight silent authentication and idempotent listener notifications in `GoogleAuthService`.
+  - Added an initial loading spinner and concurrency lock to `GoogleDriveBackupScreen` to ensure a smooth, stable display on open.
+  - Ensured background Google Drive backup queries strictly use non-interactive authentication checks.
+
+---
+
+### 2. Dynamic Midnight Background Task & Notification Gating
+- **Clean Background Task Management**:
+  - Resolved spurious midnight backup notifications firing when unauthenticated with Google.
+  - Dynamically register and cancel the midnight WorkManager background task (`daily_semester_backup`) based on whether Google Drive backup is enabled and the user is signed in, automatically cleaning up orphaned background tasks on launch.
+
+---
+
+### 3. Guaranteed Google Drive Midnight Backup Reliability
 - **Independent Modification Timestamp Tracking**:
   - Added `last_data_modified_timestamp_ms` and `last_google_drive_backup_timestamp_ms`. If local auto-backups clear the dirty flag earlier in the day, the midnight sync compares modification times and forces a Drive backup if local data changed after the last Drive upload.
 - **WorkManager Periodic Policy**:
