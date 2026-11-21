@@ -545,6 +545,17 @@ class SubjectProvider with ChangeNotifier {
         final slotSpecificDate = normalizeDate(slot.specificDate);
         if (slotSpecificDate != null && isSameDay(slotSpecificDate, normalizedTarget)) {
           replacedClassCount++;
+          // Immediately delete replaced one-off calendar event if tracked
+          _databaseService.getSystemCalendarEvent(
+            subjectId: subject.id,
+            slotKey: slot.slotKey,
+            date: normalizedTarget,
+          ).then((evId) {
+            if (evId != null) {
+              SystemCalendarService.deleteEventDirectly(evId);
+              _databaseService.deleteSystemCalendarEvent(evId);
+            }
+          });
           continue;
         }
 
@@ -585,6 +596,7 @@ class SubjectProvider with ChangeNotifier {
             startTime: slot.startTime,
             endTime: slot.endTime,
             specificDate: normalizedTarget,
+            isExtra: true,
           ),
         );
       }
@@ -708,7 +720,7 @@ class SubjectProvider with ChangeNotifier {
     }
 
     final extraExists = subject.schedule.any(
-      (slot) => slot.isExtra && slot.slotKey == slotKey,
+      (slot) => (slot.isExtra || slot.specificDate != null) && slot.slotKey == slotKey,
     );
     if (!extraExists) {
       return const ExtraClassMutationResult(
@@ -717,9 +729,24 @@ class SubjectProvider with ChangeNotifier {
       );
     }
 
+    // Immediately remove from system calendar and database
+    try {
+      final existingSystemEventId = await _databaseService.getSystemCalendarEvent(
+        subjectId: subjectId,
+        slotKey: slotKey,
+        date: normalizedDate,
+      );
+      if (existingSystemEventId != null) {
+        await SystemCalendarService.deleteEventDirectly(existingSystemEventId);
+        await _databaseService.deleteSystemCalendarEvent(existingSystemEventId);
+      }
+    } catch (e) {
+      debugPrint('Error deleting system calendar event for extra class: $e');
+    }
+
     _subjects[index] = subject.copyWith(
       schedule: subject.schedule
-          .where((slot) => !(slot.isExtra && slot.slotKey == slotKey))
+          .where((slot) => !((slot.isExtra || slot.specificDate != null) && slot.slotKey == slotKey))
           .toList(),
     );
     await _databaseService.saveSubjects(_subjects);

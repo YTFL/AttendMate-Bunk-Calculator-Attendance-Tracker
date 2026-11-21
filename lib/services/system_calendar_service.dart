@@ -1,10 +1,10 @@
+import '../features/attendance/attendance_model.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:device_calendar_plus/device_calendar_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../features/subject/subject_model.dart';
+import '../features/subject/subject_model.dart' as sub;
 import '../features/semester/semester_model.dart';
-import '../features/attendance/attendance_model.dart';
 import 'database_service.dart';
 
 class SystemCalendarService {
@@ -34,6 +34,17 @@ class SystemCalendarService {
     }
   }
 
+  /// Immediately deletes a single calendar event natively and via fallback
+  static Future<bool> deleteEventDirectly(String eventId) async {
+    final ok = await _nativeDeleteEvent(eventId);
+    if (!ok) {
+      try {
+        await DeviceCalendar.instance.deleteEvent(eventId: eventId);
+      } catch (_) {}
+    }
+    return ok;
+  }
+
   static Future<bool> _nativeSetEventColor(String eventId, int color) async {
     try {
       final bool? ok = await _nativeChannel.invokeMethod<bool>('setEventColor', {
@@ -47,9 +58,9 @@ class SystemCalendarService {
     }
   }
 
-  static Future<void> _nativeTriggerSync() async {
+  static Future<void> _nativeTriggerSync([String? calendarId]) async {
     try {
-      await _nativeChannel.invokeMethod('triggerCalendarSync');
+      await _nativeChannel.invokeMethod('triggerCalendarSync', {'calendarId': calendarId});
     } catch (e) {
       debugPrint('Native triggerCalendarSync error: $e');
     }
@@ -144,10 +155,6 @@ class SystemCalendarService {
   }
 
   /// Deletes all events synced by AttendMate from the system calendar and purges SQLite mappings.
-  /// Employs a multi-round pruning strategy:
-  /// Round 1: Native batch delete directly from CalendarProvider (without CALLER_IS_SYNCADAPTER).
-  /// Round 2: Native + plugin deletion of all tracked SQLite mappings.
-  /// Round 3: Multi-pass inspection sweep to guarantee 0 leftovers across the entire date spectrum.
   static Future<void> deleteSyncedEvents({
     bool force = false,
     String? calendarId,
@@ -172,7 +179,8 @@ class SystemCalendarService {
 
       final plugin = DeviceCalendar.instance;
       final db = DatabaseService();
-      final targetCalId = calendarId ?? await getSystemCalendarId();
+      // If calendarId is null, it means prune ALL calendars across the entire device!
+      final targetCalId = calendarId;
 
       onProgress?.call(0.1, 'Pruning calendar events...');
 
@@ -215,29 +223,27 @@ class SystemCalendarService {
         final startDate = now.subtract(const Duration(days: 1095));
         final endDate = now.add(const Duration(days: 1095));
 
-        for (int pass = 1; pass <= 2; pass++) {
-          final Set<String> leftovers = {};
-          for (final calId in calIdsToScan) {
-            try {
-              final listedEvents = await plugin.listEvents(startDate, endDate, calendarIds: [calId]);
-              for (final ev in listedEvents) {
-                final desc = ev.description?.toLowerCase() ?? '';
-                final title = ev.title?.toLowerCase() ?? '';
-                final isMatch = desc.contains('imported from attendmate') ||
-                    desc.contains('created with attendmate') ||
-                    desc.contains('attendmate') ||
-                    title.contains('attendmate');
-                if (isMatch) {
-                  leftovers.add(ev.eventId);
-                }
+        final Set<String> leftovers = {};
+        for (final calId in calIdsToScan) {
+          try {
+            final listedEvents = await plugin.listEvents(startDate, endDate, calendarIds: [calId]);
+            for (final ev in listedEvents) {
+              final desc = ev.description?.toLowerCase() ?? '';
+              final title = ev.title.toLowerCase();
+              final isMatch = desc.contains('imported from attendmate') ||
+                  desc.contains('created with attendmate') ||
+                  desc.contains('attendmate') ||
+                  title.contains('attendmate');
+              if (isMatch) {
+                leftovers.add(ev.eventId);
               }
-            } catch (e) {
-              debugPrint('Error inspecting calendar $calId on pass $pass: $e');
             }
+          } catch (e) {
+            debugPrint('Error inspecting calendar $calId: $e');
           }
+        }
 
-          if (leftovers.isEmpty) break;
-
+        if (leftovers.isNotEmpty) {
           int sweepCompleted = 0;
           for (final evId in leftovers) {
             try {
@@ -255,7 +261,7 @@ class SystemCalendarService {
         }
       }
 
-      await _nativeTriggerSync();
+      await _nativeTriggerSync(targetCalId);
       onProgress?.call(1.0, 'Calendar events cleared successfully.');
     } catch (e) {
       debugPrint('Error deleting synced system events: $e');
@@ -287,7 +293,7 @@ class SystemCalendarService {
           final events = await plugin.listEvents(startDate, endDate, calendarIds: [cal.id]);
           for (final event in events) {
             final desc = event.description?.toLowerCase() ?? '';
-            final title = event.title?.toLowerCase() ?? '';
+            final title = event.title.toLowerCase();
 
             final isMatch = desc.contains('imported from attendmate') ||
                 desc.contains('created with attendmate') ||
@@ -340,10 +346,10 @@ class SystemCalendarService {
     return prunedCount;
   }
 
-  /// Declaratively synchronizes subjects, slots, holidays, and cancellations to the chosen system calendar.
-  /// Includes real-time event-by-event progress calculation and subject color synchronization.
+  /// Synchronizes weekly timetable schedule as recurring series (RRULE) to the chosen system calendar.
+  /// Generates clean repeating weekly series instead of hundreds of detached daily single events.
   static Future<void> syncFullTimetable({
-    required List<Subject> subjects,
+    required List<sub.Subject> subjects,
     required Semester? semester,
     required bool Function(DateTime) isHoliday,
     void Function(double progress, String statusMessage)? onProgress,
@@ -372,175 +378,145 @@ class SystemCalendarService {
       final plugin = DeviceCalendar.instance;
       final db = DatabaseService();
 
-      final plannedLeaves = await db.loadPlannedLeaves();
-
-      // Track active event IDs in this run
       final Set<String> activeEventIds = {};
-
-      // Calculate start and end dates
       final DateTime startDate = semester.startDate;
-      final DateTime endDate = semester.endDate;
-
-      // 1. Precompute all class occurrences to obtain exact total class count for smooth progress
-      final List<_TimetableSyncItem> itemsToSync = [];
+      
+      final totalSlots = subjects.fold<int>(0, (sum, s) => sum + s.schedule.length);
+      int completedSlots = 0;
+      onProgress?.call(0.05, 'Preparing class schedules...');
 
       for (final subject in subjects) {
         for (final slot in subject.schedule) {
-          final targetWeekday = slot.day.index + 1; // weekday in DateTime is 1-7
+          final isOneOff = slot.specificDate != null;
 
-          DateTime currentDate = startDate;
-          while (!currentDate.isAfter(endDate)) {
-            if (currentDate.weekday == targetWeekday) {
-              final dateOnly = DateTime(currentDate.year, currentDate.month, currentDate.day);
+          // Find anchor date (first date on or after startDate matching slot weekday)
+          final targetWeekday = slot.day.index + 1; // 1 (Mon) - 7 (Sun)
+          DateTime anchorDate;
 
-              final slotFrom = slot.effectiveFrom;
-              final slotUntil = slot.effectiveUntil;
-              final specificDate = slot.specificDate;
+          if (isOneOff) {
+            anchorDate = slot.specificDate!;
 
-              bool withinValidity = true;
-              if (specificDate != null &&
-                  (dateOnly.year != specificDate.year ||
-                      dateOnly.month != specificDate.month ||
-                      dateOnly.day != specificDate.day)) {
-                withinValidity = false;
-              }
-              if (slotFrom != null && dateOnly.isBefore(DateTime(slotFrom.year, slotFrom.month, slotFrom.day))) {
-                withinValidity = false;
-              }
-              if (slotUntil != null && dateOnly.isAfter(DateTime(slotUntil.year, slotUntil.month, dateOnly.day))) {
-                withinValidity = false;
-              }
-
-              if (withinValidity) {
-                itemsToSync.add(_TimetableSyncItem(
-                  subject: subject,
-                  slot: slot,
-                  dateOnly: dateOnly,
-                ));
-              }
-            }
-            currentDate = currentDate.add(const Duration(days: 1));
-          }
-        }
-      }
-
-      final totalEvents = itemsToSync.length;
-      int completedEvents = 0;
-      onProgress?.call(0.02, 'Preparing to sync $totalEvents class schedule entries...');
-
-      for (final item in itemsToSync) {
-        final subject = item.subject;
-        final slot = item.slot;
-        final dateOnly = item.dateOnly;
-
-        final startDateTime = DateTime(
-          dateOnly.year,
-          dateOnly.month,
-          dateOnly.day,
-          slot.startTime.hour,
-          slot.startTime.minute,
-        );
-        final endDateTime = DateTime(
-          dateOnly.year,
-          dateOnly.month,
-          dateOnly.day,
-          slot.endTime.hour,
-          slot.endTime.minute,
-        );
-
-        bool isExcluded = isHoliday(dateOnly);
-        if (!isExcluded) {
-          for (final leave in plannedLeaves) {
-            if (leave.affectedSubjectIds.isEmpty || leave.affectedSubjectIds.contains(subject.id)) {
-              if (startDateTime.isBefore(leave.endDate) && endDateTime.isAfter(leave.startDate)) {
-                isExcluded = true;
+            // Check if one-off class date is a holiday or cancelled
+            final isDayHoliday = isHoliday(anchorDate);
+            bool isSlotCancelled = false;
+            for (final record in subject.attendanceRecords) {
+              if (record.date.year == anchorDate.year &&
+                  record.date.month == anchorDate.month &&
+                  record.date.day == anchorDate.day &&
+                  (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty) &&
+                  record.status == AttendanceStatus.cancelled) {
+                isSlotCancelled = true;
                 break;
               }
             }
-          }
-        }
 
-        for (final record in subject.attendanceRecords) {
-          if (record.date.year == dateOnly.year &&
-              record.date.month == dateOnly.month &&
-              record.date.day == dateOnly.day &&
-              (record.slotKey == null || record.slotKey == slot.slotKey || record.slotKey!.isEmpty)) {
-            if (record.status == AttendanceStatus.cancelled || record.status == AttendanceStatus.absent) {
-              isExcluded = true;
-            } else if (record.status == AttendanceStatus.attended) {
-              isExcluded = false;
-            }
-            break;
-          }
-        }
-
-        final String slotKey = slot.slotKey;
-        final existingEventId = await db.getSystemCalendarEvent(
-          subjectId: subject.id,
-          slotKey: slotKey,
-          date: dateOnly,
-        );
-
-        if (isExcluded) {
-          // If cancelled/holiday/leave/absent, delete existing event
-          if (existingEventId != null) {
-            try {
-              final ok = await _nativeDeleteEvent(existingEventId);
-              if (!ok) {
-                await plugin.deleteEvent(eventId: existingEventId);
-              }
-            } catch (e) {
-              debugPrint('Failed to delete cancelled system event $existingEventId: $e');
-            }
-            await db.deleteSystemCalendarEvent(existingEventId);
-          }
-        } else {
-          String? newEventId;
-          if (existingEventId != null) {
-            try {
-              await plugin.updateEvent(
-                eventId: existingEventId,
-                title: subject.name,
-                startDate: startDateTime,
-                endDate: endDateTime,
-                description: Patch.set('Imported from AttendMate'),
+            if (isDayHoliday || isSlotCancelled) {
+              final existingEventId = await db.getSystemCalendarEvent(
+                subjectId: subject.id,
+                slotKey: slot.slotKey,
+                date: anchorDate,
               );
-              newEventId = existingEventId;
-            } catch (e) {
-              debugPrint('Failed to update event: $e');
+              if (existingEventId != null) {
+                await deleteEventDirectly(existingEventId);
+                await db.deleteSystemCalendarEvent(existingEventId);
+              }
+              continue;
             }
           } else {
-            newEventId = await plugin.createEvent(
+            DateTime testDate = startDate;
+            if (slot.effectiveFrom != null && slot.effectiveFrom!.isAfter(testDate)) {
+              testDate = slot.effectiveFrom!;
+            }
+            while (testDate.weekday != targetWeekday) {
+              testDate = testDate.add(const Duration(days: 1));
+            }
+            anchorDate = testDate;
+          }
+
+          // Effective until date
+          DateTime untilDate = semester.endDate;
+          if (slot.effectiveUntil != null && slot.effectiveUntil!.isBefore(untilDate)) {
+            untilDate = slot.effectiveUntil!;
+          }
+
+          final startDateTime = DateTime(
+            anchorDate.year,
+            anchorDate.month,
+            anchorDate.day,
+            slot.startTime.hour,
+            slot.startTime.minute,
+          );
+          final endDateTime = DateTime(
+            anchorDate.year,
+            anchorDate.month,
+            anchorDate.day,
+            slot.endTime.hour,
+            slot.endTime.minute,
+          );
+
+          final String slotKey = slot.slotKey;
+          final existingEventId = await db.getSystemCalendarEvent(
+            subjectId: subject.id,
+            slotKey: slotKey,
+            date: anchorDate,
+          );
+
+          String? targetEventId = existingEventId;
+          if (existingEventId != null) {
+            final existing = await plugin.getEvent(existingEventId);
+            if (existing != null) {
+              try {
+                await plugin.updateEvent(
+                  eventId: existingEventId,
+                  title: subject.name,
+                  startDate: startDateTime,
+                  endDate: endDateTime,
+                  description: Patch.set('Imported from AttendMate'),
+                );
+                await _nativeSetEventColor(existingEventId, subject.color.toARGB32());
+                activeEventIds.add(existingEventId);
+              } catch (e) {
+                debugPrint('Failed to update event: $e');
+              }
+            } else {
+              targetEventId = null;
+            }
+          }
+
+          if (targetEventId == null) {
+            final recurrence = isOneOff
+                ? null
+                : WeeklyRecurrence(
+                    daysOfWeek: [DayOfWeek.values[slot.day.index]],
+                    end: UntilEnd(untilDate),
+                  );
+
+            final newEventId = await plugin.createEvent(
               calendarId: calendarId,
               title: subject.name,
               startDate: startDateTime,
               endDate: endDateTime,
               description: 'Imported from AttendMate',
+              recurrenceRule: recurrence,
             );
-          }
 
-          if (newEventId != null) {
             activeEventIds.add(newEventId);
-
-            // Sync subject custom color natively
-            await _nativeSetEventColor(newEventId, subject.color.value);
-
-            // Save to SQLite
+            await _nativeSetEventColor(newEventId, subject.color.toARGB32());
             await db.saveSystemCalendarEvent(
               eventId: newEventId,
               subjectId: subject.id,
               slotKey: slotKey,
-              date: dateOnly,
+              date: anchorDate,
             );
           }
-        }
 
-        completedEvents++;
-        final progress = totalEvents > 0 ? (completedEvents / totalEvents) * 0.9 : 0.9;
-        onProgress?.call(progress, 'Syncing ${subject.name} ($completedEvents/$totalEvents)...');
+          completedSlots++;
+          final progress = totalSlots > 0 ? (completedSlots / totalSlots) * 0.9 : 0.9;
+          onProgress?.call(progress, 'Syncing ${subject.name} ($completedSlots/$totalSlots)...');
+        }
       }
 
-      // Cleanup obsolete events (which were generated previously but are no longer in this run)
+      // Cleanup obsolete events (which were generated previously but are no longer in this schedule)
       final allSavedEvents = await db.getAllSystemCalendarEvents();
       final obsoleteEvents = allSavedEvents.where((e) => !activeEventIds.contains(e['eventId'] as String)).toList();
 
@@ -561,7 +537,7 @@ class SystemCalendarService {
         onProgress?.call(p, 'Cleaning obsolete events ($obsoleteDone/${obsoleteEvents.length})...');
       }
 
-      await _nativeTriggerSync();
+      await _nativeTriggerSync(calendarId);
       onProgress?.call(1.0, 'Calendar synced successfully!');
     } catch (e) {
       debugPrint('SystemCalendarService sync error: $e');
@@ -570,16 +546,4 @@ class SystemCalendarService {
       _isSyncInProgress = false;
     }
   }
-}
-
-class _TimetableSyncItem {
-  final Subject subject;
-  final TimeSlot slot;
-  final DateTime dateOnly;
-
-  const _TimetableSyncItem({
-    required this.subject,
-    required this.slot,
-    required this.dateOnly,
-  });
 }

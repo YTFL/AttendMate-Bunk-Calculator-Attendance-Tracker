@@ -233,68 +233,162 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     }
   }
 
-  Future<void> _confirmCleanUpCalendar() async {
-    final destination = _selectedCalendarName != null
-        ? '$_selectedCalendarName (${_selectedCalendarAccount ?? "Local Device"})'
-        : 'your device calendar';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Clean Up Calendar?'),
-          ],
-        ),
-        content: Text(
-          'This will permanently delete all timetable classes and schedule entries created by AttendMate from $destination.\n\nYour personal calendar events and schedules will remain completely untouched.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clean Up'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isActionInProgress = true);
+  Future<void> _showCleanUpAccountPicker() async {
     try {
-      final currentCalId = _selectedCalendarId;
-      final ok = await SyncProgressDialog.show(
+      final hasPerm = await SystemCalendarService.checkOrRequestPermissions();
+      if (!hasPerm) {
+        if (mounted) {
+          SnackbarUtils.showErrorSnackBar(context, 'Calendar permissions are required to clean up events.');
+        }
+        return;
+      }
+
+      final calendars = await SystemCalendarService.getWritableCalendars();
+      if (!mounted) return;
+
+      String selectedTargetId = (_selectedCalendarId != null && calendars.any((c) => c.id == _selectedCalendarId))
+          ? _selectedCalendarId!
+          : 'ALL_CALENDARS';
+
+      final result = await showDialog<String?>(
         context: context,
-        title: 'Pruning Calendar Events',
-        action: (onProgress) => SystemCalendarService.deleteSyncedEvents(
-          force: true,
-          calendarId: currentCalId,
-          onProgress: onProgress,
-        ),
+        builder: (ctx) {
+          String localSelection = selectedTargetId;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              final dropdownItems = <DropdownMenuItem<String>>[
+                const DropdownMenuItem<String>(
+                  value: 'ALL_CALENDARS',
+                  child: Text('All Calendars'),
+                ),
+              ];
+
+              final seenIds = <String>{};
+              for (final cal in calendars) {
+                if (seenIds.add(cal.id)) {
+                  final appName = _getCalendarDisplayName(cal);
+                  final accName = _getCalendarAccountName(cal);
+                  dropdownItems.add(
+                    DropdownMenuItem<String>(
+                      value: cal.id,
+                      child: Text(
+                        '$appName ($accName)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return AlertDialog(
+                title: const Row(
+                  children: [
+                    Icon(Icons.delete_sweep_rounded, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Clean Up Calendar Events')),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Choose a calendar account to prune AttendMate timetable events from. Personal events will remain untouched.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Select Target Calendar',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: localSelection,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      items: dropdownItems,
+                      onChanged: (newVal) {
+                        if (newVal != null) {
+                          setDialogState(() {
+                            localSelection = newVal;
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, null),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(ctx).colorScheme.error,
+                      foregroundColor: Theme.of(ctx).colorScheme.onError,
+                    ),
+                    onPressed: () => Navigator.pop(ctx, localSelection),
+                    child: const Text('Clean Up'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
       );
 
-      if (mounted) {
-        if (ok == true) {
-          SnackbarUtils.showSuccessSnackBar(context, 'All AttendMate calendar events have been pruned successfully.');
+      if (result == null || !mounted) return;
+
+      final isAll = result == 'ALL_CALENDARS';
+      final targetId = isAll ? null : result;
+      String targetLabel = 'all calendar accounts';
+      if (!isAll) {
+        final matched = calendars.where((c) => c.id == result);
+        if (matched.isNotEmpty) {
+          final cal = matched.first;
+          targetLabel = '${_getCalendarDisplayName(cal)} (${_getCalendarAccountName(cal)})';
+        }
+      }
+
+      setState(() => _isActionInProgress = true);
+      try {
+        final ok = await SyncProgressDialog.show(
+          context: context,
+          title: 'Cleaning Up Calendar',
+          action: (onProgress) => SystemCalendarService.deleteSyncedEvents(
+            force: true,
+            calendarId: targetId,
+            onProgress: onProgress,
+          ),
+        );
+
+        if (mounted && ok == true) {
+          SnackbarUtils.showSuccessSnackBar(
+            context,
+            'All AttendMate calendar events cleaned up from $targetLabel.',
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackbarUtils.showErrorSnackBar(context, 'Error cleaning calendar events: $e');
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isActionInProgress = false);
         }
       }
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showErrorSnackBar(context, 'Error cleaning calendar events: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isActionInProgress = false);
+        SnackbarUtils.showErrorSnackBar(context, 'Error preparing calendar clean up: $e');
       }
     }
   }
@@ -417,25 +511,11 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Sync Timetable to Calendar',
-                                          style: theme.textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _isSyncEnabled && _selectedCalendarName != null
-                                              ? 'Synced to $_selectedCalendarName${_selectedCalendarAccount != null ? " ($_selectedCalendarAccount)" : ""}'
-                                              : 'Sync class timetable to Google Calendar, Samsung Calendar, or Phone Calendar',
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: theme.colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
+                                    child: Text(
+                                      'Sync Timetable to Calendar',
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                   Switch(
@@ -449,89 +529,6 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                 const SizedBox(height: 16),
                                 const Divider(),
                                 const SizedBox(height: 12),
-
-                                // Active Destination Card (showing App and Account email properly)
-                                Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.check_circle_rounded,
-                                            size: 18,
-                                            color: theme.colorScheme.primary,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Active Destination',
-                                            style: theme.textTheme.labelMedium?.copyWith(
-                                              color: theme.colorScheme.primary,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'App: ',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: theme.colorScheme.onSurfaceVariant,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Text(
-                                              _selectedCalendarName ?? 'None selected',
-                                              style: theme.textTheme.bodyMedium?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: _selectedCalendarName != null
-                                                    ? theme.colorScheme.onSurface
-                                                    : theme.colorScheme.onSurfaceVariant,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'Account: ',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: theme.colorScheme.onSurfaceVariant,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Text(
-                                              _selectedCalendarAccount ?? 'Select an account below',
-                                              style: theme.textTheme.bodyMedium?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                                color: _selectedCalendarAccount != null
-                                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.85)
-                                                    : theme.colorScheme.onSurfaceVariant,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
 
                                 // Destination Calendar Dropdown Selector (NO icons)
                                 Text(
@@ -551,7 +548,7 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                     final seenIds = <String>{};
                                     final dropdownItems = <DropdownMenuItem<String>>[];
                                     for (final cal in _calendars) {
-                                      if (cal.id != null && seenIds.add(cal.id!)) {
+                                      if (seenIds.add(cal.id)) {
                                         final appName = _getCalendarDisplayName(cal);
                                         final accName = _getCalendarAccountName(cal);
                                         dropdownItems.add(
@@ -613,18 +610,6 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                                             onPressed: (_isActionInProgress || dropdownValue == null)
                                                 ? null
                                                 : _triggerSystemSync,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: OutlinedButton.icon(
-                                            icon: Icon(Icons.delete_sweep_rounded, size: 18, color: theme.colorScheme.error),
-                                            label: Text('Clean Up Calendar Events', style: TextStyle(color: theme.colorScheme.error)),
-                                            style: OutlinedButton.styleFrom(
-                                              side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5)),
-                                            ),
-                                            onPressed: _isActionInProgress ? null : _confirmCleanUpCalendar,
                                           ),
                                         ),
                                       ],
@@ -704,40 +689,30 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
                         const SizedBox(height: 20),
                       ],
 
-                      // Integration Capabilities Overview
-                      Text(
-                        'Integration Capabilities',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
+                      // Persistent Clean Up Calendar Events Button at the very bottom
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: Icon(Icons.delete_sweep_rounded, size: 20, color: theme.colorScheme.error),
+                          label: Text(
+                            'Clean Up Calendar Events',
+                            style: TextStyle(
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.6)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: _isActionInProgress ? null : _showCleanUpAccountPicker,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      _buildFeatureTile(
-                        Icons.bolt_rounded,
-                        'Zero Latency & No Rate Limits',
-                        'Direct native OS calendar synchronization writes instantly without network lag or API quota restrictions.',
-                      ),
-                      _buildFeatureTile(
-                        Icons.cloud_sync_rounded,
-                        'Automatic Cloud Sync',
-                        'When syncing to a Google account, Android automatically mirrors your schedule to Google Calendar in the cloud and web.',
-                      ),
-                      _buildFeatureTile(
-                        Icons.auto_mode_rounded,
-                        'Automatic Schedule Updates',
-                        'Modifications made to classes, rooms, or timeslots automatically reflect in your active calendar in the background.',
-                      ),
-                      _buildFeatureTile(
-                        Icons.beach_access_rounded,
-                        'Holiday & Cancellation Exclusion',
-                        'Marking dates as holidays or cancelling individual classes automatically excludes those event occurrences.',
-                      ),
-                      _buildFeatureTile(
-                        Icons.palette_outlined,
-                        'Smart Color Mapping',
-                        'Subject colors are automatically mapped to nearest matching calendar palette colors.',
-                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
 
@@ -776,47 +751,6 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildFeatureTile(IconData icon, String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                        height: 1.3,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

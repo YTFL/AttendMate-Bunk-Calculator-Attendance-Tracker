@@ -15,6 +15,7 @@ import java.io.File
 import android.provider.CalendarContract
 import android.content.ContentValues
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.os.Bundle
 
 class MainActivity : FlutterActivity() {
@@ -99,8 +100,9 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "triggerCalendarSync" -> {
+                    val calendarId = call.argument<String>("calendarId")
                     try {
-                        triggerCalendarSync()
+                        triggerCalendarSync(calendarId)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("SYNC_ERROR", e.message, null)
@@ -285,12 +287,8 @@ class MainActivity : FlutterActivity() {
 
     private fun deleteCalendarEvent(eventId: String): Boolean {
         return try {
-            val rows = contentResolver.delete(
-                CalendarContract.Events.CONTENT_URI,
-                "${CalendarContract.Events._ID} = ?",
-                arrayOf(eventId)
-            )
-            triggerCalendarSync()
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId.toLong())
+            val rows = contentResolver.delete(uri, null, null)
             rows > 0
         } catch (e: Exception) {
             e.printStackTrace()
@@ -303,14 +301,13 @@ class MainActivity : FlutterActivity() {
             val whereClause: String
             val selectionArgs: Array<String>
             if (calendarId != null && calendarId.isNotEmpty()) {
-                whereClause = "${CalendarContract.Events.CALENDAR_ID} = ? AND (${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
-                selectionArgs = arrayOf(calendarId, "%AttendMate%", "%attendmate%", "%AttendMate%")
+                whereClause = "${CalendarContract.Events.CALENDAR_ID} = ? AND (${CalendarContract.Events.DESCRIPTION} LIKE ? OR LOWER(${CalendarContract.Events.DESCRIPTION}) LIKE ?)"
+                selectionArgs = arrayOf(calendarId, "%Imported from AttendMate%", "%attendmate%")
             } else {
-                whereClause = "(${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
-                selectionArgs = arrayOf("%AttendMate%", "%attendmate%", "%AttendMate%")
+                whereClause = "(${CalendarContract.Events.DESCRIPTION} LIKE ? OR LOWER(${CalendarContract.Events.DESCRIPTION}) LIKE ?)"
+                selectionArgs = arrayOf("%Imported from AttendMate%", "%attendmate%")
             }
             val deleted = contentResolver.delete(CalendarContract.Events.CONTENT_URI, whereClause, selectionArgs)
-            triggerCalendarSync()
             deleted
         } catch (e: Exception) {
             e.printStackTrace()
@@ -318,31 +315,215 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    data class GoogleColor(val key: String, val color: Int)
+
+    private val GOOGLE_CALENDAR_PALETTE = listOf(
+        GoogleColor("1", 0xFF7986CB.toInt()), // Lavender
+        GoogleColor("2", 0xFF33B679.toInt()), // Sage
+        GoogleColor("3", 0xFF8E24AA.toInt()), // Grape
+        GoogleColor("4", 0xFFE67C73.toInt()), // Flamingo
+        GoogleColor("5", 0xFFF6BF26.toInt()), // Banana
+        GoogleColor("6", 0xFFF4511E.toInt()), // Tangerine
+        GoogleColor("7", 0xFF039BE5.toInt()), // Peacock
+        GoogleColor("8", 0xFF616161.toInt()), // Graphite
+        GoogleColor("9", 0xFF3F51B5.toInt()), // Blueberry
+        GoogleColor("10", 0xFF0B8043.toInt()), // Basil
+        GoogleColor("11", 0xFFD50000.toInt())  // Tomato
+    )
+
+    private fun findClosestGoogleColor(color: Int): GoogleColor {
+        val r = (color shr 16) and 0xFF
+        val g = (color shr 8) and 0xFF
+        val b = color and 0xFF
+
+        var closest = GOOGLE_CALENDAR_PALETTE[0]
+        var minDistance = Long.MAX_VALUE
+
+        for (palette in GOOGLE_CALENDAR_PALETTE) {
+            val pr = (palette.color shr 16) and 0xFF
+            val pg = (palette.color shr 8) and 0xFF
+            val pb = palette.color and 0xFF
+
+            val dr = (r - pr).toLong()
+            val dg = (g - pg).toLong()
+            val db = (b - pb).toLong()
+            val distance = dr * dr + dg * dg + db * db
+
+            if (distance < minDistance) {
+                minDistance = distance
+                closest = palette
+            }
+        }
+        return closest
+    }
+
     private fun setCalendarEventColor(eventId: String, color: Int): Boolean {
         return try {
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.EVENT_COLOR, color)
-            }
-            val rows = contentResolver.update(
+            var accountName: String? = null
+            var accountType: String? = null
+            var calendarId: String? = null
+
+            // 1. Look up calendarId, accountName, and accountType for this event
+            contentResolver.query(
                 CalendarContract.Events.CONTENT_URI,
-                values,
+                arrayOf(CalendarContract.Events.CALENDAR_ID),
                 "${CalendarContract.Events._ID} = ?",
-                arrayOf(eventId)
-            )
-            rows > 0
+                arrayOf(eventId),
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    calendarId = cursor.getString(0)
+                }
+            }
+
+            if (calendarId != null) {
+                contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.ACCOUNT_TYPE),
+                    "${CalendarContract.Calendars._ID} = ?",
+                    arrayOf(calendarId),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        accountName = cursor.getString(0)
+                        accountType = cursor.getString(1)
+                    }
+                }
+            }
+
+            // 2. Query available EVENT colors from CalendarContract.Colors table for this device/account
+            var bestColorKey: String? = null
+            var bestColorVal: Int? = null
+            var minDistance = Long.MAX_VALUE
+
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+
+            try {
+                val colorsProjection = arrayOf(
+                    CalendarContract.Colors.COLOR_KEY,
+                    CalendarContract.Colors.COLOR
+                )
+                val colorsSelection = "${CalendarContract.Colors.COLOR_TYPE} = ?"
+                val colorsArgs = arrayOf(CalendarContract.Colors.TYPE_EVENT.toString())
+
+                contentResolver.query(
+                    CalendarContract.Colors.CONTENT_URI,
+                    colorsProjection,
+                    colorsSelection,
+                    colorsArgs,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val cKey = cursor.getString(0)
+                        val cVal = cursor.getInt(1)
+
+                        val cr = (cVal shr 16) and 0xFF
+                        val cg = (cVal shr 8) and 0xFF
+                        val cb = cVal and 0xFF
+
+                        val dr = (r - cr).toLong()
+                        val dg = (g - cg).toLong()
+                        val db = (b - cb).toLong()
+                        val distance = dr * dr + dg * dg + db * db
+
+                        if (distance < minDistance) {
+                            minDistance = distance
+                            bestColorKey = cKey
+                            bestColorVal = cVal
+                        }
+                    }
+                }
+            } catch (ce: Exception) {
+                ce.printStackTrace()
+            }
+
+            // Fallback to Google Palette if Colors table is empty or inaccessible
+            if (bestColorKey == null) {
+                val closest = findClosestGoogleColor(color)
+                bestColorKey = closest.key
+                bestColorVal = closest.color
+            }
+
+            // 3. Step A: Update EVENT_COLOR_KEY only (sanctioned Android path for non-sync-adapters)
+            // Android's CalendarProvider automatically sets EVENT_COLOR from the key without throwing IllegalArgumentException
+            var updated = false
+            try {
+                val values = ContentValues().apply {
+                    put(CalendarContract.Events.EVENT_COLOR_KEY, bestColorKey)
+                }
+                val rows = contentResolver.update(
+                    CalendarContract.Events.CONTENT_URI,
+                    values,
+                    "${CalendarContract.Events._ID} = ?",
+                    arrayOf(eventId)
+                )
+                updated = rows > 0
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 4. Step B: If EVENT_COLOR_KEY was rejected (e.g. OEM or local offline calendars), update with CALLER_IS_SYNCADAPTER
+            if (!updated && accountName != null && accountType != null) {
+                try {
+                    val syncUri = CalendarContract.Events.CONTENT_URI.buildUpon()
+                        .appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true")
+                        .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accountName)
+                        .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE, accountType)
+                        .build()
+
+                    val syncValues = ContentValues().apply {
+                        if (bestColorVal != null) {
+                            put(CalendarContract.Events.EVENT_COLOR, bestColorVal)
+                        }
+                        put(CalendarContract.Events.EVENT_COLOR_KEY, bestColorKey)
+                        put(CalendarContract.Events.DIRTY, 1)
+                    }
+                    val rows = contentResolver.update(
+                        syncUri,
+                        syncValues,
+                        "${CalendarContract.Events._ID} = ?",
+                        arrayOf(eventId)
+                    )
+                    updated = rows > 0
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            updated
         } catch (e: Exception) {
             e.printStackTrace()
             false
         }
     }
 
-    private fun triggerCalendarSync() {
+    private fun triggerCalendarSync(calendarId: String? = null) {
         try {
+            var account: android.accounts.Account? = null
+            if (calendarId != null && calendarId.isNotEmpty()) {
+                contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.ACCOUNT_TYPE),
+                    "${CalendarContract.Calendars._ID} = ?",
+                    arrayOf(calendarId),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val name = cursor.getString(0)
+                        val type = cursor.getString(1)
+                        if (!name.isNullOrEmpty() && !type.isNullOrEmpty()) {
+                            account = android.accounts.Account(name, type)
+                        }
+                    }
+                }
+            }
+
             val bundle = Bundle().apply {
                 putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
-                putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
             }
-            ContentResolver.requestSync(null, CalendarContract.AUTHORITY, bundle)
+            ContentResolver.requestSync(account, CalendarContract.AUTHORITY, bundle)
         } catch (e: Exception) {
             e.printStackTrace()
         }

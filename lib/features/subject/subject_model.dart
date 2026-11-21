@@ -350,8 +350,8 @@ class TimeSlot {
     this.locationId,
     this.room,
     this.block,
-    this.isExtra = false,
-  });
+    bool? isExtra,
+  }) : isExtra = isExtra ?? (specificDate != null);
 
   factory TimeSlot.fromJson(Map<String, dynamic> json) {
     final rawDateStr = json['specificDate'] ?? json['date'];
