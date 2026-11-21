@@ -452,7 +452,7 @@ class TodayScheduleState extends State<TodaySchedule> {
               ],
             ),
           ),
-        if (!semesterEnded && !isFutureDate && allLocked)
+        if (!semesterEnded && allLocked)
           Container(
             margin: rs.insetsSymmetric(horizontal: 16, vertical: 8),
             padding: rs.insetsSymmetric(horizontal: 14, vertical: 10),
@@ -480,7 +480,7 @@ class TodayScheduleState extends State<TodaySchedule> {
               ],
             ),
           ),
-        if (!semesterEnded && !isFutureDate && !allLocked)
+        if (!semesterEnded && !allLocked)
           Padding(
             padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
             child: LayoutBuilder(
@@ -603,33 +603,6 @@ class TodayScheduleState extends State<TodaySchedule> {
                   ],
                 );
               },
-            ),
-          ),
-        if (!semesterEnded && isFutureDate && displayClasses.isNotEmpty && !allLocked)
-          Padding(
-            padding: rs.insetsSymmetric(horizontal: 16, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: Size(0, rs.height(44)),
-                  backgroundColor: theme.colorScheme.onSurface,
-                  foregroundColor: theme.colorScheme.surface,
-                ),
-                icon: const Icon(Icons.celebration_outlined),
-                label: const Text('Mark as Holiday', style: TextStyle(fontWeight: FontWeight.w600)),
-                onPressed: () => _showConfirmationDialog(
-                  context: context,
-                  title: 'Mark as Holiday',
-                  content: lockedCount > 0
-                      ? 'Are you sure you want to mark ${editableClasses.length} upcoming class(es) as a holiday? $lockedCount locked class(es) will remain unchanged.'
-                      : 'Are you sure you want to mark this upcoming day as a holiday? All classes will be cancelled.',
-                  onConfirm: () => subjectProvider.markDayAsHoliday(targetDate),
-                  successMessage: lockedCount > 0
-                      ? 'Marked ${editableClasses.length} class(es) as holiday. $lockedCount locked.'
-                      : 'Day marked as holiday.',
-                ),
-              ),
             ),
           ),
         if (displayClasses.isEmpty)
@@ -913,7 +886,7 @@ class TodayScheduleState extends State<TodaySchedule> {
                   ),
                 );
 
-                if (semesterEnded || isFutureDate || isLocked) {
+                if (semesterEnded || isLocked) {
                   return cardWidget;
                 }
 

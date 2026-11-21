@@ -493,5 +493,90 @@ void main() {
       // Drain auto-sync debounce timer
       await tester.pump(const Duration(seconds: 2));
     });
+
+    testWidgets('Future days show all 3 bulk action buttons and allow SwipeableCard actions', (tester) async {
+      final now = DateTime.now();
+      final tomorrow = now.add(const Duration(days: 1));
+      final tomorrowWeekday = DayOfWeek.values[tomorrow.weekday - 1];
+
+      final futureSubject = Subject(
+        id: 'sub-future',
+        name: 'Distributed Systems',
+        acronym: 'DS',
+        color: Colors.purple,
+        schedule: [
+          TimeSlot(
+            day: tomorrowWeekday,
+            startTime: const TimeOfDay(hour: 10, minute: 0),
+            endTime: const TimeOfDay(hour: 11, minute: 0),
+          ),
+        ],
+        targetAttendance: 75,
+      );
+
+      await tester.pumpWidget(createWidgetUnderTest([futureSubject]));
+      await tester.pumpAndSettle();
+
+      // Navigate to tomorrow (future day)
+      final state = tester.state<TodayScheduleState>(find.byType(TodaySchedule));
+      state.goToNextDay();
+      await tester.pumpAndSettle();
+
+      // Verify that all 3 bulk action buttons are present on future day page
+      expect(find.text('Holiday'), findsOneWidget);
+      expect(find.text('Skip Day'), findsOneWidget);
+      expect(find.text('Present'), findsOneWidget);
+
+      // Verify that the future subject card is swipeable (SwipeableCard enabled)
+      expect(find.byType(SwipeableCard), findsOneWidget);
+      expect(find.text('Upcoming'), findsOneWidget);
+
+      // Mark future attendance directly
+      final subjectProvider = Provider.of<SubjectProvider>(
+        tester.element(find.byType(TodaySchedule)),
+        listen: false,
+      );
+      await subjectProvider.markAttendance(
+        futureSubject.id,
+        tomorrow,
+        AttendanceStatus.attended,
+        slotKey: futureSubject.schedule.first.slotKey,
+      );
+      await tester.pumpAndSettle();
+
+      // Status immediately reflects 'Attended'
+      expect(find.text('Attended'), findsOneWidget);
+      expect(find.text('Upcoming'), findsNothing);
+
+      // Unmarking also immediately restores 'Upcoming'
+      await subjectProvider.unmarkAttendance(
+        futureSubject.id,
+        tomorrow,
+        slotKey: futureSubject.schedule.first.slotKey,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('Attended'), findsNothing);
+
+      // Test bulk marking on future day: tap 'Present'
+      await tester.tap(find.text('Present'));
+      await tester.pumpAndSettle();
+
+      // Confirmation dialog should appear with non-today title "Mark Day as Present"
+      expect(find.text('Mark Day as Present'), findsOneWidget);
+      expect(find.text('Confirm'), findsOneWidget);
+
+      // Confirm bulk action
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+
+      // Should now be marked as Attended
+      expect(find.text('Attended'), findsOneWidget);
+      expect(find.text('Upcoming'), findsNothing);
+
+      // Drain auto-sync debounce timer
+      await tester.pump(const Duration(seconds: 2));
+    });
   });
 }
