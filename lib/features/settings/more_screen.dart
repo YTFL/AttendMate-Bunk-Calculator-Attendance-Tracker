@@ -9,7 +9,6 @@ import 'dart:math';
 
 import 'package:workmanager/workmanager.dart';
 import '../../services/backup_service.dart';
-import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
 import '../../services/semester_share_service.dart';
 import '../../models/app_update_model.dart';
@@ -613,20 +612,11 @@ class _MoreScreenState extends State<MoreScreen> {
         final prefs = await SharedPreferences.getInstance();
         final isDevSyncEnabled = prefs.getBool('dev_mode_calendar_sync_enabled') ?? false;
         if (isDevSyncEnabled) {
-          final semester = semesterProvider.semester;
-          
           // Delete from System Calendar
           try {
             await SystemCalendarService.deleteSyncedEvents(force: true);
           } catch (e) {
             debugPrint('Failed to clear device calendar: $e');
-          }
-
-          // Delete from Google Calendar
-          try {
-            await CalendarService.deleteAllSyncedEvents(semester, force: true);
-          } catch (e) {
-            debugPrint('Failed to clear google calendar: $e');
           }
         }
       }
@@ -1378,27 +1368,15 @@ class _MoreScreenState extends State<MoreScreen> {
       ),
     );
 
-    int googlePruned = 0;
     int systemPruned = 0;
     String? errorMsg;
 
     try {
-      // 1. Prune Google Calendar events
-      try {
-        googlePruned = await CalendarService.pruneAllAttendMateEvents();
-      } catch (e) {
-        debugPrint('Google Calendar prune error: $e');
-        errorMsg = 'Google Calendar error: $e';
-      }
-
-      // 2. Prune System / Device Calendar events
       try {
         systemPruned = await SystemCalendarService.pruneAllAttendMateEvents();
       } catch (e) {
         debugPrint('System Calendar prune error: $e');
-        errorMsg = errorMsg != null
-            ? '$errorMsg\nDevice Calendar error: $e'
-            : 'Device Calendar error: $e';
+        errorMsg = 'Device Calendar error: $e';
       }
     } finally {
       if (mounted) {
@@ -1408,7 +1386,7 @@ class _MoreScreenState extends State<MoreScreen> {
 
     if (!mounted) return;
 
-    if (errorMsg != null && googlePruned == 0 && systemPruned == 0) {
+    if (errorMsg != null && systemPruned == 0) {
       SnackbarUtils.showErrorSnackBar(context, 'Pruning failed: $errorMsg');
     } else {
       showDialog(
@@ -1420,16 +1398,14 @@ class _MoreScreenState extends State<MoreScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('• Google Calendar events pruned: $googlePruned', style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              Text('• Device Calendar events pruned: $systemPruned', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('• AttendMate calendar events pruned: $systemPruned', style: const TextStyle(fontWeight: FontWeight.w600)),
               if (errorMsg != null) ...[
                 const SizedBox(height: 12),
                 Text('Warnings / Issues:\n$errorMsg', style: const TextStyle(color: Colors.red, fontSize: 12)),
               ],
               const SizedBox(height: 16),
               const Text(
-                'Note: For Google Calendar, deleted events are moved to your online Trash (Bin). Open Google Calendar on the web (calendar.google.com) > Settings > Trash > "Empty Trash" to immediately purge tombstones from external sync adapters.',
+                'Note: All AttendMate timetable entries have been successfully pruned from your device calendars.',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],

@@ -26,7 +26,7 @@ import 'services/update_service.dart';
 import 'services/backup_service.dart';
 import 'services/google_drive_backup_service.dart';
 import 'services/live_timetable_sync_service.dart';
-import 'services/calendar_service.dart';
+import 'services/system_calendar_service.dart';
 import 'services/google_auth_service.dart';
 import 'utils/github_issue_helper.dart';
 import 'features/settings/diagnostics_log_screen.dart';
@@ -524,7 +524,7 @@ Future<void> main() async {
     unawaited(Future.wait([
       GoogleDriveBackupService().isBackupEnabled(),
       GoogleDriveBackupService().getLastBackupTime(),
-      CalendarService.isGoogleCalendarSyncEnabled(),
+      SystemCalendarService.isSystemSyncEnabled(),
       BackupService().isBackupEnabled(),
       LiveTimetableSyncService().init(),
     ]).catchError((e) {

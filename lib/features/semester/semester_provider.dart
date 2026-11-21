@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
+import '../../services/system_calendar_service.dart';
 import 'semester_model.dart';
 
 class SemesterProvider with ChangeNotifier {
@@ -66,6 +67,15 @@ class SemesterProvider with ChangeNotifier {
   /// Create a new semester and clear all old data
   Future<void> createNewSemester(Semester semester) async {
     try {
+      // If calendar sync is enabled, clear previous semester's calendar events
+      try {
+        if (await SystemCalendarService.isSystemSyncEnabled()) {
+          await SystemCalendarService.deleteSyncedEvents(force: true);
+        }
+      } catch (e) {
+        debugPrint('Error clearing calendar events during createNewSemester: $e');
+      }
+
       // Clear all subjects and attendance data
       await _databaseService.clearAllData();
       

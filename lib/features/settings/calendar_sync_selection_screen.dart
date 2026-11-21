@@ -65,27 +65,9 @@ class _CalendarSyncSelectionScreenState extends State<CalendarSyncSelectionScree
     }
   }
 
-  String _getCalendarDisplayName(dc.Calendar cal) {
-    if (cal.accountType == 'com.google' && cal.name == cal.accountName) {
-      return 'Google Calendar';
-    } else if (cal.name.toLowerCase() == 'my calendar') {
-      return 'My Calendar';
-    } else if (cal.accountType != null && cal.accountType!.toLowerCase().contains('samsung')) {
-      return 'Samsung Calendar';
-    } else {
-      return cal.name.isEmpty ? 'Calendar' : cal.name;
-    }
-  }
+  String _getCalendarDisplayName(dc.Calendar cal) => SystemCalendarService.getCalendarDisplayName(cal);
 
-  String _getCalendarAccountName(dc.Calendar cal) {
-    if (cal.accountName == null || cal.accountName!.trim().isEmpty) {
-      return 'Local Device';
-    } else if (cal.accountName!.toLowerCase() == 'my calendar') {
-      return 'Local Offline';
-    } else {
-      return cal.accountName!;
-    }
-  }
+  String _getCalendarAccountName(dc.Calendar cal) => SystemCalendarService.getCalendarAccountName(cal);
 
   Future<void> _toggleSync(bool value) async {
     if (value) {

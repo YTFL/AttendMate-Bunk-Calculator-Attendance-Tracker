@@ -16,6 +16,7 @@ import android.provider.CalendarContract
 import android.content.ContentValues
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.ContentProviderOperation
 import android.os.Bundle
 
 class MainActivity : FlutterActivity() {
@@ -83,6 +84,19 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGUMENTS", "eventId is required", null)
+                    }
+                }
+                "deleteEvents" -> {
+                    val eventIds = call.argument<List<String>>("eventIds")
+                    if (eventIds != null) {
+                        try {
+                            val count = deleteCalendarEvents(eventIds)
+                            result.success(count)
+                        } catch (e: Exception) {
+                            result.error("DELETE_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "eventIds is required", null)
                     }
                 }
                 "setEventColor" -> {
@@ -287,28 +301,98 @@ class MainActivity : FlutterActivity() {
 
     private fun deleteCalendarEvent(eventId: String): Boolean {
         return try {
-            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId.toLong())
+            val idLong = eventId.toLongOrNull() ?: return false
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, idLong)
             val rows = contentResolver.delete(uri, null, null)
-            rows > 0
+            if (rows > 0) {
+                triggerCalendarSync()
+                true
+            } else {
+                false
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             false
         }
     }
 
+    private fun deleteCalendarEvents(eventIds: List<String>): Int {
+        if (eventIds.isEmpty()) return 0
+        var totalDeleted = 0
+        try {
+            val ops = ArrayList<ContentProviderOperation>()
+            for (idStr in eventIds) {
+                val idLong = idStr.toLongOrNull() ?: continue
+                val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, idLong)
+                ops.add(ContentProviderOperation.newDelete(uri).build())
+                if (ops.size >= 100) {
+                    val results = contentResolver.applyBatch(CalendarContract.AUTHORITY, ops)
+                    totalDeleted += results.count { (it.count ?: 0) > 0 }
+                    ops.clear()
+                }
+            }
+            if (ops.isNotEmpty()) {
+                val results = contentResolver.applyBatch(CalendarContract.AUTHORITY, ops)
+                totalDeleted += results.count { (it.count ?: 0) > 0 }
+                ops.clear()
+            }
+            triggerCalendarSync()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return totalDeleted
+    }
+
     private fun pruneAttendMateEvents(calendarId: String?): Int {
         return try {
+            val projection = arrayOf(CalendarContract.Events._ID)
             val whereClause: String
             val selectionArgs: Array<String>
             if (calendarId != null && calendarId.isNotEmpty()) {
-                whereClause = "${CalendarContract.Events.CALENDAR_ID} = ? AND (${CalendarContract.Events.DESCRIPTION} LIKE ? OR LOWER(${CalendarContract.Events.DESCRIPTION}) LIKE ?)"
-                selectionArgs = arrayOf(calendarId, "%Imported from AttendMate%", "%attendmate%")
+                whereClause = "${CalendarContract.Events.CALENDAR_ID} = ? AND (${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
+                selectionArgs = arrayOf(calendarId, "%AttendMate%", "%AttendMate%")
             } else {
-                whereClause = "(${CalendarContract.Events.DESCRIPTION} LIKE ? OR LOWER(${CalendarContract.Events.DESCRIPTION}) LIKE ?)"
-                selectionArgs = arrayOf("%Imported from AttendMate%", "%attendmate%")
+                whereClause = "(${CalendarContract.Events.DESCRIPTION} LIKE ? OR ${CalendarContract.Events.TITLE} LIKE ?)"
+                selectionArgs = arrayOf("%AttendMate%", "%AttendMate%")
             }
-            val deleted = contentResolver.delete(CalendarContract.Events.CONTENT_URI, whereClause, selectionArgs)
-            deleted
+
+            val eventIds = mutableListOf<Long>()
+            contentResolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                projection,
+                whereClause,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndex(CalendarContract.Events._ID)
+                while (cursor.moveToNext()) {
+                    eventIds.add(cursor.getLong(idIndex))
+                }
+            }
+
+            if (eventIds.isEmpty()) {
+                return 0
+            }
+
+            var totalDeleted = 0
+            val ops = ArrayList<ContentProviderOperation>()
+            for (id in eventIds) {
+                val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
+                ops.add(ContentProviderOperation.newDelete(uri).build())
+                if (ops.size >= 100) {
+                    val results = contentResolver.applyBatch(CalendarContract.AUTHORITY, ops)
+                    totalDeleted += results.count { (it.count ?: 0) > 0 }
+                    ops.clear()
+                }
+            }
+            if (ops.isNotEmpty()) {
+                val results = contentResolver.applyBatch(CalendarContract.AUTHORITY, ops)
+                totalDeleted += results.count { (it.count ?: 0) > 0 }
+                ops.clear()
+            }
+
+            triggerCalendarSync(calendarId)
+            totalDeleted
         } catch (e: Exception) {
             e.printStackTrace()
             0
@@ -501,7 +585,7 @@ class MainActivity : FlutterActivity() {
 
     private fun triggerCalendarSync(calendarId: String? = null) {
         try {
-            var account: android.accounts.Account? = null
+            val accountsToSync = mutableSetOf<android.accounts.Account>()
             if (calendarId != null && calendarId.isNotEmpty()) {
                 contentResolver.query(
                     CalendarContract.Calendars.CONTENT_URI,
@@ -513,17 +597,36 @@ class MainActivity : FlutterActivity() {
                     if (cursor.moveToFirst()) {
                         val name = cursor.getString(0)
                         val type = cursor.getString(1)
-                        if (!name.isNullOrEmpty() && !type.isNullOrEmpty()) {
-                            account = android.accounts.Account(name, type)
+                        if (!name.isNullOrEmpty() && !type.isNullOrEmpty() && type != CalendarContract.ACCOUNT_TYPE_LOCAL) {
+                            accountsToSync.add(android.accounts.Account(name, type))
+                        }
+                    }
+                }
+            } else {
+                contentResolver.query(
+                    CalendarContract.Calendars.CONTENT_URI,
+                    arrayOf(CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars.ACCOUNT_TYPE),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val name = cursor.getString(0)
+                        val type = cursor.getString(1)
+                        if (!name.isNullOrEmpty() && !type.isNullOrEmpty() && type != CalendarContract.ACCOUNT_TYPE_LOCAL) {
+                            accountsToSync.add(android.accounts.Account(name, type))
                         }
                     }
                 }
             }
 
-            val bundle = Bundle().apply {
-                putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+            for (account in accountsToSync) {
+                val bundle = Bundle().apply {
+                    putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                    putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+                }
+                ContentResolver.requestSync(account, CalendarContract.AUTHORITY, bundle)
             }
-            ContentResolver.requestSync(account, CalendarContract.AUTHORITY, bundle)
         } catch (e: Exception) {
             e.printStackTrace()
         }

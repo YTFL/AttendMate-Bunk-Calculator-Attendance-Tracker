@@ -28,7 +28,7 @@ class DatabaseService {
 
       _database = await openDatabase(
         path,
-        version: 10,
+        version: 11,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -103,20 +103,21 @@ class DatabaseService {
         )
       ''');
 
-      // System Calendar Events mapping table
+      // System Calendar Events mapping table (composite primary key on subjectId, slotKey)
       await db.execute('''
         CREATE TABLE system_calendar_events (
-          eventId TEXT PRIMARY KEY,
           subjectId TEXT NOT NULL,
           slotKey TEXT NOT NULL,
-          date TEXT NOT NULL
+          eventId TEXT NOT NULL,
+          date TEXT,
+          PRIMARY KEY (subjectId, slotKey)
         )
       ''');
 
       // Create lookup index to speed up calendar sync operations
       await db.execute('''
         CREATE INDEX idx_system_calendar_events_lookup 
-        ON system_calendar_events (subjectId, slotKey, date)
+        ON system_calendar_events (subjectId, slotKey)
       ''');
 
       // Locations table
@@ -138,17 +139,6 @@ class DatabaseService {
           startDate TEXT NOT NULL,
           endDate TEXT NOT NULL,
           affectedSubjectIds TEXT NOT NULL
-        )
-      ''');
-
-      // Google Calendar Events mapping table
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS google_calendar_events (
-          subjectId TEXT NOT NULL,
-          slotKey TEXT NOT NULL,
-          googleEventId TEXT NOT NULL,
-          contentHash TEXT NOT NULL,
-          PRIMARY KEY (subjectId, slotKey)
         )
       ''');
     } catch (e) {
@@ -266,6 +256,39 @@ class DatabaseService {
         }
         if (!existing.contains('electiveGroupName')) {
           await db.execute('ALTER TABLE subjects ADD COLUMN electiveGroupName TEXT');
+        }
+      }
+      if (oldVersion < 11) {
+        // Upgrade system_calendar_events table to composite primary key (subjectId, slotKey)
+        // and drop obsolete google_calendar_events table
+        await db.execute('DROP TABLE IF EXISTS google_calendar_events');
+
+        final tableInfo = await db.rawQuery("PRAGMA table_info(system_calendar_events)");
+        if (tableInfo.isNotEmpty) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS system_calendar_events_new (
+              subjectId TEXT NOT NULL,
+              slotKey TEXT NOT NULL,
+              eventId TEXT NOT NULL,
+              date TEXT,
+              PRIMARY KEY (subjectId, slotKey)
+            )
+          ''');
+
+          // Copy distinct mappings into new table
+          await db.execute('''
+            INSERT OR REPLACE INTO system_calendar_events_new (subjectId, slotKey, eventId, date)
+            SELECT subjectId, slotKey, eventId, date
+            FROM system_calendar_events
+            GROUP BY subjectId, slotKey
+          ''');
+
+          await db.execute('DROP TABLE system_calendar_events');
+          await db.execute('ALTER TABLE system_calendar_events_new RENAME TO system_calendar_events');
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_system_calendar_events_lookup 
+            ON system_calendar_events (subjectId, slotKey)
+          ''');
         }
       }
     } catch (e) {
@@ -579,7 +602,7 @@ class DatabaseService {
     required String eventId,
     required String subjectId,
     required String slotKey,
-    required DateTime date,
+    DateTime? date,
   }) async {
     try {
       final db = _getDb();
@@ -589,7 +612,7 @@ class DatabaseService {
           'eventId': eventId,
           'subjectId': subjectId,
           'slotKey': slotKey,
-          'date': date.toIso8601String().split('T')[0],
+          'date': date?.toIso8601String().split('T')[0],
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -602,15 +625,14 @@ class DatabaseService {
   Future<String?> getSystemCalendarEvent({
     required String subjectId,
     required String slotKey,
-    required DateTime date,
   }) async {
     try {
       final db = _getDb();
       final maps = await db.query(
         'system_calendar_events',
         columns: ['eventId'],
-        where: 'subjectId = ? AND slotKey = ? AND date = ?',
-        whereArgs: [subjectId, slotKey, date.toIso8601String().split('T')[0]],
+        where: 'subjectId = ? AND slotKey = ?',
+        whereArgs: [subjectId, slotKey],
       );
       if (maps.isEmpty) return null;
       return maps.first['eventId'] as String?;
@@ -640,6 +662,20 @@ class DatabaseService {
       return await db.query('system_calendar_events');
     } catch (e) {
       debugPrint('DatabaseService getAllSystemCalendarEvents error: $e');
+      return [];
+    }
+  }
+
+  Future<List<String>> getAllSystemCalendarEventIds() async {
+    try {
+      final db = _getDb();
+      final maps = await db.query(
+        'system_calendar_events',
+        columns: ['eventId'],
+      );
+      return maps.map((m) => m['eventId'] as String).where((id) => id.isNotEmpty).toList();
+    } catch (e) {
+      debugPrint('DatabaseService getAllSystemCalendarEventIds error: $e');
       return [];
     }
   }
@@ -678,102 +714,6 @@ class DatabaseService {
       await db.delete('system_calendar_events');
     } catch (e) {
       debugPrint('DatabaseService clearSystemCalendarEvents error: $e');
-      rethrow;
-    }
-  }
-
-  // ==================== GOOGLE CALENDAR SYNC MAPPINGS ====================
-
-  Future<void> saveGoogleCalendarEvent({
-    required String subjectId,
-    required String slotKey,
-    required String googleEventId,
-    required String contentHash,
-  }) async {
-    try {
-      final db = _getDb();
-      await db.insert(
-        'google_calendar_events',
-        {
-          'subjectId': subjectId,
-          'slotKey': slotKey,
-          'googleEventId': googleEventId,
-          'contentHash': contentHash,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } catch (e) {
-      debugPrint('DatabaseService saveGoogleCalendarEvent error: $e');
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>?> getGoogleCalendarEvent({
-    required String subjectId,
-    required String slotKey,
-  }) async {
-    try {
-      final db = _getDb();
-      final maps = await db.query(
-        'google_calendar_events',
-        where: 'subjectId = ? AND slotKey = ?',
-        whereArgs: [subjectId, slotKey],
-      );
-      if (maps.isEmpty) return null;
-      return maps.first;
-    } catch (e) {
-      debugPrint('DatabaseService getGoogleCalendarEvent error: $e');
-      return null;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> getAllGoogleCalendarEvents() async {
-    try {
-      final db = _getDb();
-      return await db.query('google_calendar_events');
-    } catch (e) {
-      debugPrint('DatabaseService getAllGoogleCalendarEvents error: $e');
-      return [];
-    }
-  }
-
-  Future<void> deleteGoogleCalendarEvent({
-    required String subjectId,
-    required String slotKey,
-  }) async {
-    try {
-      final db = _getDb();
-      await db.delete(
-        'google_calendar_events',
-        where: 'subjectId = ? AND slotKey = ?',
-        whereArgs: [subjectId, slotKey],
-      );
-    } catch (e) {
-      debugPrint('DatabaseService deleteGoogleCalendarEvent error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> deleteGoogleCalendarEventsForSubject(String subjectId) async {
-    try {
-      final db = _getDb();
-      await db.delete(
-        'google_calendar_events',
-        where: 'subjectId = ?',
-        whereArgs: [subjectId],
-      );
-    } catch (e) {
-      debugPrint('DatabaseService deleteGoogleCalendarEventsForSubject error: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> clearGoogleCalendarEvents() async {
-    try {
-      final db = _getDb();
-      await db.delete('google_calendar_events');
-    } catch (e) {
-      debugPrint('DatabaseService clearGoogleCalendarEvents error: $e');
       rethrow;
     }
   }

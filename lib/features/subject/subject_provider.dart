@@ -6,7 +6,6 @@ import '../attendance/attendance_provider.dart';
 import '../../services/backup_service.dart';
 import '../../services/database_service.dart';
 import '../../services/notification_service.dart';
-import '../../services/calendar_service.dart';
 import '../../services/system_calendar_service.dart';
 import '../calendar/calendar_utils.dart' hide isSameDay;
 import 'subject_model.dart';
@@ -549,7 +548,6 @@ class SubjectProvider with ChangeNotifier {
           _databaseService.getSystemCalendarEvent(
             subjectId: subject.id,
             slotKey: slot.slotKey,
-            date: normalizedTarget,
           ).then((evId) {
             if (evId != null) {
               SystemCalendarService.deleteEventDirectly(evId);
@@ -734,7 +732,6 @@ class SubjectProvider with ChangeNotifier {
       final existingSystemEventId = await _databaseService.getSystemCalendarEvent(
         subjectId: subjectId,
         slotKey: slotKey,
-        date: normalizedDate,
       );
       if (existingSystemEventId != null) {
         await SystemCalendarService.deleteEventDirectly(existingSystemEventId);
@@ -772,6 +769,20 @@ class SubjectProvider with ChangeNotifier {
     await NotificationService().cancelAllRemindersForSubject(subject);
     await _refreshAttendanceReminders();
     await _attendanceProvider.deleteRecordsForSubject(subject.id);
+
+    try {
+      final events = await _databaseService.getSystemCalendarEventsForSubject(subject.id);
+      for (final ev in events) {
+        final evId = ev['eventId'] as String?;
+        if (evId != null && evId.isNotEmpty) {
+          await SystemCalendarService.deleteEventDirectly(evId);
+        }
+      }
+      await _databaseService.deleteSystemCalendarEventsForSubject(subject.id);
+    } catch (e) {
+      debugPrint('Error deleting subject calendar events: $e');
+    }
+
     await BackupService().notifyDataChanged();
     notifyListeners();
     _scheduleAutoSync();
@@ -1057,20 +1068,7 @@ class SubjectProvider with ChangeNotifier {
         return subject.copyWith(attendanceRecords: combined);
       }).toList();
 
-      // 1. Google Calendar Auto-Sync
-      try {
-        if (await CalendarService.isUserSignedIn() && await CalendarService.isGoogleCalendarSyncEnabled()) {
-          await CalendarService.syncFullTimetable(
-            subjects: syncedSubjects,
-            semester: semester,
-            isHoliday: isHoliday,
-          );
-        }
-      } catch (e) {
-        debugPrint("Google Calendar auto-sync error: $e");
-      }
-
-      // 2. System Calendar Auto-Sync
+      // System Calendar Auto-Sync
       try {
         if (await SystemCalendarService.isSystemSyncEnabled()) {
           await SystemCalendarService.syncFullTimetable(
